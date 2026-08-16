@@ -169,6 +169,22 @@ export function buildSystemPrompt(params: PromptParams): string {
     })
     .join("\n");
 
+  // Rhyme level instruction based on artist cadence
+  const rhymeLevelProfile = getFlowProfile(params.artistId);
+  const rhymeCadence = rhymeLevelProfile?.cadence ?? "free";
+  let rhymeLevelInstruction = "";
+  if (rhymeCadence === "rapid_fire" || rhymeCadence === "triplet") {
+    rhymeLevelInstruction = artist?.name + " es TÉCNICO: exige MÁXIMA densidad de rimas. MÍNIMO 2 rimas internas por barra. Rimas multisilábicas de 3+ sílabas obligatorias. Ejemplo: 'cuento el DINERO como un VELERO navegando al INFIERNO' (dinero/velero/infierno = 3 rimas internas multisilábicas).";
+  } else if (rhymeCadence === "staccato" || rhymeCadence === "syncopated") {
+    rhymeLevelInstruction = artist?.name + " es AGRESIVO: rimas cortantes y directas. MÍNIMO 1 rima interna por barra. Rimas multisilábicas de 2+ sílabas. Ejemplo: 'big GLOCK on the BLOCK, no TICK tock on the CLOCK' (glock/block/clock = 3 rimas).";
+  } else if (rhymeCadence === "melodic_flow" || rhymeCadence === "legato") {
+    rhymeLevelInstruction = artist?.name + " es MELODICO: rimas que suenen bien al cantarse. MÍNIMO 1 rima interna por barra. Rimas de 2+ sílabas que fluyan melódicamente. Ejemplo: 'pouring the LEAN, living the DREAM, cash on the SCREEN' (lean/dream/screen = 3 rimas multisilábicas).";
+  } else if (rhymeCadence === "chaotic") {
+    rhymeLevelInstruction = artist?.name + " es CAÓTICO: rimas impredecibles, rompe el patrón. Rimas internas cuando suene natural (no forzado). Puede usar rimas asonantes (vocales) además de consonantes. Ejemplo: 'SLATT, jump in the TRAP, countin the RACKS, no CAP' (slatt/trap/racks/cap = rimas asonantes).";
+  } else {
+    rhymeLevelInstruction = artist?.name + " es NATURAL: rimas orgánicas sin forzar. MÍNIMO 1 rima interna por barra cuando sea natural. Rimas de 2+ sílabas preferidas. Ejemplo: 'walk in the ROOM, meetin my DOOM, sweepin the BROOM' (room/doom/broom = 3 rimas).";
+  }
+
   // Narrative arc
   let narrativeBlock = "";
   if (params.narrativeArcId !== "none" && params.narrativeArcDesc) {
@@ -374,24 +390,7 @@ ${breathBlock}
 **REGLAS DE RIMA (CRÍTICO — esto es lo que separa una letra amateur de una profesional):**
 
 NIVEL DE RIMA SEGÚN ARTISTA:
-${(() => {
-  const fp = getFlowProfile(params.artistId);
-  const cadence = fp?.cadence ?? "free";
-  // Artistas técnicos = más rimas internas
-  if (cadence === "rapid_fire" || cadence === "triplet") {
-    return `- ${artist?.name ?? "Este artista"} es TÉCNICO: exige MÁXIMA densidad de rimas.\n- MÍNIMO 2 rimas internas por barra.\n- Rimas multisilábicas de 3+ sílabas obligatorias.\n- Ejemplo: "cuento el DINERO como un VELERO navegando al INFIERNO" (dinero/velero/infierno = 3 rimas internas multisilábicas).`;
-  }
-  if (cadence === "staccato" || cadence === "syncopated") {
-    return `- ${artist?.name ?? "Este artista"} es AGRESIVO: rimas cortantes y directas.\n- MÍNIMO 1 rima interna por barra.\n- Rimas multisilábicas de 2+ sílabas.\n- Ejemplo: "big GLOCK on the BLOCK, no TICK tock on the CLOCK" (glock/block/clock = 3 rimas).`;
-  }
-  if (cadence === "melodic_flow" || cadence === "legato") {
-    return `- ${artist?.name ?? "Este artista"} es MELODICO: rimas que suenen bien al cantarse.\n- MÍNIMO 1 rima interna por barra.\n- Rimas de 2+ sílabas que fluyan melódicamente.\n- Ejemplo: "pouring the LEAN, living the DREAM, cash on the SCREEN" (lean/dream/screen = 3 rimas multisilábicas).`;
-  }
-  if (cadence === "chaotic") {
-    return `- ${artist?.name ?? "Este artista"} es CAÓTICO: rimas impredecibles, rompe el patrón.\n- Rimas internas cuando suene natural (no forzado).\n- Puede usar rimas asonantes (vocales) además de consonantes.\n- Ejemplo: "SLATT, jump in the TRAP, countin' the RACKS, no CAP" (slatt/trap/racks/cap = rimas asonantes).`;
-  }
-  return `- ${artist?.name ?? "Este artista"} es NATURAL: rimas orgánicas sin forzar.\n- MÍNIMO 1 rima interna por barra cuando sea natural.\n- Rimas de 2+ sílabas preferidas.\n- Ejemplo: "walk in the ROOM, meetin' my DOOM, sweepin' the BROOM" (room/doom/broom = 3 rimas).`;
-})()
+${rhymeLevelInstruction}
 
 REGLAS UNIVERSALES:
 1. La ÚLTIMA palabra de cada barra DEBE rimar con otra barra del mismo grupo (AABB, ABAB, etc.).
