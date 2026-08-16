@@ -1,0 +1,100 @@
+# TrapGhost — Generador de Letras de Trap
+
+## Cómo instalarlo en tu ordenador
+
+### 1. Requisitos previos
+- Node.js 18+ (descárgalo de https://nodejs.org)
+- Bun (gestor de paquetes):
+  - Mac/Linux: curl -fsSL https://bun.sh/install | bash
+  - Windows: powershell -c "irm bun.sh/install.ps1 | iex"
+
+### 2. Instalación
+1. Descomprime el ZIP en una carpeta
+2. Abre una terminal en esa carpeta
+3. Ejecuta:
+   ```
+   bun install
+   ```
+
+### 3. Ejecutar la app
+```
+bun run dev
+```
+Se abrirá en http://localhost:3000
+
+### 4. Configurar la IA (API Key de Gemini)
+1. Ve a https://aistudio.google.com/app/apikey
+2. Crea una API Key gratuita
+3. En la app, pégala en el campo "API Key de Gemini"
+4. Click en guardar (💾)
+5. ¡Listo! La app usará tu cuenta de Gemini
+
+### 5. Para parar la app
+- Pulsa Ctrl+C en la terminal
+
+---
+
+## Estructura del proyecto
+
+- src/app/page.tsx — La app completa (UI)
+- src/lib/ — Toda la lógica (datos, prompt builder, análisis)
+- src/app/api/ — Rutas del backend (generación, traducción, crítico, etc.)
+
+## Funciones disponibles
+
+### Generación
+- Generar letras con estilo de 50+ artistas
+- Spanglish Ratio verificable (ES/EN)
+- Asignación de voces por sección
+- Beat Type selector (13 tipos)
+- Flow Profiles (cadencias + vocal tags para Suno)
+- Suno Style Prompt auto-generado
+- Producer Tag personalizado con tu nombre
+
+### Análisis
+- Language Analysis (ratio ES/EN real)
+- Rhyme Heatmap (mapa de rimas fonético)
+- Quality Score (S-F)
+- Mood Match
+- Flow Analysis (sílabas, flow score)
+- Theme Analyzer
+- Beat Fit
+- Vocal Range
+- Rhyme Scheme Detector
+- Punchline Detector
+- Flow Waveform
+- Playlist Fit
+- Live Performance Simulator
+
+### Herramientas
+- Lyrics Critic (feedback IA + aplicar mejoras)
+- Traducción EN↔ES
+- Remix Studio
+- Cover Art Generator (IA)
+- Social Media Captions (Instagram/Twitter/TikTok)
+- Export: txt, Markdown, PDF
+- Historial (8 generaciones)
+- Presets (guardar/cargar configuración)
+- Share URL (comparte tu configuración)
+- Lock Sections (bloquear secciones)
+- Regenerate Single Section
+- Compare + Diff (word-level)
+
+## Solución de problemas
+
+### Error: "Cannot find module"
+Ejecuta: bun install
+
+### Error: "Port 3000 already in use"
+Cambia el puerto: bun run dev -- -p 3001
+
+### La generación no funciona
+- Verifica que tu API Key de Gemini es correcta
+- Comprueba que tienes conexión a internet
+- Si el error dice "location not supported", la app está intentando usar el SDK de Z.ai en vez de tu API Key. Asegúrate de pegar la key y guardarla.
+
+### Los ad-libs son repetitivos
+La app está diseñada para que el LLM improvise ad-libs contextuales. Si se repiten, prueba con:
+- Temperature más alta (0.9-1.1)
+- Cambiar de artista
+- Usar "Aplicar Mejoras del Crítico" después de generar
