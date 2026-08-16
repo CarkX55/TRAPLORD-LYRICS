@@ -213,6 +213,14 @@ export default function TrapGhostPage() {
   const [availableModels, setAvailableModels] = useState<{ id: string; name: string }[]>([]);
   const [loadingModels, setLoadingModels] = useState<boolean>(false);
   const [fixingFromCritic, setFixingFromCritic] = useState<boolean>(false);
+  // Producer Tag Generator
+  const [producerTags, setProducerTags] = useState<{ text: string; style: string }[]>([]);
+  const [producerTagLoading, setProducerTagLoading] = useState<boolean>(false);
+  const [producerTagOpen, setProducerTagOpen] = useState<boolean>(false);
+  // Agent Polish (multi-agente IA)
+  const [polishResult, setPolishResult] = useState<{ originalScore: number; finalScore: number; polishedLyrics: string; agentReports: { agent: string; score: number; issues: string[]; suggestions: string[] }[]; improvements: string[] } | null>(null);
+  const [polishLoading, setPolishLoading] = useState<boolean>(false);
+  const [polishOpen, setPolishOpen] = useState<boolean>(false);
 
   // Output state
   const [lyrics, setLyrics] = useState<string>("");
@@ -237,23 +245,15 @@ export default function TrapGhostPage() {
       const storedKey = localStorage.getItem("gemini_api_key");
       if (storedKey) {
         setGeminiApiKey(storedKey);
-        // Cargar modelos automáticamente si hay key guardada
-        fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${storedKey}`)
+        // Cargar modelos vía proxy del servidor
+        fetch("/api/gemini-models", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiKey: storedKey }),
+        })
           .then(r => r.json())
           .then(data => {
-            if (data.models) {
-              const models = data.models
-                .filter((m: { supportedGenerationMethods?: string[] }) => m.supportedGenerationMethods?.includes("generateContent"))
-                .map((m: { name: string; displayName?: string }) => {
-                  const id = m.name.replace("models/", "");
-                  let name = m.displayName || id;
-                  if (id.includes("gemini-2.5") || id.includes("gemini-3")) name = `✨ ${name}`;
-                  else if (id.includes("gemini-2.0")) name = `🔥 ${name}`;
-                  else if (id.includes("gemini-1.5")) name = `📊 ${name}`;
-                  return { id, name };
-                });
-              setAvailableModels(models);
-            }
+            if (data.models) setAvailableModels(data.models);
           })
           .catch(() => {});
       }
@@ -272,23 +272,19 @@ export default function TrapGhostPage() {
     }
     setLoadingModels(true);
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`);
+      // Usar proxy del servidor para evitar CORS
+      const res = await fetch("/api/gemini-models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey }),
+      });
       const data = await res.json();
       if (data.error) {
-        toast.error(`Error: ${data.error.message}`);
+        toast.error(`Error: ${data.error}`);
         setAvailableModels([]);
         return;
       }
-      const models = (data.models || [])
-        .filter((m: { supportedGenerationMethods?: string[] }) => m.supportedGenerationMethods?.includes("generateContent"))
-        .map((m: { name: string; displayName?: string }) => {
-          const id = m.name.replace("models/", "");
-          let name = m.displayName || id;
-          if (id.includes("gemini-2.5") || id.includes("gemini-3")) name = `✨ ${name}`;
-          else if (id.includes("gemini-2.0")) name = `🔥 ${name}`;
-          else if (id.includes("gemini-1.5")) name = `📊 ${name}`;
-          return { id, name };
-        });
+      const models = data.models || [];
       setAvailableModels(models);
       if (models.length > 0) {
         const currentExists = models.some((m: { id: string }) => m.id === geminiModel);
@@ -995,6 +991,115 @@ export default function TrapGhostPage() {
       setCriticLoading(false);
     }
   }, [lyrics, artist, moodId, spanglishPercent]);
+
+  // ===== Agent Polish (4 agentes IA que revisan y mejoran) =====
+  const handleAgentPolish = useCallback(async () => {
+    if (!lyrics) {
+      toast.error("Genera una letra primero");
+      return;
+    }
+    setPolishLoading(true);
+    setPolishOpen(true);
+    setPolishResult(null);
+    try {
+      const structurePlan = structure.sections.map(s => `[${s.name}]`).join(", ");
+      const res = await fetch("/api/agent-polish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lyrics,
+          artistName: artist?.name ?? "Libre",
+          moodId,
+          spanglishPercent,
+          bpmRange: bpmVibe.range,
+          structurePlan,
+          geminiApiKey: geminiApiKey || undefined,
+          geminiModel,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Error en Agent Polish");
+      }
+      setPolishResult(data);
+      toast.success("Agent Polish completado");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setPolishLoading(false);
+    }
+  }, [lyrics, artist, moodId, spanglishPercent, bpmVibe, structure, geminiApiKey, geminiModel]);
+
+  // ===== Aplicar letra pulida =====
+  const applyPolishedLyrics = useCallback(() => {
+    if (!polishResult?.polishedLyrics) return;
+    setLyrics(polishResult.polishedLyrics);
+    setAnalysis(analyzeLanguageRatio(polishResult.polishedLyrics, spanglishPercent));
+    setPolishOpen(false);
+    toast.success("Letra pulida aplicada");
+  }, [polishResult, spanglishPercent]);
+
+  // ===== Producer Tag Generator =====
+  const handleProducerTag = useCallback(async () => {
+    if (!lyrics) {
+      toast.error("Genera una letra primero");
+      return;
+    }
+    setProducerTagLoading(true);
+    setProducerTagOpen(true);
+    setProducerTags([]);
+    try {
+      const res = await fetch("/api/producer-tag", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          producerName,
+          producerId,
+          lyrics,
+          artistName: artist?.name ?? "Libre",
+          moodId,
+          geminiApiKey: geminiApiKey || undefined,
+          geminiModel,
+        }),
+      });
+      const data: { tags?: { text: string; style: string }[]; error?: string } = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Error generando producer tag");
+      }
+      setProducerTags(data.tags ?? []);
+      toast.success("Producer tags generados");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setProducerTagLoading(false);
+    }
+  }, [lyrics, producerName, producerId, artist, moodId, geminiApiKey, geminiModel]);
+
+  // ===== Inyectar producer tag en la letra =====
+  const injectProducerTag = useCallback((tagText: string) => {
+    if (!lyrics) return;
+    // Si la letra ya empieza con el tag, no duplicar
+    if (lyrics.startsWith(`"${tagText}"`) || lyrics.includes(`"${tagText}"`)) {
+      toast.error("Ese tag ya está en la letra");
+      return;
+    }
+    // Buscar el primer ### [Intro] o ### [ y inyectar antes
+    const introMatch = lyrics.match(/###\s*\[Intro\]/i);
+    if (introMatch) {
+      const idx = introMatch.index!;
+      const before = lyrics.slice(0, idx);
+      const after = lyrics.slice(idx);
+      const newLyrics = `${before}"${tagText}"\n${after}`;
+      setLyrics(newLyrics);
+      toast.success(`Tag inyectado: "${tagText}"`);
+    } else {
+      // Si no hay Intro, poner al principio
+      const newLyrics = `"${tagText}"\n\n${lyrics}`;
+      setLyrics(newLyrics);
+      toast.success(`Tag inyectado: "${tagText}"`);
+    }
+    setProducerTagOpen(false);
+  }, [lyrics]);
 
   // ===== Cover art generation (AI image) =====
   const handleCoverArt = useCallback(async () => {
@@ -2138,6 +2243,12 @@ export default function TrapGhostPage() {
                     <Button variant="ghost" size="sm" onClick={handleCritic} disabled={criticLoading} className="text-muted-foreground hover:text-yellow-400 h-8" title="Crítico de letra (feedback IA)">
                       <MessageSquare className="w-3.5 h-3.5 mr-1" />Crítico
                     </Button>
+                    <Button variant="ghost" size="sm" onClick={handleProducerTag} disabled={producerTagLoading} className="text-muted-foreground hover:text-purple-400 h-8" title="Generar Producer Tag personalizado">
+                      <Disc3 className="w-3.5 h-3.5 mr-1" />Tag
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={handleAgentPolish} disabled={polishLoading} className="text-muted-foreground hover:text-cyber h-8" title="Agent Polish — 4 agentes IA revisan y mejoran la letra">
+                      <Sparkles className="w-3.5 h-3.5 mr-1" />Polish
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => handleSocialCaption("instagram")} disabled={socialLoading} className="text-muted-foreground hover:text-pink-400 h-8" title="Caption para Instagram">
                       <Instagram className="w-3.5 h-3.5" />
                     </Button>
@@ -3126,6 +3237,157 @@ export default function TrapGhostPage() {
                     </div>
                   </div>
                 </div>
+              </Card>
+            )}
+
+            {/* --- Agent Polish Panel --- */}
+            {polishOpen && (
+              <Card className="glass-card p-5 space-y-3 animate-fade-slide">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-cyber" />
+                  <h2 className="font-display text-lg font-semibold">Agent Polish</h2>
+                  <Badge variant="outline" className="ml-auto text-[10px] border-cyber/40 text-cyber">
+                    4 Agentes IA
+                  </Badge>
+                  <Button variant="ghost" size="sm" onClick={() => { setPolishOpen(false); setPolishResult(null); }} className="text-muted-foreground hover:text-foreground h-8">
+                    ✕
+                  </Button>
+                </div>
+                {polishLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-4">
+                    <div className="trap-spinner" />
+                    <p className="text-sm text-muted-foreground">4 agentes analizando la letra...</p>
+                    <div className="space-y-1.5 text-[11px] text-muted-foreground/70">
+                      <p>🎤 Agente 1: Rhyme Checker — analizando rimas...</p>
+                      <p>🎵 Agente 2: Flow Checker — analizando métrica...</p>
+                      <p>📝 Agente 3: Content Checker — analizando contenido...</p>
+                      <p>✨ Agente 4: Rewriter — reescribiendo con mejoras...</p>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/50">Esto puede tardar 30-60 segundos</p>
+                  </div>
+                ) : polishResult ? (
+                  <div className="space-y-3">
+                    {/* Score comparison */}
+                    <div className="flex items-center gap-3 rounded-lg border border-cyber/20 bg-cyber/5 p-3">
+                      <div className="text-center">
+                        <p className="text-[10px] text-muted-foreground uppercase">Original</p>
+                        <p className="font-display text-2xl font-bold text-muted-foreground">{polishResult.originalScore}</p>
+                      </div>
+                      <div className="text-2xl text-cyber">→</div>
+                      <div className="text-center">
+                        <p className="text-[10px] text-muted-foreground uppercase">Pulido</p>
+                        <p className="font-display text-2xl font-bold text-slime">{polishResult.finalScore}</p>
+                      </div>
+                      <div className="ml-auto">
+                        <Badge variant="outline" className="text-[10px] border-slime/40 text-slime">
+                          +{polishResult.finalScore - polishResult.originalScore} pts
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {/* Agent reports */}
+                    <div className="space-y-2">
+                      {polishResult.agentReports.map((report, i) => (
+                        <div key={i} className="rounded-lg border border-border/40 bg-black/20 p-3 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[12px] font-medium">{report.agent}</span>
+                            <Badge variant="outline" className={`text-[9px] ${
+                              report.score >= 70 ? "border-slime/40 text-slime" :
+                              report.score >= 50 ? "border-yellow-400/40 text-yellow-400" :
+                              "border-cyber/40 text-cyber"
+                            }`}>
+                              {report.score}/100
+                            </Badge>
+                          </div>
+                          {report.issues.length > 0 && (
+                            <div className="space-y-0.5">
+                              {report.issues.slice(0, 3).map((issue, j) => (
+                                <div key={j} className="flex items-start gap-1.5 text-[10px]">
+                                  <AlertCircle className="w-3 h-3 text-cyber mt-0.5 shrink-0" />
+                                  <span className="text-muted-foreground">{issue}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {report.suggestions.length > 0 && (
+                            <div className="space-y-0.5">
+                              {report.suggestions.slice(0, 2).map((sug, j) => (
+                                <div key={j} className="flex items-start gap-1.5 text-[10px]">
+                                  <Lightbulb className="w-3 h-3 text-yellow-400 mt-0.5 shrink-0" />
+                                  <span className="text-muted-foreground">{sug}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Improvements summary */}
+                    <div className="rounded-lg border border-slime/20 bg-slime/5 p-3">
+                      <p className="text-[10px] text-slime uppercase font-medium mb-1">Mejoras aplicadas:</p>
+                      {polishResult.improvements.map((imp, i) => (
+                        <p key={i} className="text-[11px] text-foreground/70">✓ {imp}</p>
+                      ))}
+                    </div>
+
+                    {/* Apply button */}
+                    <Button onClick={applyPolishedLyrics} className="w-full bg-gradient-to-r from-cyber to-purple-500 text-white font-semibold hover:opacity-90 h-11">
+                      <Sparkles className="w-4 h-4 mr-2" />Aplicar Letra Pulida
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">Esperando análisis...</p>
+                )}
+              </Card>
+            )}
+
+            {/* --- Producer Tag Generator Panel --- */}
+            {producerTagOpen && (
+              <Card className="glass-card p-5 space-y-3 animate-fade-slide">
+                <div className="flex items-center gap-2">
+                  <Disc3 className="w-5 h-5 text-purple-400" />
+                  <h2 className="font-display text-lg font-semibold">Producer Tag Generator</h2>
+                  <Badge variant="outline" className="ml-auto text-[10px] border-purple-400/40 text-purple-400">
+                    {producerName}
+                  </Badge>
+                  <Button variant="ghost" size="sm" onClick={() => { setProducerTagOpen(false); setProducerTags([]); }} className="text-muted-foreground hover:text-foreground h-8">
+                    ✕
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Genera 5 variants de producer tag para "{producerName}" adaptadas a la letra y el mood de la canción.
+                  Click en uno para inyectarlo al inicio de la letra.
+                </p>
+                {producerTagLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <div className="trap-spinner" />
+                    <p className="text-sm text-muted-foreground">Generando tags para {producerName}...</p>
+                  </div>
+                ) : producerTags.length > 0 ? (
+                  <div className="space-y-2">
+                    {producerTags.map((tag, i) => (
+                      <div
+                        key={i}
+                        className="rounded-lg border border-purple-400/30 bg-purple-400/5 p-3 hover:border-purple-400/60 hover:bg-purple-400/10 cursor-pointer transition-all"
+                        onClick={() => injectProducerTag(tag.text)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[9px] border-purple-400/30 text-purple-400 shrink-0">
+                            {tag.style}
+                          </Badge>
+                          <p className="text-[13px] text-foreground italic flex-1">"{tag.text}"</p>
+                          <span className="text-[10px] text-muted-foreground shrink-0">Click para inyectar →</span>
+                        </div>
+                      </div>
+                    ))}
+                    <Button variant="outline" size="sm" onClick={handleProducerTag} disabled={producerTagLoading} className="w-full border-purple-400/30 hover:bg-purple-400/10 hover:text-purple-400 h-8">
+                      <RefreshCw className="w-3.5 h-3.5 mr-1" />Generar otros
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">Esperando tags...</p>
+                )}
               </Card>
             )}
 
