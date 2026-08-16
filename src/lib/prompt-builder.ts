@@ -371,14 +371,40 @@ ${breathBlock}
 - **Métrica Americana**: Frases cortas. Usa puntuación agresiva (comas, guiones) para forzar "staccato" o "triplets".
 - Si el BPM es > 140, TRIPLICA la densidad (flow rápido Rage/Drill). Si es < 100, reduce palabras, alarga sílabas finales.
 
-**REGLAS DE RIMA (CRÍTICO):**
+**REGLAS DE RIMA (CRÍTICO — esto es lo que separa una letra amateur de una profesional):**
+
+NIVEL DE RIMA SEGÚN ARTISTA:
+${(() => {
+  const fp = getFlowProfile(params.artistId);
+  const cadence = fp?.cadence ?? "free";
+  // Artistas técnicos = más rimas internas
+  if (cadence === "rapid_fire" || cadence === "triplet") {
+    return `- ${artist?.name ?? "Este artista"} es TÉCNICO: exige MÁXIMA densidad de rimas.\n- MÍNIMO 2 rimas internas por barra.\n- Rimas multisilábicas de 3+ sílabas obligatorias.\n- Ejemplo: "cuento el DINERO como un VELERO navegando al INFIERNO" (dinero/velero/infierno = 3 rimas internas multisilábicas).`;
+  }
+  if (cadence === "staccato" || cadence === "syncopated") {
+    return `- ${artist?.name ?? "Este artista"} es AGRESIVO: rimas cortantes y directas.\n- MÍNIMO 1 rima interna por barra.\n- Rimas multisilábicas de 2+ sílabas.\n- Ejemplo: "big GLOCK on the BLOCK, no TICK tock on the CLOCK" (glock/block/clock = 3 rimas).`;
+  }
+  if (cadence === "melodic_flow" || cadence === "legato") {
+    return `- ${artist?.name ?? "Este artista"} es MELODICO: rimas que suenen bien al cantarse.\n- MÍNIMO 1 rima interna por barra.\n- Rimas de 2+ sílabas que fluyan melódicamente.\n- Ejemplo: "pouring the LEAN, living the DREAM, cash on the SCREEN" (lean/dream/screen = 3 rimas multisilábicas).`;
+  }
+  if (cadence === "chaotic") {
+    return `- ${artist?.name ?? "Este artista"} es CAÓTICO: rimas impredecibles, rompe el patrón.\n- Rimas internas cuando suene natural (no forzado).\n- Puede usar rimas asonantes (vocales) además de consonantes.\n- Ejemplo: "SLATT, jump in the TRAP, countin' the RACKS, no CAP" (slatt/trap/racks/cap = rimas asonantes).`;
+  }
+  return `- ${artist?.name ?? "Este artista"} es NATURAL: rimas orgánicas sin forzar.\n- MÍNIMO 1 rima interna por barra cuando sea natural.\n- Rimas de 2+ sílabas preferidas.\n- Ejemplo: "walk in the ROOM, meetin' my DOOM, sweepin' the BROOM" (room/doom/broom = 3 rimas).`;
+})()
+
+REGLAS UNIVERSALES:
 1. La ÚLTIMA palabra de cada barra DEBE rimar con otra barra del mismo grupo (AABB, ABAB, etc.).
-2. NO uses rimas cliché (vida/herida, calle/calle, amor/dolor). Busca rimas ORIGINALES e inesperadas.
-3. RIMAS INTERNAS: mete al menos 1 rima interna por barra (una palabra dentro de la frase que rime con la palabra final o con otra palabra interna). Ejemplo: "cuento el DINERO como un VELERO navegando al INFIERNO" — dinero/velero/infierno riman internamente.
-4. RIMAS MULTISILÁBICAS: intenta que las rimas sean de 2+ sílabas, no solo la última sílaba. "consideración/observación" es mejor que "canción/pasión".
-5. EVITA rimas forzadas: si una palabra no encaja naturalmente en la frase, no la uses solo para rimar. Mejor reescribe la barra.
-6. Spanglish: las rimas pueden cruzar idiomas (price/ice, calle/balle, money/honey) — eso es válido y suena bien en trap.
-7. Cada 4 barras, CAMBIA la rima (nuevo grupo de rimas). No rimes 16 barras con la misma vocal.
+2. RIMAS INTERNAS: palabras DENTRO de la barra que riman entre sí o con la palabra final. Esto es OBLIGATORIO. Una barra sin rima interna es una barra mediocre.
+   - Ejemplo básico: "countin' the CASH, hidin' the STASH, makin' a DASH" (cash/stash/dash = 3 rimas internas + final)
+   - Ejemplo avanzado: "the MONEY come FUNNY, my HONEY act SUNNY but SLUMMY at NIGHT" (money/funny/honey/sunny = 4 rimas internas asonantes)
+3. RIMAS MULTISILÁBICAS: 2+ sílabas rimando, no solo la última. "observación/consideración" es mejor que "canción/pasión". "MONEY/FUNNY" es mejor que "cash/flash".
+4. NO uses rimas cliché: prohibido vida/herida, amor/dolor, calle/calle, corazón/razón, fuego/juego. Busca combinaciones INESPERADAS.
+5. Rimas cross-language válidas: price/ice, calle/balle, money/honey, blood/mud, lean/dream.
+6. EVITA rimas forzadas: si una palabra no encaja naturalmente, reescribe la barra. Mejor fluidez que rima forzada.
+7. CAMBIA la rima cada 4 barras. No rimes 16 barras con la misma vocal.
+8. RIMAS EN CADENA: a veces pon 3-4 palabras seguidas que rimen: "I GRAB it, STAB it, TAB it, CAB it" — esto es un showcase técnico.
+9. RIMA RESPUESTA: la rima interna puede RESPONDER a la palabra final de la barra anterior: "I got the CASH (cash!) / Next bar: SPEND it on HASH, make it a DASH" — la rima conecta barras.
 
 # MÓDULO 3: SONIC LANDSCAPE
 - Adapta la lírica al BPM y al estilo natural del artista.
