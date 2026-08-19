@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildSystemPrompt, buildSpanglishInstruction, buildSunoStylePrompt, type LockedSection, type RegenerateSectionParams, type SectionVoiceAssignment } from "@/lib/prompt-builder";
-import { MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, BEAT_TYPES, generateBeatPrompt } from "@/lib/trap-data";
+import { MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, BEAT_TYPES, generateBeatPrompt, getArtistById } from "@/lib/trap-data";
 import { analyzeLanguageRatio, buildCorrectionInstruction } from "@/lib/language-detector";
+import { getArtistReference } from "@/lib/artist-references";
+import { generateArtistReference } from "@/lib/reference-generator";
+import { analyzeReferenceTrack } from "@/lib/track-analyzer";
 
 export const runtime = "nodejs";
-export const maxDuration = 10;
+export const maxDuration = 60; // increased for on-the-fly reference generation + track analysis
 
 interface BuildPromptBody {
   artistId: string;
@@ -39,12 +42,44 @@ interface BuildPromptBody {
   regenerateSection?: RegenerateSectionParams;
   previousLyrics?: string;
   autoCorrect?: boolean;
+  geminiApiKey?: string;   // NEW — for reference generation on Vercel
+  geminiModel?: string;    // NEW
+  referenceTrackLyrics?: string;  // NEW Phase 4 — pasted reference track to extract DNA from
+  dynamicSongForm?: boolean;      // NEW Phase 6 — toggle dynamic structure
 }
 
 function resolveTopics(topicIds: string[]): string[] {
   return topicIds
     .map(id => TOPICS.find(t => t.id === id)?.label)
     .filter((x): x is string => Boolean(x));
+}
+
+// Get a reference for an artist: curated DB first, then generate on-the-fly (graceful fallback)
+async function getOrGenerateReference(
+  artistId: string,
+  geminiApiKey?: string,
+  geminiModel?: string
+) {
+  // 1. Check curated DB (50 artists) — instant
+  const curated = getArtistReference(artistId);
+  if (curated) return curated;
+
+  // 2. Non-curated artist — generate on-the-fly
+  const artist = getArtistById(artistId);
+  if (!artist) return null;
+
+  try {
+    const generated = await generateArtistReference({
+      artistId,
+      artistName: artist.name,
+      geminiApiKey,
+      geminiModel,
+    });
+    return generated;
+  } catch (err) {
+    console.error(`[build-prompt] reference generation failed for ${artistId}:`, err instanceof Error ? err.message : err);
+    return null; // graceful — build prompt without reference
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -65,6 +100,17 @@ export async function POST(req: NextRequest) {
         correctionInstruction = buildCorrectionInstruction(analysis);
       }
     }
+
+    // Phase 3: fetch/generate peak-era references for main + feature artists + Phase 4: analyze reference track (all in parallel)
+    const [mainRef, featRef, refTrack] = await Promise.all([
+      getOrGenerateReference(body.artistId, body.geminiApiKey, body.geminiModel),
+      body.featureArtistId
+        ? getOrGenerateReference(body.featureArtistId, body.geminiApiKey, body.geminiModel)
+        : Promise.resolve(null),
+      body.referenceTrackLyrics?.trim()
+        ? analyzeReferenceTrack({ lyrics: body.referenceTrackLyrics, geminiApiKey: body.geminiApiKey, geminiModel: body.geminiModel })
+        : Promise.resolve(null),
+    ]);
 
     const prompt = buildSystemPrompt({
       artistId: body.artistId,
@@ -98,6 +144,10 @@ export async function POST(req: NextRequest) {
       lockedSections: body.lockedSections,
       regenerateSection: body.regenerateSection,
       correctionInstruction,
+      mainArtistReference: mainRef,
+      featureArtistReference: featRef,
+      referenceTrack: refTrack,
+      dynamicSongForm: body.dynamicSongForm,
     });
 
     const spanglishInfo = buildSpanglishInstruction(body.spanglishPercent);
@@ -117,6 +167,9 @@ export async function POST(req: NextRequest) {
       beatPrompt,
       sunoStylePrompt,
       temperature: body.temperature ?? 0.9,
+      mainRefSource: mainRef?.source ?? null,
+      featRefSource: featRef?.source ?? null,
+      refTrackSummary: refTrack?.summary ?? null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error construyendo el prompt.";

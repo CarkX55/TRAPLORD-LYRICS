@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import ZAI from "z-ai-web-dev-sdk";
 import { getArtistById, MOODS, BPM_VIBES, getProducerById } from "@/lib/trap-data";
 
 export const runtime = "nodejs";
@@ -76,6 +75,7 @@ export async function POST(req: NextRequest) {
 
     const prompt = `Album cover art for a trap song. Style: ${artistVisual}. Mood: ${moodVisual}. BPM: ${bpm?.range ?? "130-145"}. ${producer ? `Producer vibe: ${producer.name} (${producer.style}).` : ""} Spanglish ratio: ${body.spanglishPercent}% EN. Square format, high quality, professional album cover, no text, no words, no letters, pure visual art, dramatic lighting, cinematic composition.`;
 
+    const ZAI = (await import("z-ai-web-dev-sdk")).default;
     const zai = await ZAI.create();
     const response = await zai.images.generations.create({
       prompt,

@@ -204,6 +204,7 @@ export default function TrapGhostPage() {
   const [syllableSync, setSyllableSync] = useState<boolean>(false);
   const [phoneticAdlibs, setPhoneticAdlibs] = useState<boolean>(false);
   const [smartBarsMode, setSmartBarsMode] = useState<boolean>(false);
+  const [dynamicSongForm, setDynamicSongForm] = useState<boolean>(true); // Phase 6 — default ON
   const [sectionVoices, setSectionVoices] = useState<SectionVoiceAssignment[]>([]);
   const [sunoStylePrompt, setSunoStylePrompt] = useState<string>("");
   // Round 12: API Key + model selector + producer name + flow profile
@@ -218,9 +219,27 @@ export default function TrapGhostPage() {
   const [producerTagLoading, setProducerTagLoading] = useState<boolean>(false);
   const [producerTagOpen, setProducerTagOpen] = useState<boolean>(false);
   // Agent Polish (multi-agente IA)
-  const [polishResult, setPolishResult] = useState<{ originalScore: number; finalScore: number; polishedLyrics: string; agentReports: { agent: string; score: number; issues: string[]; suggestions: string[] }[]; improvements: string[] } | null>(null);
+  const [polishResult, setPolishResult] = useState<{
+    originalScore: number;
+    finalScore: number;
+    polishedLyrics: string;
+    agentReports: { agent: string; score: number; issues: string[]; suggestions: string[] }[];
+    improvements: string[];
+    iterations?: { iteration: number; score: number; agents: { agent: string; score: number }[] }[];
+    autoIterate?: boolean;
+    threshold?: number;
+    tier?: number;
+    tierLabel?: string;
+    stoppedReason?: string;
+  } | null>(null);
   const [polishLoading, setPolishLoading] = useState<boolean>(false);
   const [polishOpen, setPolishOpen] = useState<boolean>(false);
+  const [polishAutoIterate, setPolishAutoIterate] = useState<boolean>(false);
+  const [polishError, setPolishError] = useState<string | null>(null);
+  // Reference Track Importer (Phase 4)
+  const [refTrackOpen, setRefTrackOpen] = useState<boolean>(false);
+  const [refTrackLyrics, setRefTrackLyrics] = useState<string>("");
+  const [refTrackAnalysis, setRefTrackAnalysis] = useState<string | null>(null);
 
   // Output state
   const [lyrics, setLyrics] = useState<string>("");
@@ -365,6 +384,10 @@ export default function TrapGhostPage() {
       temperature,
       autoCorrect: autoCorrect && isRegen,
       previousLyrics: isRegen ? lyrics : undefined,
+      geminiApiKey: geminiApiKey || undefined,
+      geminiModel,
+      referenceTrackLyrics: refTrackOpen && refTrackLyrics.trim() ? refTrackLyrics : undefined,
+      dynamicSongForm,
     };
 
     try {
@@ -375,9 +398,13 @@ export default function TrapGhostPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(configPayload),
         });
-        const promptData: { prompt?: string; spanglishLabel?: string; beatPrompt?: BeatPrompt; sunoStylePrompt?: string; temperature?: number; error?: string } = await promptRes.json();
+        const promptData: { prompt?: string; spanglishLabel?: string; beatPrompt?: BeatPrompt; sunoStylePrompt?: string; temperature?: number; error?: string; refTrackSummary?: string } = await promptRes.json();
         if (!promptRes.ok || promptData.error) {
           throw new Error(promptData.error || "Error construyendo el prompt");
+        }
+        // Capture reference track analysis summary (Phase 4)
+        if (promptData.refTrackSummary) {
+          setRefTrackAnalysis(promptData.refTrackSummary);
         }
 
         const model = geminiModel || "gemini-2.0-flash";
@@ -435,9 +462,13 @@ export default function TrapGhostPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(configPayload),
       });
-      const data: GenerateResponse & { error?: string } = await res.json();
+      const data: GenerateResponse & { error?: string; refTrackSummary?: string } = await res.json();
       if (!res.ok || data.error) {
         throw new Error(data.error || "Error en la generación");
+      }
+      // Capture reference track analysis summary (Phase 4)
+      if (data.refTrackSummary) {
+        setRefTrackAnalysis(data.refTrackSummary);
       }
       setLyrics(data.lyrics);
       setAnalysis(data.analysis);
@@ -473,7 +504,7 @@ export default function TrapGhostPage() {
       temperature, rhymeSchemeId, lockedSections, lyrics, regenCount, artist,
       beatTypeId, featureSimId, customIntro, collabInteraction, altVoiceAsterisks,
       syllableSync, phoneticAdlibs, smartBarsMode, sectionVoices,
-      geminiApiKey, geminiModel, producerName]);
+      geminiApiKey, geminiModel, producerName, refTrackOpen, refTrackLyrics, dynamicSongForm]);
 
   // ===== Copy lyrics =====
   const handleCopy = useCallback(async () => {
@@ -998,8 +1029,13 @@ export default function TrapGhostPage() {
       toast.error("Genera una letra primero");
       return;
     }
+    if (!geminiApiKey?.trim()) {
+      setPolishError("Necesitas tu API Key de Gemini para usar Agent Polish. Ponla arriba en la UI.");
+      setPolishOpen(true);
+      return;
+    }
+    setPolishError(null);
     setPolishLoading(true);
-    setPolishOpen(true);
     setPolishResult(null);
     try {
       const structurePlan = structure.sections.map(s => `[${s.name}]`).join(", ");
@@ -1009,12 +1045,14 @@ export default function TrapGhostPage() {
         body: JSON.stringify({
           lyrics,
           artistName: artist?.name ?? "Libre",
+          artistId,
           moodId,
           spanglishPercent,
           bpmRange: bpmVibe.range,
           structurePlan,
           geminiApiKey: geminiApiKey || undefined,
           geminiModel,
+          autoIterate: polishAutoIterate,
         }),
       });
       const data = await res.json();
@@ -1022,13 +1060,15 @@ export default function TrapGhostPage() {
         throw new Error(data.error || "Error en Agent Polish");
       }
       setPolishResult(data);
-      toast.success("Agent Polish completado");
+      toast.success(polishAutoIterate ? `Auto-iterate completado: ${data.iterations?.length ?? 1} iteraciones` : "Agent Polish completado");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error desconocido");
+      const msg = err instanceof Error ? err.message : "Error desconocido";
+      setPolishError(msg);
+      toast.error(msg);
     } finally {
       setPolishLoading(false);
     }
-  }, [lyrics, artist, moodId, spanglishPercent, bpmVibe, structure, geminiApiKey, geminiModel]);
+  }, [lyrics, artist, artistId, moodId, spanglishPercent, bpmVibe, structure, geminiApiKey, geminiModel, polishAutoIterate]);
 
   // ===== Aplicar letra pulida =====
   const applyPolishedLyrics = useCallback(() => {
@@ -1935,6 +1975,14 @@ export default function TrapGhostPage() {
                     <Switch checked={phoneticAdlibs} onCheckedChange={setPhoneticAdlibs} />
                   </div>
 
+                  {/* Song Form Intelligence (Phase 6) */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2"><Music2 className="w-4 h-4 text-sky-400" /><div><Label className="text-[13px] cursor-pointer">Song Form Intelligence</Label><p className="text-[11px] text-muted-foreground">Estructura dinámica: expanding chorus, pre-chorus, beat drops, verse variable (auto per-artista)</p></div></div>
+                    <Switch checked={dynamicSongForm} onCheckedChange={setDynamicSongForm} />
+                  </div>
+
+                  {/* Reference Track Importer (Phase 4) — moved OUTSIDE Advanced for visibility */}
+
                   {/* Keyboard shortcuts hint */}
                   <div className="rounded-lg border border-border/40 bg-black/20 p-3 space-y-1.5">
                     <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 font-medium">
@@ -1949,6 +1997,56 @@ export default function TrapGhostPage() {
                 </CollapsibleContent>
               </Card>
             </Collapsible>
+
+            {/* --- Reference Track Importer (Phase 4) — standalone, always visible --- */}
+            <Card className="glass-card p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <Music2 className="w-5 h-5 text-sky-400" />
+                <h2 className="font-display text-lg font-semibold">Reference Track Importer</h2>
+                <Badge variant="outline" className={`ml-auto text-[10px] ${refTrackOpen ? "border-sky-400/60 text-sky-400" : "border-border/40 text-muted-foreground"}`}>
+                  {refTrackOpen ? "● ACTIVO" : "Desactivado"}
+                </Badge>
+                <Switch checked={refTrackOpen} onCheckedChange={setRefTrackOpen} />
+              </div>
+              {refTrackOpen ? (
+                <div className="space-y-2.5">
+                  <p className="text-[11px] text-muted-foreground">
+                    Pega la letra de una canción que te guste (tuya o de otro artista). Al generar, la app extraerá su <span className="text-sky-400 font-medium">ADN estructural</span> (secciones, esquema de rima, densidad, ad-libs, idioma, hook style) y lo replicará con el contenido del artista seleccionado.
+                  </p>
+                  <textarea
+                    value={refTrackLyrics}
+                    onChange={(e) => setRefTrackLyrics(e.target.value)}
+                    placeholder={"Pega aquí la letra completa de la canción de referencia...\n\n### [Verse 1]\n...\n\n### [Chorus]\n..."}
+                    className="w-full min-h-[140px] max-h-[300px] overflow-y-auto rounded-lg border border-border/40 bg-black/30 p-3 text-[12px] font-mono text-foreground/90 placeholder:text-muted-foreground/40 focus:outline-none focus:border-sky-400/50 resize-y"
+                  />
+                  {refTrackLyrics.trim() && (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px] border-sky-400/40 text-sky-400">
+                        {refTrackLyrics.trim().split("\n").length} líneas listas
+                      </Badge>
+                      <Button variant="ghost" size="sm" onClick={() => { setRefTrackLyrics(""); setRefTrackAnalysis(null); }} className="text-[10px] text-muted-foreground hover:text-foreground h-7">
+                        Limpiar
+                      </Button>
+                    </div>
+                  )}
+                  {refTrackAnalysis && (
+                    <div className="rounded-lg border border-sky-400/20 bg-sky-400/5 p-3">
+                      <p className="text-[10px] text-sky-400 uppercase font-medium mb-1">ADN extraído del último análisis:</p>
+                      <p className="text-[11px] text-foreground/70">{refTrackAnalysis}</p>
+                    </div>
+                  )}
+                  <div className="rounded-lg border border-sky-400/10 bg-sky-400/5 p-2.5">
+                    <p className="text-[10px] text-sky-400/80">
+                      💡 La estructura, rima, densidad y dinámica de esta canción se usarán como esqueleto. El contenido será del artista seleccionado.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Actívalo para pegar una canción de referencia. La app replicará su estructura, esquema de rima, densidad y dinámica con el contenido del artista seleccionado.
+                </p>
+              )}
+            </Card>
 
             {/* --- Presets --- */}
             {presets.length > 0 && (
@@ -2246,8 +2344,11 @@ export default function TrapGhostPage() {
                     <Button variant="ghost" size="sm" onClick={handleProducerTag} disabled={producerTagLoading} className="text-muted-foreground hover:text-purple-400 h-8" title="Generar Producer Tag personalizado">
                       <Disc3 className="w-3.5 h-3.5 mr-1" />Tag
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={handleAgentPolish} disabled={polishLoading} className="text-muted-foreground hover:text-cyber h-8" title="Agent Polish — 4 agentes IA revisan y mejoran la letra">
+                    <Button variant="ghost" size="sm" onClick={() => { setPolishOpen(true); setPolishError(null); }} disabled={polishLoading} className="text-muted-foreground hover:text-cyber h-8" title="Agent Polish — 4 agentes IA revisan y mejoran la letra">
                       <Sparkles className="w-3.5 h-3.5 mr-1" />Polish
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setRefTrackOpen(!refTrackOpen)} className={`h-8 ${refTrackOpen ? "text-sky-400" : "text-muted-foreground hover:text-sky-400"}`} title="Reference Track Importer — pega una canción y replica su ADN estructural">
+                      <Music2 className="w-3.5 h-3.5 mr-1" />Ref Track
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => handleSocialCaption("instagram")} disabled={socialLoading} className="text-muted-foreground hover:text-pink-400 h-8" title="Caption para Instagram">
                       <Instagram className="w-3.5 h-3.5" />
@@ -2783,7 +2884,7 @@ export default function TrapGhostPage() {
                     )}
                   </>
                 ) : (
-                  <p className="text-sm text-muted-foreground text-center py-8">Esperando análisis...</p>
+                  <p className="text-sm text-muted-foreground text-center py-4">Configura las opciones arriba y pulsa <span className="text-cyber font-medium">"Start Analysis"</span> para comenzar.</p>
                 )}
               </Card>
             )}
@@ -3247,26 +3348,82 @@ export default function TrapGhostPage() {
                   <Sparkles className="w-5 h-5 text-cyber" />
                   <h2 className="font-display text-lg font-semibold">Agent Polish</h2>
                   <Badge variant="outline" className="ml-auto text-[10px] border-cyber/40 text-cyber">
-                    4 Agentes IA
+                    4 Checkers + Rewriter
                   </Badge>
                   <Button variant="ghost" size="sm" onClick={() => { setPolishOpen(false); setPolishResult(null); }} className="text-muted-foreground hover:text-foreground h-8">
                     ✕
                   </Button>
                 </div>
+
+                {/* Auto-iterate toggle — siempre visible cuando no está cargando */}
+                {!polishLoading && (
+                  <label className="flex items-center gap-2 rounded-lg border border-purple-400/30 bg-purple-400/5 p-2.5 cursor-pointer hover:bg-purple-400/10 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={polishAutoIterate}
+                      onChange={(e) => setPolishAutoIterate(e.target.checked)}
+                      className="w-4 h-4 accent-purple-400"
+                    />
+                    <div className="flex-1">
+                      <p className="text-[12px] font-medium text-purple-400">⚡ Auto-iterate (hasta 3 ciclos)</p>
+                      <p className="text-[10px] text-muted-foreground">Reescribe automáticamente hasta superar el umbral del tier del artista. TIER 1=80, TIER 2=70, TIER 3=60.</p>
+                    </div>
+                  </label>
+                )}
+
+                {/* Error display */}
+                {polishError && !polishLoading && (
+                  <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-400" />
+                      <p className="text-[12px] font-medium text-red-400">Error en Agent Polish:</p>
+                    </div>
+                    <p className="text-[11px] text-foreground/80">{polishError}</p>
+                    <Button variant="outline" size="sm" onClick={() => { setPolishError(null); handleAgentPolish(); }} className="h-7 text-[11px] border-red-400/40 text-red-400 hover:bg-red-500/10">
+                      Reintentar
+                    </Button>
+                  </div>
+                )}
+
+                {/* Start Analysis button — solo cuando no está cargando y no hay resultado/error */}
+                {!polishLoading && !polishResult && !polishError && (
+                  <Button onClick={handleAgentPolish} className="w-full bg-gradient-to-r from-cyber to-purple-500 text-white font-semibold hover:opacity-90 h-11">
+                    <Sparkles className="w-4 h-4 mr-2" />Start Analysis
+                  </Button>
+                )}
+
                 {polishLoading ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-4">
                     <div className="trap-spinner" />
-                    <p className="text-sm text-muted-foreground">4 agentes analizando la letra...</p>
+                    <p className="text-sm text-muted-foreground">
+                      {polishAutoIterate ? `Auto-iterate: analizando y reescribiendo (hasta 3 ciclos)...` : `4 agentes analizando la letra...`}
+                    </p>
                     <div className="space-y-1.5 text-[11px] text-muted-foreground/70">
                       <p>🎤 Agente 1: Rhyme Checker — analizando rimas...</p>
                       <p>🎵 Agente 2: Flow Checker — analizando métrica...</p>
                       <p>📝 Agente 3: Content Checker — analizando contenido...</p>
-                      <p>✨ Agente 4: Rewriter — reescribiendo con mejoras...</p>
+                      <p>🪝 Agente 4: Hook Analyzer — analizando hook por estilo...</p>
+                      <p>✨ Agente 5: Rewriter — reescribiendo con mejoras...{polishAutoIterate ? " (iterando)" : ""}</p>
                     </div>
-                    <p className="text-[10px] text-muted-foreground/50">Esto puede tardar 30-60 segundos</p>
+                    <p className="text-[10px] text-muted-foreground/50">
+                      {polishAutoIterate ? "Auto-iterate puede tardar 2-5 minutos (múltiples ciclos)" : "Esto puede tardar 30-90 segundos"}
+                    </p>
                   </div>
                 ) : polishResult ? (
                   <div className="space-y-3">
+                    {/* Tier + threshold badge (auto-iterate) */}
+                    {polishResult.autoIterate && polishResult.tierLabel && (
+                      <div className="flex items-center gap-2 rounded-lg border border-purple-400/30 bg-purple-400/5 p-2">
+                        <Zap className="w-3.5 h-3.5 text-purple-400" />
+                        <span className="text-[10px] text-purple-400 font-medium">Tier: {polishResult.tierLabel}</span>
+                        {polishResult.stoppedReason === "threshold_reached" ? (
+                          <Badge variant="outline" className="text-[9px] border-slime/40 text-slime ml-auto">✓ Umbral superado</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] border-yellow-400/40 text-yellow-400 ml-auto">Máx iteraciones</Badge>
+                        )}
+                      </div>
+                    )}
+
                     {/* Score comparison */}
                     <div className="flex items-center gap-3 rounded-lg border border-cyber/20 bg-cyber/5 p-3">
                       <div className="text-center">
@@ -3280,10 +3437,26 @@ export default function TrapGhostPage() {
                       </div>
                       <div className="ml-auto">
                         <Badge variant="outline" className="text-[10px] border-slime/40 text-slime">
-                          +{polishResult.finalScore - polishResult.originalScore} pts
+                          {polishResult.finalScore >= polishResult.originalScore ? "+" : ""}{polishResult.finalScore - polishResult.originalScore} pts
                         </Badge>
                       </div>
                     </div>
+
+                    {/* Iterations progress (auto-iterate) */}
+                    {polishResult.autoIterate && polishResult.iterations && polishResult.iterations.length > 0 && (
+                      <div className="rounded-lg border border-purple-400/20 bg-purple-400/5 p-3">
+                        <p className="text-[10px] text-purple-400 uppercase font-medium mb-2">Iteraciones:</p>
+                        <div className="flex items-center gap-2">
+                          {polishResult.iterations.map((it, i) => (
+                            <div key={i} className="flex-1 text-center">
+                              <p className="text-[9px] text-muted-foreground">#{it.iteration}</p>
+                              <p className={`font-display text-lg font-bold ${it.score >= (polishResult.threshold ?? 70) ? "text-slime" : "text-yellow-400"}`}>{it.score}</p>
+                            </div>
+                          ))}
+                          {polishResult.iterations.length > 1 && <div className="text-[10px] text-muted-foreground ml-2">→</div>}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Agent reports */}
                     <div className="space-y-2">
@@ -3337,8 +3510,59 @@ export default function TrapGhostPage() {
                     </Button>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground text-center py-8">Esperando análisis...</p>
+                  <p className="text-sm text-muted-foreground text-center py-4">Configura las opciones arriba y pulsa <span className="text-cyber font-medium">"Start Analysis"</span> para comenzar.</p>
                 )}
+              </Card>
+            )}
+
+            {/* --- Reference Track Importer Panel (Phase 4) --- */}
+            {refTrackOpen && (
+              <Card className="glass-card p-5 space-y-3 animate-fade-slide">
+                <div className="flex items-center gap-2">
+                  <Music2 className="w-5 h-5 text-sky-400" />
+                  <h2 className="font-display text-lg font-semibold">Reference Track Importer</h2>
+                  <Badge variant="outline" className="ml-auto text-[10px] border-sky-400/40 text-sky-400">
+                    ADN estructural
+                  </Badge>
+                  <Button variant="ghost" size="sm" onClick={() => setRefTrackOpen(false)} className="text-muted-foreground hover:text-foreground h-8">
+                    ✕
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Pega la letra de una canción que te guste (tuya o de otro artista). La app analiza su ADN estructural (secciones, esquema de rima, densidad, ad-libs, idioma, hook style) y lo replica con el contenido del artista seleccionado.
+                </p>
+                <textarea
+                  value={refTrackLyrics}
+                  onChange={(e) => setRefTrackLyrics(e.target.value)}
+                  placeholder="Pega aquí la letra completa de la canción de referencia...&#10;&#10;### [Verse 1]&#10;...&#10;&#10;### [Chorus]&#10;..."
+                  className="w-full min-h-[140px] max-h-[300px] overflow-y-auto rounded-lg border border-border/40 bg-black/30 p-3 text-[12px] font-mono text-foreground/90 placeholder:text-muted-foreground/40 focus:outline-none focus:border-sky-400/50 resize-y custom-scroll"
+                />
+                {refTrackLyrics.trim() && (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] border-sky-400/40 text-sky-400">
+                      {refTrackLyrics.trim().split("\n").length} líneas
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setRefTrackLyrics(""); setRefTrackAnalysis(null); }}
+                      className="text-[10px] text-muted-foreground hover:text-foreground h-7"
+                    >
+                      Limpiar
+                    </Button>
+                  </div>
+                )}
+                {refTrackAnalysis && (
+                  <div className="rounded-lg border border-sky-400/20 bg-sky-400/5 p-3">
+                    <p className="text-[10px] text-sky-400 uppercase font-medium mb-1">ADN extraído:</p>
+                    <p className="text-[11px] text-foreground/70">{refTrackAnalysis}</p>
+                  </div>
+                )}
+                <div className="rounded-lg border border-sky-400/10 bg-sky-400/5 p-2.5">
+                  <p className="text-[10px] text-sky-400/80">
+                    💡 Cuando generes, la app extraerá la estructura, esquema de rima, densidad, patrón de ad-libs, ratio de idioma y hook style de esta canción, y replicará ese ADN con el contenido del artista seleccionado.
+                  </p>
+                </div>
               </Card>
             )}
 

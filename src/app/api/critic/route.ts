@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import ZAI from "z-ai-web-dev-sdk";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -55,6 +54,7 @@ Proporciona 3-5 puntos de feedback mezclando strengths, weaknesses y suggestions
 LETRA A ANALIZAR:
 ${body.lyrics}`;
 
+    const ZAI = (await import("z-ai-web-dev-sdk")).default;
     const zai = await ZAI.create();
     const completion = await zai.chat.completions.create({
       messages: [

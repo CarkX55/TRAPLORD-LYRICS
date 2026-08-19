@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import ZAI from "z-ai-web-dev-sdk";
 import { buildSystemPrompt, buildSpanglishInstruction, type LockedSection, type RegenerateSectionParams } from "@/lib/prompt-builder";
-import { MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, generateBeatPrompt } from "@/lib/trap-data";
+import { MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, generateBeatPrompt, getArtistById } from "@/lib/trap-data";
 import { buildCorrectionInstruction, analyzeLanguageRatio, type LanguageAnalysis } from "@/lib/language-detector";
+import { getArtistReference } from "@/lib/artist-references";
+import { generateArtistReference } from "@/lib/reference-generator";
+import { analyzeReferenceTrack } from "@/lib/track-analyzer";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 90; // increased for reference generation + track analysis
 
 interface GenerateBody {
   artistId: string;
@@ -30,6 +32,32 @@ interface GenerateBody {
   regenerateSection?: RegenerateSectionParams;
   previousLyrics?: string; // for re-generation with correction
   autoCorrect?: boolean; // enable post-generation verification + auto re-gen
+  referenceTrackLyrics?: string; // NEW Phase 4
+  dynamicSongForm?: boolean; // NEW Phase 6
+  producerName?: string; // ensure passed
+  featureSimId?: string;
+  beatTypeId?: string;
+  customIntro?: string;
+  collabInteraction?: boolean;
+  altVoiceAsterisks?: boolean;
+  syllableSync?: boolean;
+  phoneticAdlibs?: boolean;
+  smartBarsMode?: boolean;
+  sectionVoices?: { sectionName: string; voice: string; bars?: number; density?: "sparse" | "normal" | "dense" | "extra_dense" }[];
+}
+
+// Get a reference for an artist: curated DB first, then generate on-the-fly (sandbox uses z-ai SDK)
+async function getOrGenerateReference(artistId: string) {
+  const curated = getArtistReference(artistId);
+  if (curated) return curated;
+  const artist = getArtistById(artistId);
+  if (!artist) return null;
+  try {
+    return await generateArtistReference({ artistId, artistName: artist.name });
+  } catch (err) {
+    console.error(`[generate] ref gen failed for ${artistId}:`, err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 function resolveTopics(topicIds: string[]): string[] {
@@ -58,6 +86,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Phase 3+4: fetch/generate artist references + analyze reference track (all in parallel, sandbox uses z-ai SDK)
+    const [mainRef, featRef, refTrack] = await Promise.all([
+      getOrGenerateReference(body.artistId),
+      body.featureArtistId ? getOrGenerateReference(body.featureArtistId) : Promise.resolve(null),
+      body.referenceTrackLyrics?.trim()
+        ? analyzeReferenceTrack({ lyrics: body.referenceTrackLyrics })
+        : Promise.resolve(null),
+    ]);
+
     const prompt = buildSystemPrompt({
       artistId: body.artistId,
       featureArtistId: body.featureArtistId ?? "",
@@ -71,6 +108,7 @@ export async function POST(req: NextRequest) {
       narrativeArcDesc: narrativeArc.description,
       producerId: body.producerId ?? "none",
       producerTag: body.producerTag,
+      producerName: body.producerName,
       customDictionary: body.customDictionary,
       dynamicMarkers: body.dynamicMarkers,
       chorusLanguageOverride: body.chorusLanguageOverride,
@@ -80,9 +118,14 @@ export async function POST(req: NextRequest) {
       lockedSections: body.lockedSections,
       regenerateSection: body.regenerateSection,
       correctionInstruction,
+      mainArtistReference: mainRef,
+      featureArtistReference: featRef,
+      referenceTrack: refTrack,
+      dynamicSongForm: body.dynamicSongForm,
     });
 
     // Call the LLM via z-ai-web-dev-sdk (server-side only)
+    const ZAI = (await import("z-ai-web-dev-sdk")).default;
     const zai = await ZAI.create();
     // Temperature control: lower = more adherence to rules, higher = more creativity
     // Default 0.9; if user wants strict ratio adherence, they set lower (e.g. 0.6)
@@ -114,6 +157,7 @@ export async function POST(req: NextRequest) {
       promptPreview: prompt.slice(0, 500) + "...",
       temperature,
       beatPrompt,
+      refTrackSummary: refTrack?.summary ?? null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido en la generación.";

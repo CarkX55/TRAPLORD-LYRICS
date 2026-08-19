@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import ZAI from "z-ai-web-dev-sdk";
 import { getArtistById, MOODS, BPM_VIBES, getProducerById } from "@/lib/trap-data";
 
 export const runtime = "nodejs";
@@ -71,6 +70,7 @@ REQUISITOS:
 
 Devuelve SOLO el caption (sin explicaciones, sin metadatos):`;
 
+    const ZAI = (await import("z-ai-web-dev-sdk")).default;
     const zai = await ZAI.create();
     const completion = await zai.chat.completions.create({
       messages: [
