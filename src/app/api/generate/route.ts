@@ -128,13 +128,12 @@ export async function POST(req: NextRequest) {
     const ZAI = (await import("z-ai-web-dev-sdk")).default;
     const zai = await ZAI.create();
     // Temperature control: lower = more adherence to rules, higher = more creativity
-    // Default 0.9; if user wants strict ratio adherence, they set lower (e.g. 0.6)
-    const temperature = typeof body.temperature === "number" ? body.temperature : 0.9;
+    // Default 0.72 for tight rhymes and authentic flow
+    const temperature = typeof body.temperature === "number" ? body.temperature : 0.72;
     const completion = await zai.chat.completions.create({
       messages: [
         { role: "user", content: prompt },
       ],
-      thinking: { type: "disabled" },
       temperature,
     });
 

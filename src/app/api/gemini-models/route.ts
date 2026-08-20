@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
       .map((m: { name: string; displayName?: string }) => {
         const id = m.name.replace("models/", "");
         let name = m.displayName || id;
-        if (id.includes("gemini-2.5") || id.includes("gemini-3")) name = `✨ ${name}`;
+        if (id.includes("gemini-3") || id.includes("gemini-2.5") || id.includes("thinking")) name = `✨ ${name} (Thinking Máximo)`;
         else if (id.includes("gemini-2.0")) name = `🔥 ${name}`;
         else if (id.includes("gemini-1.5")) name = `📊 ${name}`;
         return { id, name };

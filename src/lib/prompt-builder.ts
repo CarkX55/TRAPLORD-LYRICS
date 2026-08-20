@@ -1,4 +1,4 @@
-// Prompt Builder — COMPACT prompt + TIERED rhymes (no banning 1-syllable rhymes for street artists)
+// Prompt Builder — Suno AI Native + Guided Thinking Protocol + Organic Code-Switching
 
 import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, type SongStructure, type BpmVibe, type BeatType } from "./trap-data";
 import { getFlowProfile, getBreathInstruction, getCadenceLabel, type FlowProfile } from "./artist-flow-profiles";
@@ -10,7 +10,6 @@ import type { TrackAnalysis } from "./track-analyzer";
  * TIER 1 = technical multi-syllabic required (Eminem, Kendrick, J. Cole, Takeoff, Recycled J — rs_internal).
  * TIER 2 = balanced: mix multi + single (Drake, Migos, Gunna, Travis — rs_abab, rs_triplets).
  * TIER 3 = street/direct: 1-syllable OK if it hits (Yung Beef, 21 Savage, Carti, Chief Keef, Future, Pop Smoke, Gucci — rs_aabb, rs_monorhyme, rs_free).
- * This way we DON'T restrict artists whose authentic style relies on punchy 1-syllable rhymes.
  */
 export function getRhymeTier(artistId: string): 1 | 2 | 3 {
   const profile = getFlowProfile(artistId);
@@ -84,34 +83,34 @@ export function buildSpanglishInstruction(percent: number): {
   const spanishPct = 100 - percent;
 
   let vibeLabel: string;
-  let strictRule: string;
+  let organicRule: string;
 
   if (englishPct === 0) {
     vibeLabel = "100% Español puro";
-    strictRule = "REGLA ABSOLUTA: 0% inglés. Ni una sola frase en inglés. Solo se permiten anglicismos si son nombres de marcas (Glock, Ferrari). Todo debe ser español.";
-  } else if (englishPct <= 15) {
-    vibeLabel = `🇪🇸 Español dominante (${spanishPct}% ES / ${englishPct}% EN)`;
-    strictRule = `REGLA MATEMÁTICA: De cada 10 palabras de contenido, aproximadamente ${Math.round(spanishPct / 10)} deben ser en español y ${Math.round(englishPct / 10)} en inglés. Escribe el 85-90% en español, pero introduce slang inglés aislado (bands, drip, opp) como condimento. Los estribillos en español.`;
-  } else if (englishPct <= 40) {
-    vibeLabel = `🔌 Español con slang americano (${spanishPct}% ES / ${englishPct}% EN)`;
-    strictRule = `REGLA MATEMÁTICA: Proporción objetivo ${spanishPct}% español / ${englishPct}% inglés. De cada 10 palabras, ~${Math.round(spanishPct / 10)} españolas y ~${Math.round(englishPct / 10)} inglesas. Escribe la mayoría en español pero termina estrofas con metralletas de slang inglés. Mezcla natural.`;
-  } else if (englishPct <= 60) {
+    organicRule = "IDIOMA: 100% Español puro. Prohibido usar frases o palabras en inglés (salvo marcas registradas). Las rimas, la métrica y la jerga deben fluir con naturalidad en español.";
+  } else if (englishPct <= 20) {
+    vibeLabel = `🇪🇸 Español dominante con Loanwords (${spanishPct}% ES / ${englishPct}% EN)`;
+    organicRule = `CODE-SWITCHING ORGÁNICO: Español dominante. Escribe las estrofas y narrativa en español, pero integra anglicismos callejeros y loanwords auténticos de la cultura urbana (drip, opps, motion, racks, plug, flex) en puntos rítmicos naturales. Los estribillos en español.`;
+  } else if (englishPct <= 45) {
+    vibeLabel = `🔌 Español con Rhyme Anchors en inglés (${spanishPct}% ES / ${englishPct}% EN)`;
+    organicRule = `CODE-SWITCHING ORGÁNICO: Base en español con remates y anclas de rima en inglés. Desarrolla la frase en español y cierra el compás con punchlines o terminaciones en inglés. Mezcla fluida y musical como Eladio Carrión o Myke Towers.`;
+  } else if (englishPct <= 65) {
     vibeLabel = `⚖️ Spanglish balanceado 50/50 (${spanishPct}% ES / ${englishPct}% EN)`;
-    strictRule = `REGLA MATEMÁTICA: Equilibrio ${spanishPct}/${englishPct}. De cada 10 palabras, ~${Math.round(spanishPct / 10)} en español y ~${Math.round(englishPct / 10)} en inglés. ALTERNA constantemente: una barra en español, la siguiente en inglés. O empieza la frase en español y termina la rima en inglés.`;
+    organicRule = `CODE-SWITCHING ORGÁNICO (50/50): Alternancia constante y fluida. Alterna barras completas en inglés y español o realiza cambios de código a mitad de compás. Las rimas deben cruzar ambos idiomas con total naturalidad estilo Kidd Keo / Eladio.`;
   } else if (englishPct <= 85) {
-    vibeLabel = `🇺🇸 Inglés con frases en español (${englishPct}% EN / ${spanishPct}% ES)`;
-    strictRule = `REGLA MATEMÁTICA: Proporción objetivo ${englishPct}% inglés / ${spanishPct}% español. De cada 10 palabras, ~${Math.round(englishPct / 10)} inglesas y ~${Math.round(spanishPct / 10)} españolas. El 70-80% en inglés americano. Usa español solo para insultos, frases callejeras cortas o puentes rítmicos.`;
+    vibeLabel = `🇺🇸 Inglés dominante con barras en español (${englishPct}% EN / ${spanishPct}% ES)`;
+    organicRule = `CODE-SWITCHING ORGÁNICO: Inglés americano dominante (75-80%). Estructura principal en inglés con puentes, remates o frases callejeras directas en español.`;
   } else if (englishPct < 100) {
-    vibeLabel = `🇺🇸 Inglés dominante (${englishPct}% EN / ${spanishPct}% ES)`;
-    strictRule = `REGLA MATEMÁTICA: 85-90% en inglés americano. De cada 10 palabras, ~${Math.round(englishPct / 10)} en inglés y ~${Math.round(spanishPct / 10)} en español. Toda la estructura en inglés. Solo unas pocas palabras sueltas en español como adorno.`;
+    vibeLabel = `🇺🇸 Inglés casi puro (${englishPct}% EN / ${spanishPct}% ES)`;
+    organicRule = `IDIOMA: 90% Inglés americano (US Trap). Prácticamente todo en inglés con algún modismo aislado en español.`;
   } else {
     vibeLabel = "100% English puro";
-    strictRule = "REGLA ABSOLUTA: 100% inglés americano. Prohibido usar español. Toda la letra, slang y métrica debe ser estrictamente en inglés (US Trap).";
+    organicRule = "IDIOMA: 100% Inglés americano puro (US Trap). Prohibido usar español. Toda la lírica, slang y métrica debe ser estrictamente en inglés de Atlanta/US.";
   }
 
   return {
     label: vibeLabel,
-    prompt: `**Idioma Base**: ${vibeLabel}. ${strictRule}`,
+    prompt: `**Patrón de Idioma**: ${vibeLabel}. ${organicRule}`,
   };
 }
 
@@ -123,22 +122,22 @@ export function buildSystemPrompt(params: PromptParams): string {
   // Topic construction
   let topicBlock: string;
   if (params.customTopic.trim()) {
-    topicBlock = `TEMA A LA CARTA: El usuario quiere EXACTAMENTE ESTO: "${params.customTopic.trim()}". Desarrolla esta idea al máximo, con detalles crudos, narración rica y una perspectiva única.`;
+    topicBlock = `CONCEPTO A LA CARTA: "${params.customTopic.trim()}". Desarrolla esta idea con detalles crudos, anécdotas callejeras concretas y ángulo único.`;
     if (params.topics.length > 0) {
-      topicBlock += ` Etiquetas adicionales de vibra: [${params.topics.join(" + ")}]. Úsalas solo como color/atmósfera.`;
+      topicBlock += ` Atmósfera adicional: [${params.topics.join(" + ")}].`;
     }
   } else if (params.topics.length > 0) {
-    topicBlock = `${params.topics.join(" + ")} (INSTRUCCIÓN CRÍTICA: NO escribas historias genéricas. Busca una perspectiva MUY ORIGINAL, un ángulo narrativo único o una anécdota específica que combine estos elementos de forma sorprendente, pero que SIEMPRE SUENE REAL dentro del estilo de vida del Rap/Trap.)`;
+    topicBlock = `${params.topics.join(" + ")} (Escribe desde una perspectiva original, cruda y realista dentro de la cultura Rap/Trap).`;
   } else {
-    topicBlock = "TEMA LIBRE Y ALEATORIO (INSTRUCCIÓN CRÍTICA: Inventa un concepto, anécdota o historia COMPLETAMENTE NUEVA cada vez, dentro de la cultura del Rap/Trap. NO repitas clichés.)";
+    topicBlock = "TEMA LIBRE (Crea un concepto callejero auténtico y fresco, sin recurrir a clichés antiguos).";
   }
 
-  // Song Form Intelligence (Phase 6) — dynamic structure based on artist's songFormStyle
+  // Dynamic Song Form
   const flowProfileForForm = getFlowProfile(params.artistId);
   const songFormStyle = flowProfileForForm?.songFormStyle ?? "minimal_standard";
   const useDynamicForm = params.dynamicSongForm !== false && songFormStyle !== "minimal_standard";
 
-  // Structure plan with per-section voice assignment + dynamic form (Phase 6)
+  // Structure plan formatted strictly for Suno AI
   let chorusIdx = 0;
   let verseIdx = 0;
   const totalSections = params.structure.sections.length;
@@ -152,30 +151,23 @@ export function buildSystemPrompt(params: PromptParams): string {
 
       const lines: string[] = [];
 
-      // Dynamic insertions BEFORE this section
-      if (useDynamicForm) {
-        if ((songFormStyle === "pre_chorus_build" || songFormStyle === "hybrid") && isChorus) {
-          lines.push(`[Pre-Chorus]: ${artist?.name ?? "Main Artist"} — EXACTAMENTE 2-4 barras (BUILD melódico que sube tensión hacia el chorus. NO repitas el chorus, es la RAMP previa)`);
-        }
+      // Pre-Chorus build
+      if (useDynamicForm && (songFormStyle === "pre_chorus_build" || songFormStyle === "hybrid") && isChorus) {
+        lines.push(`[Pre-Chorus: ${artist?.name ?? "Lead"}] — 2-4 barras (Rampa melódica que sube la energía hacia el chorus)`);
       }
 
-      let voice = artist?.name ?? "Main Artist";
+      let voice = artist?.name ?? "Lead";
       const voiceAssign = params.sectionVoices?.find(v => v.sectionName === s.name);
       if (voiceAssign) {
         const v = voiceAssign.voice;
-        if (v === "main") voice = artist?.name ?? "Main Artist";
+        if (v === "main") voice = artist?.name ?? "Lead";
         else if (v === "feature" && featureArtist) voice = featureArtist.name;
-        else if (v === "both") voice = `${artist?.name ?? "Main"} + ${featureArtist?.name ?? "Feature"} (Unísono)`;
-        else if (v === "hype") voice = `${artist?.name ?? "Main"} (Hype Man - Solo Ad-libs)`;
+        else if (v === "both") voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
+        else if (v === "hype") voice = `${artist?.name ?? "Lead"} (Ad-libs only)`;
         else if (v.startsWith("instrumental:")) voice = `🚫 NO LYRICS - [${v.replace("instrumental:", "")}]`;
         else {
           const assignedArtist = getArtistById(v);
-          if (assignedArtist) {
-            voice = assignedArtist.name;
-            if (assignedArtist.id !== params.artistId) {
-              voice += ` (ESTILO OBLIGATORIO: ${assignedArtist.style})`;
-            }
-          }
+          if (assignedArtist) voice = assignedArtist.name;
         }
       } else if (s.name.toLowerCase().includes("feature") && featureArtist) {
         voice = featureArtist.name;
@@ -195,40 +187,25 @@ export function buildSystemPrompt(params: PromptParams): string {
         bars = isVerse ? "8-12 barras" : isChorus ? "4-8 barras" : "2-4 barras";
       }
 
-      // Dynamic modifications (Phase 6)
       let dynamicNote = "";
       if (useDynamicForm) {
         if ((songFormStyle === "expanding_chorus" || songFormStyle === "hybrid") && isChorus && chorusIdx > 1) {
-          const extraBars = (chorusIdx - 1) * 2;
-          dynamicNote = ` (+${extraBars} barras vs Chorus anterior — EXPANDING: añade frases/ad-libs NUEVOS, no repitas igual)`;
+          dynamicNote = ` (Chorus expansivo: añade variaciones nuevas y ad-libs)`;
         }
         if (songFormStyle === "variable_verse" && isVerse) {
-          if (verseIdx === 1) dynamicNote = " (+2 barras STORYTELLING — verso largo narrativo)";
-          else if (verseIdx === 2) dynamicNote = " (-2 barras MOMENTUM — verso más corto y rápido)";
+          if (verseIdx === 1) dynamicNote = " (Verso 1 narrativo y descriptivo)";
+          else if (verseIdx === 2) dynamicNote = " (Verso 2 rápido y agresivo)";
         }
       }
 
-      // Densidad por sección
-      let densityInstruction = "";
-      if (voiceAssign?.density) {
-        const densityMap: Record<string, string> = {
-          sparse: "DENSIDAD BAJA: 4-6 sílabas por barra. Frases cortas, mucho espacio entre líneas. Deja que el beat respire. Flow minimalista.",
-          normal: "DENSIDAD NORMAL: 8-10 sílabas por barra. Flow estándar equilibrado.",
-          dense: "DENSIDAD ALTA: 12-14 sílabas por barra. Frases largas, muchas rimas internas. Flow rápido y técnico.",
-          extra_dense: "DENSIDAD EXTREMA: 14-18 sílabas por barra. Ametralladora de palabras, rimas internas múltiples, flow rapid fire.",
-        };
-        densityInstruction = densityMap[voiceAssign.density] ?? "";
-      }
+      lines.push(`[${s.name}: ${voice}] — ${bars}${dynamicNote}`);
 
-      lines.push(`[${s.name}]: ${voice} — EXACTAMENTE ${bars}${dynamicNote} (líneas cantadas)${densityInstruction ? `. ${densityInstruction}` : ""}`);
-
-      // Dynamic insertions AFTER this section (beat drops)
       if (useDynamicForm && songFormStyle === "beat_drop") {
         if (isIntro) {
-          lines.push(`[BEAT DROP]: 🚫 NO LYRICS — beat drop 1 barra tras intro. Marca el inicio real del track con energía máxima.`);
+          lines.push(`[Beat Drop] — 🚫 NO LYRICS (Drop del beat con 808 pesado)`);
         }
-        if (isChorus && i < totalSections - 1 && i === totalSections - 2) {
-          lines.push(`[BEAT DROP]: 🚫 NO LYRICS — silencio 1-2 barras + drop del beat. Tensión máxima antes del chorus final.`);
+        if (isChorus && i === totalSections - 2) {
+          lines.push(`[Beat Drop] — 🚫 NO LYRICS (Tensión antes del chorus final)`);
         }
       }
 
@@ -236,171 +213,65 @@ export function buildSystemPrompt(params: PromptParams): string {
     })
     .join("\n");
 
-  // Tiered rhyme instruction — TIER 3 explicitly allows 1-syllable rhymes (street style)
+  // Rhyme tier instruction
   const rhymeTier = getRhymeTier(params.artistId);
   let rhymeLevelInstruction = "";
   if (rhymeTier === 1) {
-    rhymeLevelInstruction = `${artist?.name ?? "El artista"} es TÉCNICO: rimas multisilábicas OBLIGATORIAS (2+ sílabas). Mínimo 2 rimas internas por barra. Estilo Eminem/Kendrick — la complejidad técnica es la firma.`;
+    rhymeLevelInstruction = `MÉTRICA TÉCNICA: Rimas multisilábicas obligatorias (2+ sílabas coincidentes) y rimas internas dentro del compás. Precisión quirúrgica estilo Eminem/Kendrick/Recycled J.`;
   } else if (rhymeTier === 2) {
-    rhymeLevelInstruction = `${artist?.name ?? "El artista"} es EQUILIBRADO: combina multisilábicas con rimas de 1 sílaba. Mínimo 1 rima interna por barra. Mezcla natural — algunos versos complejos, otros simples y pegadizos.`;
+    rhymeLevelInstruction = `MÉTRICA EQUILIBRADA: Combina multisilábicas con rimas de 1 sílaba contundentes. Rimas internas naturales y cadencia pegadiza estilo Travis Scott/Gunna/Drake.`;
   } else {
-    rhymeLevelInstruction = `${artist?.name ?? "El artista"} es DIRECTO/CALLE: las rimas de 1 sílaba SON VÁLIDAS si pegan duro. Prioriza RITMO, AD-LIBS y ATMÓSFERA sobre complejidad técnica. Mete algún multi-silábico solo para punchlines puntuales — forzarlo aquí sonaría fake.`;
+    rhymeLevelInstruction = `MÉTRICA DIRECTA / STREET: Prioriza la cadencia, el golpe rítmico y la actitud cruda. Rimas directas, asonancias pesadas y ad-libs precisos estilo Yung Beef/21 Savage/Future/Carti.`;
   }
 
   // Narrative arc
   let narrativeBlock = "";
   if (params.narrativeArcId !== "none" && params.narrativeArcDesc) {
-    narrativeBlock = `\n# 📖 ARCO NARRATIVO OBLIGATORIO\n${params.narrativeArcDesc}`;
+    narrativeBlock = `\n# 📖 ARCO NARRATIVO\n${params.narrativeArcDesc}`;
   }
 
   // Dictionary
   let dictionaryBlock = "";
   if (params.customDictionary.trim()) {
-    dictionaryBlock = `\n# 🌍 WORLD-BUILDING (DICCIONARIO ESTRICTO)\nEl usuario proporcionó nombres reales. DEBES tejer estos términos en la letra de forma natural:\n{ ${params.customDictionary.trim()} }\nÚsalos para nombrar la base, los enemigos o sus posesiones directamente.`;
+    dictionaryBlock = `\n# 🌍 DICCIONARIO / WORLD-BUILDING\nIncorpora estos términos y nombres reales de forma orgánica en las barras:\n{ ${params.customDictionary.trim()} }`;
   }
 
-  // Dynamic markers
-  let dynamicsBlock = "";
-  if (params.dynamicMarkers) {
-    dynamicsBlock = `\n# 🎙️ MARCADORES DINÁMICOS DE VOZ\nIncluye marcadores entre corchetes para indicar cambios de tono: [LONG PAUSE], [BEAT DROP], [WHISPERING], [AGGRESSIVELY INCREASING PITCH], [MELODIC CRYING VOICE], [SCREAMING].`;
-  }
-
-  // Beat type
-  let beatTypeBlock = "";
-  if (params.beatType) {
-    beatTypeBlock = `\n# 🎵 BEAT TYPE / SUB-GENRE\nTipo de beat: ${params.beatType.label}. ${params.beatType.description}. Tags sónicos: ${params.beatType.sunoTags.join(", ")}. Adapta el flow a este sub-género específico.`;
-  }
-
-  // Feature sim
-  let featureSimBlock = "";
-  if (params.featureSimId && params.featureSimId !== "solo") {
-    const sim = getFeatureSimById(params.featureSimId);
-    if (sim) {
-      featureSimBlock = `\n# 🤝 TIPO DE COLABORACIÓN\n${sim.description}. Adapta la dinámica entre artistas según este arquetipo.`;
-    }
-  }
-
-  // Advanced toggles
-  let collabBlock = "";
-  if (params.collabInteraction) {
-    collabBlock = `\n# 🎤 INTERACCIÓN ORGÁNICA DE COLABORACIÓN\nLos artistas DEBEN reconocerse mutuamente de forma natural. Usa frases como "Pass the mic", "Yo [Artist], take it away", reacciones espontáneas, y referencias cruzadas entre sus estilos.`;
-  }
-
-  let asterisksBlock = "";
-  if (params.altVoiceAsterisks) {
-    asterisksBlock = `\n# ✨ ASTERISCOS DE VOZ ALTERNATIVA (HACK SUNO)\nEnvuelve SOLO palabras clave individuales o frases cortas (2-3 palabras) entre asteriscos: *palabra*. Esto fuerza a Suno a usar un tono de voz alternativo. NO abuses — máximo 1-2 por barra.`;
-  }
-
-  let syllableSyncBlock = "";
-  if (params.syllableSync) {
-    syllableSyncBlock = `\n# 📐 STRICT POCKET / SINCRONIZACIÓN SILÁBICA\nModo matemático: cuenta las sílabas con precisión. Cada barra debe tener el MISMO número de sílabas (±1). Sigue un esquema rígido AABB o ABAB con conteo silábico simétrico.`;
-  }
-
-  let phoneticBlock = "";
-  if (params.phoneticAdlibs) {
-    phoneticBlock = `\n# 🔤 AD-LIBS FONÉTICOS\nEscribe los ad-libs de forma fonética extendida para mejor pronunciación en Suno: "Skirrrrt" en vez de "Skrrt", "Brrrrrt" en vez de "Brrr", "Yeaaaaah" en vez de "Yeah".`;
-  }
-
-  let customIntroBlock = "";
-  if (params.customIntro?.trim()) {
-    customIntroBlock = `\n# 🎬 INTRO/SKIT PERSONALIZADO\nEl usuario quiere EXACTAMENTE este intro o skit: "${params.customIntro.trim()}". Úsalo como inspiración literal o adáptalo al estilo del artista en la sección Intro.`;
-  }
-
-  // === FLOW PROFILE: cadence + breath + speed (optimizado para Suno) ===
+  // Flow profiles
   const flowProfile = getFlowProfile(params.artistId);
   const featureFlowProfile = featureArtist ? getFlowProfile(featureArtist.id) : null;
 
   let cadenceBlock = "";
   if (flowProfile) {
-    cadenceBlock = `\n# 🎵 CADENCIA RÍTMICA OBLIGATORIA (para Suno)\n**Cadencia**: ${getCadenceLabel(flowProfile.cadence)}\n${flowProfile.cadenceInstruction}\n**Velocidad ideal**: ${flowProfile.syllablesPerBar} sílabas por barra (${flowProfile.speedLabel}).\n**Prosodia**: ${flowProfile.accentPattern}`;
-    if (featureFlowProfile) {
-      cadenceBlock += `\n\n**Cadencia del Feature (${featureArtist!.name})**: ${getCadenceLabel(featureFlowProfile.cadence)}\n${featureFlowProfile.cadenceInstruction}`;
+    cadenceBlock = `\n# 🎵 CADENCIA Y VELOCIDAD (POCKET SUNO)\n- **Cadencia**: ${getCadenceLabel(flowProfile.cadence)}\n- **Velocidad de compás**: ${flowProfile.syllablesPerBar} sílabas por barra (${flowProfile.speedLabel})\n- ${flowProfile.cadenceInstruction}\n- **Puntuación para Suno**: Usa comas ',' y pausas '...' en los puntos de respiración natural.`;
+    if (featureFlowProfile && featureArtist) {
+      cadenceBlock += `\n- **Cadencia del Feature (${featureArtist.name})**: ${getCadenceLabel(featureFlowProfile.cadence)} — ${featureFlowProfile.cadenceInstruction}`;
     }
   }
 
-  let breathBlock = "";
-  if (flowProfile) {
-    breathBlock = `\n# 🫁 PATRÓN DE RESPIRACIÓN (para Suno)\n${getBreathInstruction(flowProfile)}\nLos marcadores ${flowProfile.breathStyle} hacen que Suno genere pausas vocales realistas. Ponlos en puntos naturales de respiración entre frases largas.`;
-  }
-
-  // Peak-era reference bars (few-shot style matching) — NEW Phase 1
-  // Use params.mainArtistReference if provided (generated via web-search/LLM for non-curated), else fall back to curated DB
+  // Reference bars (Few-Shot Peak Era)
   const artistRef = params.mainArtistReference ?? getArtistReference(params.artistId);
   let referenceBlock = "";
   if (artistRef) {
     const allBars = [
-      ...artistRef.verseBars.map(b => `V: "${b}"`),
-      ...artistRef.hookBars.map(b => `H: "${b}"`),
-      ...(artistRef.signatureBar ? [`★: "${artistRef.signatureBar}"`] : []),
+      ...artistRef.verseBars.map(b => `Verso: "${b}"`),
+      ...artistRef.hookBars.map(b => `Hook: "${b}"`),
+      ...(artistRef.signatureBar ? [`Firma: "${artistRef.signatureBar}"`] : []),
     ];
-    referenceBlock = `\n# 🎯 REFERENCIA PEAK ERA (FEW-SHOT — IMITA EL FLOW, NO COPIES LITERAL)\n${artist?.name ?? "Artista"} en su peak: ${artistRef.peakEra}\n${artistRef.verified ? "(Barras REALES verificadas)" : "(Barras style-matched — imitan el flow, no son reales)"}\n${allBars.join("\n")}\nEstudia: flow, cadencia, slang, posición de ad-libs, esquema de rima. IMPROVISA con tu contenido, NO repitas estas palabras.`;
+    referenceBlock = `\n# 🎯 REFERENCIA ESTILÍSTICA PEAK ERA (IMITA LA CADENCIA Y ACTITUD, NO COPIES LETRA LITERAL)\nArtista: ${artist?.name ?? "Artista"} (${artistRef.peakEra})\n${allBars.join("\n")}\nAnaliza cómo caen las sílabas en el compás y los ad-libs, e improvisa tus propias barras originales con este mismo peso.`;
   }
 
-  // Feature artist reference bars (NEW Phase 3) — few-shot for the feature artist's verse
   const featRef = params.featureArtistReference ?? (featureArtist ? getArtistReference(featureArtist.id) : null);
   let featureReferenceBlock = "";
   if (featRef && featureArtist) {
     const featBars = [
-      ...featRef.verseBars.map(b => `V: "${b}"`),
-      ...featRef.hookBars.map(b => `H: "${b}"`),
-      ...(featRef.signatureBar ? [`★: "${featRef.signatureBar}"`] : []),
+      ...featRef.verseBars.map(b => `Verso: "${b}"`),
+      ...featRef.hookBars.map(b => `Hook: "${b}"`),
+      ...(featRef.signatureBar ? [`Firma: "${featRef.signatureBar}"`] : []),
     ];
-    featureReferenceBlock = `\n# 🤝 REFERENCIA FEATURE — PEAK ERA (FEW-SHOT)\n${featureArtist.name} en su peak: ${featRef.peakEra}\n${featRef.verified ? "(Barras REALES verificadas)" : "(Barras style-matched — imitan el flow, no son reales)"}\n${featBars.join("\n")}\nCUANDO cante el Feature, usa ESTE flow (no el del artista principal). IMPROVISA con contenido propio, NO copies estas palabras.`;
+    featureReferenceBlock = `\n# 🤝 REFERENCIA FEATURE PEAK ERA\nFeature: ${featureArtist.name} (${featRef.peakEra})\n${featBars.join("\n")}\nCuando cante el Feature, cambia inmediatamente la cadencia, jerga y entrega para reflejar este estilo.`;
   }
 
-  // Per-artist style rules (hook, wordplay, emotional arc, melodic contour) — peak era
-  let artistStyleBlock = "";
-  if (flowProfile) {
-    const hookRules: Record<string, string> = {
-      repetitive: "HOOK repetitivo: chorus repite 1-2 frases clave con variaciones mínimas.",
-      melodic: "HOOK melódico: chorus casi cantado, melodía pegadiza.",
-      technical: "HOOK técnico: chorus con rimas internas complejas.",
-      simple_punchy: "HOOK directo: frases cortas y golpeadoras, minimalista.",
-    };
-    const wordplayRules: Record<number, string> = {
-      1: "WORDPLAY PESADO: dobles sentidos, metáforas extendidas, punchlines con setup (obligatorio).",
-      2: "WORDPLAY MODERADO: algún doble sentido/punchline cuando suene natural.",
-      3: "WORDPLAY MÍNIMO: prioriza ritmo y vibra, sin dobles sentidos forzados.",
-    };
-    const arcRules: Record<string, string> = {
-      rising: "ARCO ASCENDENTE: empieza bajo, sube intensidad, climax al final del verso.",
-      flat: "ARCO PLANO: misma energía durante todo el verso.",
-      chaotic: "ARCO CAÓTICO: cambia de tono impredeciblemente (susurro→grito→melodía).",
-      introspective: "ARCO INTROSPECTIVO: tono reflexivo, confesional, sin estallidos.",
-    };
-    const contourRules: Record<string, string> = {
-      rising: "MELODÍA ASCENDENTE: rimas suben de tono, agudo al final (para Suno).",
-      falling: "MELODÍA DESCENDENTE: empieza agudo, baja al final.",
-      flat: "MELODÍA PLANA: monótona, sin variación tonal.",
-      variable: "MELODÍA VARIABLE: cambia de dirección según la frase.",
-    };
-    artistStyleBlock = `\n# 🎭 ESTILO PER-ARTISTA (PEAK ERA)\n- ${hookRules[flowProfile.hookStyle] ?? ""}\n- ${wordplayRules[flowProfile.wordplayTier] ?? ""}\n- ${arcRules[flowProfile.emotionalArc] ?? ""}\n- ${contourRules[flowProfile.melodicContour] ?? ""}\n- WORDPLAY ESPECÍFICO: usa estas técnicas del artista en peak — ${flowProfile.wordplayTechniques.join(", ")}\n- STORYTELLING: ${flowProfile.storytellingStyle}\n- IMAGERY STYLE (CRÍTICO — NO calcles al artista): el artista usa este TIPO de imagery en su peak — ${flowProfile.imageryBank.join(", ")}. USA estos descriptores como INSPIRACIÓN DE ESTILO, NO copies referencias exactas del artista (sería identificable = calcado). INVENTA tus PROPIAS referencias concretas del mismo tipo/vibe. Ej: si el estilo dice "Detroit working-class barrio", inventa tu propia referencia obrera. Si dice "family trauma", escribe sobre trauma TUYO. Mezcla 3-5 referencias ORIGINALES de este tipo en cada verso. El resultado debe SONAR como el artista pero NO ser identificable como él.`;
-  }
-
-  // Reference Track DNA (NEW Phase 4) — user pasted a song, replicate its structure/dynamics
-  let referenceTrackBlock = "";
-  if (params.referenceTrack) {
-    const rt = params.referenceTrack;
-    const sectionsPlan = rt.sections.length > 0
-      ? rt.sections.map(s => `[${s.name}] ${s.barCount}b`).join(" → ")
-      : "(no detectada)";
-    referenceTrackBlock = `\n# 🎵 REFERENCE TRACK DNA (REPLICAR ESTA ESTRUCTURA — PRIORIDAD ALTA)\nEl usuario pegó una canción de referencia. Replica su ADN estructural:\n- Estructura: ${sectionsPlan}\n- Esquema de rima: ${rt.rhymeScheme}\n- Densidad: ${rt.density} (${rt.avgSyllablesPerBar} sílabas/barra)\n- Ad-libs: ${rt.adlibFrequency} frecuencia, posiciones ${rt.adlibPositions.join("/")}\n- Idioma: ${rt.languageRatio}% EN\n- Hook style: ${rt.hookStyle}\n- Arco emocional: ${rt.emotionalArc}\n- Técnicas: ${rt.notableTechniques.join(", ") || "ninguna destacada"}\n- Resumen: ${rt.summary}\nUSA esta estructura como esqueleto. Adapta el CONTENIDO al artista seleccionado, pero MANTÉN la estructura, esquema de rima y dinámica de la referencia.`;
-  }
-
-  // Song Form Intelligence block (Phase 6) — explains the dynamic structure
-  let songFormBlock = "";
-  if (useDynamicForm && songFormStyle !== "minimal_standard") {
-    const formExplanations: Record<string, string> = {
-      expanding_chorus: "EXPANDING CHORUS: cada repetición del chorus es MÁS larga (+2 barras) con frases/ad-libs NUEVOS. No pegues el mismo chorus 3 veces.",
-      pre_chorus_build: "PRE-CHORUS BUILD: antes de cada chorus hay un Pre-Chorus (2-4 barras) que sube tensión melódicamente. Es la RAMP, no el chorus.",
-      beat_drop: "BEAT DROPS: hay secciones [BEAT DROP] (sin letra) que marcan drops del beat. Suno responde a estos markers con tensión/drop.",
-      variable_verse: "VARIABLE VERSE: Verse 1 es MÁS largo (storytelling narrativo), Verse 2 es MÁS corto (momentum). Varía la longitud para dinámica.",
-      hybrid: "HYBRID: combina expanding chorus (corus crece) + pre-chorus build (ramp antes de cada chorus).",
-    };
-    songFormBlock = `\n# 🎶 SONG FORM INTELLIGENCE (dinámico per-artista)\n${formExplanations[songFormStyle] ?? ""}`;
-  }
-
-  // Producer tag (personalizado con el nombre del usuario)
+  // Producer tag
   let producerBlock = "";
   const producer = params.producerId ? getProducerById(params.producerId) : null;
   if (producer && producer.id !== "none") {
@@ -410,176 +281,71 @@ export function buildSystemPrompt(params: PromptParams): string {
         .replace(new RegExp(producer.name, "gi"), params.producerName.trim())
         .replace(/\{NAME\}/gi, params.producerName.trim());
     }
-    producerBlock = `\n# 🎛️ PRODUCER TAG & SONIC PROFILE\nProductor: ${params.producerName?.trim() || producer.name} (estilo de ${producer.name}). Estilo de beat: ${producer.style}.\nIncluye el producer tag icónico al inicio del Intro: "${personalizedTag}". Adapta el flow al estilo del beat.`;
+    producerBlock = `\n# 🎛️ PRODUCER TAG\nInserta este producer tag al inicio del [Intro]: "${personalizedTag}"`;
   } else if (params.producerTag.trim()) {
-    producerBlock = `\n# 🎛️ PRODUCER TAG\nIncluye el producer tag icónico para "${params.producerName?.trim() || params.producerTag.trim()}" al inicio del Intro: "${params.producerTag.trim()}".`;
-  } else if (params.producerName?.trim()) {
-    producerBlock = `\n# 🎛️ PRODUCER TAG\nEl productor se llama "${params.producerName.trim()}". Crea un producer tag corto y pegadizo con su nombre al inicio del Intro (ej: "${params.producerName.trim()} on the beat").`;
+    producerBlock = `\n# 🎛️ PRODUCER TAG\nInserta este producer tag al inicio del [Intro]: "${params.producerTag.trim()}"`;
   }
 
-  // Per-section language override
-  let sectionLangBlock = "";
-  const chorusOverride = params.chorusLanguageOverride && params.chorusLanguageOverride !== "auto";
-  const versesOverride = params.versesLanguageOverride && params.versesLanguageOverride !== "auto";
-  if (chorusOverride || versesOverride) {
-    const parts: string[] = [];
-    if (chorusOverride) {
-      const lang = params.chorusLanguageOverride === "en" ? "inglés americano" : "español";
-      parts.push(`Los CHORUS/ESTRIBILLOS deben ser 100% en ${lang}.`);
-    }
-    if (versesOverride) {
-      const lang = params.versesLanguageOverride === "en" ? "inglés americano" : "español";
-      parts.push(`Los VERSES deben ser 100% en ${lang}.`);
-    }
-    sectionLangBlock = `\n# 🎯 OVERRIDE DE IDIOMA POR SECCIÓN\n${parts.join(" ")} Esto tiene PRIORIDAD sobre el ratio general.`;
-  }
-
-  // Artist ad-libs (estilo descriptivo, NO lista cerrada) — COMPACTO 5 reglas
+  // Ad-libs rules
   let adlibsBlock = "";
   const adlibsStyle: string[] = [];
   if (artist?.adlibs && artist.adlibs.length > 0) {
-    adlibsStyle.push(`${artist.name} usa: ${artist.adlibs.map(a => `"${a}"`).join(", ")} — pero IMPROVISA los tuyos según contexto`);
+    adlibsStyle.push(`${artist.name}: ${artist.adlibs.map(a => `(${a})`).join(" ")}`);
   }
   if (featureArtist?.adlibs && featureArtist.adlibs.length > 0) {
-    adlibsStyle.push(`${featureArtist.name} usa: ${featureArtist.adlibs.map(a => `"${a}"`).join(", ")} — igualmente, improvisa`);
+    adlibsStyle.push(`${featureArtist.name}: ${featureArtist.adlibs.map(a => `(${a})`).join(" ")}`);
   }
   if (adlibsStyle.length > 0) {
-    adlibsBlock = `\n# 🗣️ AD-LIBS (CRÍTICO SUNO)\nReferencia (NO copies literal, IMPROVISA):\n${adlibsStyle.join("\n")}\n\nREGLAS:\n1. IMPROVISA según contenido: disparos→(Bow!), dinero→(Racks!), coches→(Skrrt!), lean→(Sip!). RESPONDEN al contenido, no decoración.\n2. POSICIÓN variada: 40% final, 25% medio, 15% inicio, 10% entre barras, 10% solos. SI TODOS al final = FAKE.\n3. Combina a veces: "(Yeah! Skrrt!)". Densidad: 1-2 por barra, deja 2-3 barras sin ad-libs para que respire.\n4. MÁS en chorus, MENOS en verse (más denso). Chorus no repetido: cada repetición con VARIACIONES en ad-libs.\n5. Feature: que improvise ad-libs de SU estilo, no del artista principal.`;
+    adlibsBlock = `\n# 🗣️ AD-LIBS NATIVOS PARA SUNO\nEjemplos icónicos:\n${adlibsStyle.join("\n")}\nREGLAS DE AD-LIBS:\n1. Ad-libs SIEMPRE entre paréntesis: (Yeah!), (Brrr!), (Let's go!). Suno los ubicará automáticamente como pistas de fondo en estéreo.\n2. ESPACIO Y AIRE: Máximo 1 ad-lib cada 2 o 3 barras. Deja que la voz principal respire, no satures cada línea.\n3. CONTEXTO: El ad-lib debe responder al remate de la barra previa.`;
   }
 
-  // Regenerate single section mode
-  let regenerateSectionBlock = "";
-  if (params.regenerateSection) {
-    const { sectionName, keepContext } = params.regenerateSection;
-    regenerateSectionBlock = `\n# 🔄 RE-GENERACIÓN DE SECCIÓN ÚNICA\nEl usuario quiere RE-GENERAR SOLO la sección "${sectionName}". Mantén el contexto del resto de la canción para que encaje:\n\n${keepContext}\n\nGenera SOLO la sección "${sectionName}" con el mismo formato (### [${sectionName}] + Intérprete + barras). No repitas las otras secciones.`;
-  }
+  const prompt = `Eres un Ghostwriter de élite del Trap y Rap contemporáneo. Escribes letras auténticas, con groove callejero y perfectamente estructuradas para ser producidas y cantadas en SUNO AI.
 
-  // Rhyme scheme — COMPACTO
-  let rhymeBlock = "";
-  if (params.rhymeSchemeId && params.rhymeSchemeId !== "rs_free") {
-    const scheme = getRhymeSchemeById(params.rhymeSchemeId);
-    if (scheme) {
-      rhymeBlock = `\n# 🔤 ESQUEMA OBLIGATORIO\nPatrón: ${scheme.pattern}. ${scheme.description} Síguelo en todos los versos.`;
-    }
-  } else {
-    const flowProfileForRhyme = getFlowProfile(params.artistId);
-    const schemeId = flowProfileForRhyme?.defaultRhymeScheme;
-    if (schemeId && schemeId !== "rs_free") {
-      const artistScheme = getRhymeSchemeById(schemeId);
-      if (artistScheme) {
-        rhymeBlock = `\n# 🔤 ESQUEMA DEL ARTISTA\n${artist?.name ?? "El artista"} usa: ${artistScheme.pattern}. ${artistScheme.description}`;
-      } else {
-        rhymeBlock = `\n# 🔤 ESQUEMA\nAABB o ABAB natural.`;
-      }
-    } else if (schemeId === "rs_free") {
-      rhymeBlock = `\n# 🔤 RIMAS LIBRES\n${artist?.name ?? "El artista"} usa rimas libres. Cada barra rima con alguna otra. Sin patrón fijo.`;
-    } else {
-      rhymeBlock = `\n# 🔤 ESQUEMA\nAABB o ABAB natural.`;
-    }
-  }
+# 🧠 PROTOCOLO DE RAZONAMIENTO INTERNO (THINKING PROTOCOL)
+Antes de redactar la letra definitiva, utiliza tus tokens de razonamiento interno para completar estas 4 fases:
+1. **Fase 1 (Concepto & Punchlines):** Define el concepto central, el hook melódico y el remate (punchline/payoff) de cada estrofa primero.
+2. **Fase 2 (Backtracking & Arquitectura de Rimas):** Establece los fonemas de rima objetivo (asonante/consonante) y construye las barras 1, 2 y 3 hacia el remate, asegurando que cada compás tenga entre 8 y 11 sílabas naturales.
+3. **Fase 3 (Filtro Antiparodia & Cringe Filter):** Evalúa críticamente cada barra: ¿Suena a canción real de trap o parece una parodia/caricatura forzada? Si alguna frase suena ortopédica o artificial, descártala y reescríbela con jerga callejera y musicalidad real.
+4. **Fase 4 (Emisión Suno-Native):** Emite únicamente la letra estructurada con etiquetas entre corchetes [Section: Artist], limpia y lista para Suno.
 
-  // Locked sections
-  let lockedBlock = "";
-  if (params.lockedSections && params.lockedSections.length > 0) {
-    const lockedList = params.lockedSections.map(s =>
-      `### [${s.name}]\n${s.content}`
-    ).join("\n\n");
-    lockedBlock = `\n# 🔒 SECCIONES BLOQUEADAS (NO MODIFICAR)\nEl usuario quiere mantener EXACTAMENTE estas secciones tal como están. Reprodúcelas literalmente, sin cambiar ni una palabra:\n\n${lockedList}\n\nGenera SOLO las secciones que NO están arriba.`;
-  }
-
-  // Correction instruction
-  let correctionBlock = "";
-  if (params.correctionInstruction) {
-    correctionBlock = `\n# ⚠️ CORRECCIÓN DE IDIOMA (RE-GENERACIÓN)\n${params.correctionInstruction}\nLa proporción de idioma anterior NO cumplió el objetivo. Esta vez cumple la regla matemática con mayor precisión.`;
-  }
-
-  const prompt = `Eres un Ghostwriter de élite del Trap. Fusionas el sonido de Atlanta con dialectos hispanos y slang americano.
-
-# IDENTIDAD & IDIOMA
+# 🎤 IDENTIDAD & ESTILO
 ${spanglish.prompt}
-- **Artista Principal**: ${artist?.name ?? "Estilo libre"} — ${artist?.style ?? "Flow libre."}
-${featureArtist ? `- **Feature**: ${featureArtist.name} — ${featureArtist.style}` : "- **Feature**: Ninguno."}
-- **Jerga orgánica**: genera slang/modismos/acentos auténticos del artista. Cuando cante el Feature, CAMBIA DRÁSTICAMENTE la jerga y flow para adaptarlos a SU estilo.
-- **Ad-libs**: son la FIRMA del artista. Orgánicos y contextuales (ver reglas completas abajo).
-- **RESTRICCIÓN**: JAMÁS menciones el nombre real o apodo de ningún artista. Eres un fantasma.
-${correctionBlock}
-${dynamicsBlock}
-${sectionLangBlock}
-${adlibsBlock}
-${rhymeBlock}
-${lockedBlock}
-${regenerateSectionBlock}
-${beatTypeBlock}
-${featureSimBlock}
-${collabBlock}
-${asterisksBlock}
-${syllableSyncBlock}
-${phoneticBlock}
-${customIntroBlock}
+- **Artista Principal**: ${artist?.name ?? "Estilo Libre"} (${artist?.origin ?? "Trap"}) — ${artist?.style ?? "Flow crudo."}
+${featureArtist ? `- **Feature**: ${featureArtist.name} (${featureArtist.origin}) — ${featureArtist.style}` : "- **Feature**: Ninguno."}
+- **BPM & Vibra**: ${params.bpmVibe.range} BPM (${params.bpmVibe.label}).
+- **Temática**: ${topicBlock}
+${narrativeBlock}
+${dictionaryBlock}
+${producerBlock}
 ${cadenceBlock}
-${breathBlock}
 ${referenceBlock}
 ${featureReferenceBlock}
-${artistStyleBlock}
-${referenceTrackBlock}
-${songFormBlock}
+${adlibsBlock}
 
-# FLOW, BPM & SONIDO
-- **BPM**: ${params.bpmVibe.range} — ${params.bpmVibe.label}. Densidad: ${params.bpmVibe.density}.
-- BPM >140 → tripla densidad (rage/drill). BPM <100 → alarga sílabas, menos palabras.
-- Métrica americana: frases cortas, puntuación agresiva para "staccato" o triplets.
-- Adapta la lírica al BPM: alto=acción/agresión, medio=ego/flow/punchlines, bajo=introspección/dolor.
-
-**RIMAS — NIVEL SEGÚN ARTISTA:**
+# 📐 REGLAS MUSICALES & MÉTRICA SUNO
 ${rhymeLevelInstruction}
+- **Pocket Silábico**: Entre 8 y 11 sílabas por compás (evita versos gigantescos que aceleren la voz en Suno).
+- **Puntuación Rítmica**: Utiliza comas ',' y puntos suspensivos '...' para marcar los silencios y respiraciones del cantante.
+- **Rimas Orgánicas**: Rimas AABB o ABAB fluidas. Evita clichés baratos (vida/herida, amor/dolor).
+- **Prohibido**: JAMÁS menciones el nombre real o apodo de ningún artista en la letra cantada a menos que sea un ad-lib propio.
 
-**REGLAS UNIVERSALES:**
-1. Última palabra de cada barra rima con su pareja (AABB/ABAB).
-2. Rimas internas DENTRO de la barra cuando suenen natural (no forzado en estilo street).
-3. Multisilábicas (2+ sílabas) PREFERIDAS para técnicos, 1 sílaba OK si pega en estilo street.
-4. EVITA clichés (vida/herida, amor/dolor, glock/block, cash/flash). Si los usas, dales un giro.
-5. Cambia la rima cada 4 barras. Cadena (3-4 rimas seguidas) para punchlines.
-6. PUNCHLINE STRUCTURE: setup → payoff. La barra de setup crea expectativa, la siguiente la rompe con un twist/doble sentido. Mínimo 2-3 punchlines por verso (TIER 1-2); opcional en TIER 3 (calle prefiere ritmo).
-7. VERSE DYNAMICS: empieza el verso a menor densidad, SUBE la intensidad hacia el final, climax en las últimas 2-3 barras. La barra del punchline = más densa (más sílabas/palabras). Deja 1 barra de respiración antes del punchline final.
-
-**EJEMPLOS:**
-- Multisilábico: "I POUR up the LEAN, livin' the DREAM, cash on the SCREEN" (lean/dream/screen = 3 multisilábicas en cadena)
-- Street directo: "Big GLOCK on the BLOCK, no TICK tock on the CLOCK" (glock/block/clock = 3 rimas de 1 sílaba en cadena, pegan duro)
-
-# TEMÁTICA & COHESIÓN
-- **Mood**: ${params.moodId}
-- **Temas**: [${topicBlock}]
-- **Arco**: ${params.narrativeArcId === "none" ? "Lineal." : params.narrativeArcDesc}
-- Mantén historia coherente. Secciones posteriores construyen sobre las anteriores. Ad-libs al final de cada sección "llaman" a la siguiente.
-- Vocabulario en transiciones DEBE adaptarse al Mood.
-${narrativeBlock}
-${featureArtist ? `- Feature entra: cambia flow, jerga y actitud para reflejar SU estilo.` : ""}
-
-# DICCIONARIO & PRODUCER
-${dictionaryBlock || "(Sin diccionario. Genera tu propio slang auténtico.)"}
-${producerBlock}
-
-# EJECUCIÓN ESTRICTA (PRIORIDAD MÁXIMA)
-Sigue este esqueleto EXACTAMENTE sin desviarte. No añadas ni omitas secciones:
+# 🎼 ESTRUCTURA DE LA CANCIÓN (SUNO NATIVE)
+Sigue esta estructura sin omitir ni añadir secciones:
 ${structurePlan}
 
-**FORMATO (Markdown estricto):**
-1. Sección inicia con: ### [Nombre Sección]
-2. Intérprete en cursiva: *Intérprete: X* (USA EL NOMBRE REAL del artista, no "Main Artist")
-3. Barras (líneas cantadas) una por línea.
-4. Ad-libs secundarios SIEMPRE entre paréntesis: (Skrrt!)
-5. Etiquetas de sección entre corchetes: [Verse 1]
-
-# OUTPUT
-Tu respuesta debe contener ÚNICAMENTE la letra de la canción. Sin explicaciones, intros ni etiquetas de estilo musical.
-
-[SEED: ${Math.random().toString(36).substring(2, 10)} — factor de entropía para forzar letra 100% original]`;
+# 📋 FORMATO DE SALIDA ESTRICTO (SUNO AI NATIVE)
+1. Encabezados de sección EXCLUSIVAMENTE entre corchetes estándar: [Intro], [Verse 1: ${artist?.name ?? "Lead"}], [Chorus], [Pre-Chorus], [Beat Drop], [Outro].
+2. NUNCA uses encabezados markdown '###' ni escribas líneas separadas como '*Intérprete:*' porque Suno intentará cantarlas.
+3. Ad-libs secundarios SIEMPRE entre paréntesis: (Yeah!), (Brrr!).
+4. Una barra cantada por línea.
+5. Tu respuesta debe contener ÚNICAMENTE la letra de la canción. Sin introducciones, notas de producción ni texto extra fuera de los corchetes.`;
 
   return prompt;
 }
 
 /**
  * Builds a Suno-style music prompt from the config.
+ * Optimized to 120-180 characters for maximum fidelity in Suno AI.
  */
 export function buildSunoStylePrompt(params: {
   beatType?: BeatType;
@@ -592,55 +358,37 @@ export function buildSunoStylePrompt(params: {
   const tags: string[] = [];
 
   if (params.beatType) {
-    tags.push(...params.beatType.sunoTags);
+    tags.push(...params.beatType.sunoTags.slice(0, 2));
   }
 
   const bpmNum = parseInt(params.bpmVibe.range.split("-")[1] ?? "130");
   tags.push(`${params.bpmVibe.range} BPM`);
-  if (bpmNum > 160) tags.push("rage", "high energy", "fast");
-  else if (bpmNum > 140) tags.push("aggressive", "drill");
-  else if (bpmNum < 100) tags.push("melodic", "slow", "emotional");
+  if (bpmNum > 150) tags.push("fast rage drill");
+  else if (bpmNum < 105) tags.push("slow melodic trap");
+  else tags.push("bouncy trap beat");
 
   const moodTags: Record<string, string[]> = {
-    agresivo: ["dark", "aggressive", "menacing"],
-    melancolico: ["melancholic", "emotional", "sad"],
-    flex: ["confident", "luxurious", "triumphant"],
-    fiesta: ["energetic", "party", "danceable"],
-    introspectivo: ["introspective", "deep", "contemplative"],
-    oscuro: ["dark", "sinister", "ominous"],
-    romantico: ["romantic", "smooth", "sensual"],
-    calle: ["raw", "gritty", "street"],
-    menacing: ["menacing", "dark", "threatening"],
-    dreamy: ["dreamy", "ethereal", "psychedelic"],
-    nostalgic: ["nostalgic", "warm", "reflective"],
-    confident: ["confident", "bold", "powerful"],
+    agresivo: ["dark aggressive", "heavy distorted 808"],
+    melancolico: ["melancholic emotional", "sad guitar loop"],
+    flex: ["luxurious triumphant", "clean 808 slide"],
+    fiesta: ["energetic party", "bouncy club synth"],
+    introspectivo: ["introspective deep", "lo-fi piano"],
+    oscuro: ["sinister dark", "menacing sub-bass"],
+    romantico: ["sensual smooth", "warm synth pad"],
+    calle: ["raw gritty street", "hard hitting drums"],
   };
-  const mTags = moodTags[params.moodId];
-  if (mTags) tags.push(...mTags);
+  const mTags = moodTags[params.moodId] ?? ["dark atmospheric"];
+  tags.push(...mTags);
 
-  const structLower = params.structureLabel.toLowerCase();
-  if (structLower.includes("anthem")) tags.push("anthem", "epic build");
-  if (structLower.includes("pop trap")) tags.push("pop trap", "catchy hook");
-  if (structLower.includes("drill")) tags.push("drill");
-  if (structLower.includes("rage")) tags.push("rage", "moshpit");
-  if (structLower.includes("pain")) tags.push("emotional", "pain");
-
-  const artist = getArtistById(params.artistId);
-  if (artist?.beatTags) tags.push(...artist.beatTags.slice(0, 3));
-
-  // Vocal tags from flow profile
   const flowProfile = getFlowProfile(params.artistId);
-  if (flowProfile) {
-    tags.push(...flowProfile.vocalTags);
+  if (flowProfile && flowProfile.vocalTags.length > 0) {
+    tags.push(flowProfile.vocalTags.slice(0, 2).join(" "));
   }
-
-  const producer = params.producerId !== "none" ? getProducerById(params.producerId) : null;
-  if (producer) tags.push(producer.name.toLowerCase());
 
   const unique = [...new Set(tags)];
   let result = unique.join(", ");
-  if (result.length > 1000) {
-    result = result.substring(0, 997) + "...";
+  if (result.length > 200) {
+    result = result.substring(0, 197) + "...";
   }
   return result;
 }

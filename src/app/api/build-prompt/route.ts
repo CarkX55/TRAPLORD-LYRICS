@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
       spanglishLabel: spanglishInfo.label,
       beatPrompt,
       sunoStylePrompt,
-      temperature: body.temperature ?? 0.9,
+      temperature: body.temperature ?? 0.72,
       mainRefSource: mainRef?.source ?? null,
       featRefSource: featRef?.source ?? null,
       refTrackSummary: refTrack?.summary ?? null,

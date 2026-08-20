@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import {
   Mic2, Music, Zap, Settings2, ChevronDown, Copy, RotateCcw, Sparkles,
@@ -93,20 +94,25 @@ function parseLyrics(raw: string) {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    const tagMatch = trimmed.match(/^(?:[*#\-\s]*)(\[(?:Intro|Verse|Chorus|Hook|Bridge|Outro|Pre-Chorus|Refrán)[^\]]*\])(?:[*#\-\s:]*)$/i)
-      || trimmed.match(/^(?:[*#\-\s]*)(\[[^\]]+\])(?:[*#\-\s:]*)$/);
+    const tagMatch = trimmed.match(/^(?:[*#\-\s]*)(\[[^\]]+\])(?:[*#\-\s:]*)$/);
     const interpMatch = trimmed.match(/^\*?Interpr[èe]te?:\s*(.+?)\*?$/i)
       || trimmed.match(/^\*?Intérprete?:\s*(.+?)\*?$/i);
 
     if (tagMatch) {
       if (current) sections.push(current);
-      current = { tag: tagMatch[1], interpreter: "", lines: [] };
+      const fullTag = tagMatch[1];
+      const colonMatch = fullTag.match(/^\[([^:]+):\s*([^\]]+)\]$/);
+      if (colonMatch) {
+        current = { tag: `[${colonMatch[1].trim()}]`, interpreter: colonMatch[2].trim(), lines: [] };
+      } else {
+        current = { tag: fullTag, interpreter: "", lines: [] };
+      }
     } else if (interpMatch && current) {
       current.interpreter = interpMatch[1].replace(/\*/g, "").trim();
     } else if (current) {
       current.lines.push(line);
     } else if (trimmed) {
-      // preamble before first tag — skip or attach as "Intro"
+      // preamble before first tag — attach as "Intro"
       current = { tag: "[Intro]", interpreter: "", lines: [line] };
     }
   }
@@ -407,7 +413,7 @@ export default function TrapGhostPage() {
           setRefTrackAnalysis(promptData.refTrackSummary);
         }
 
-        const model = geminiModel || "gemini-2.0-flash";
+        const model = geminiModel || "gemini-2.5-flash";
         const geminiRes = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey.trim()}`,
           {
@@ -415,7 +421,11 @@ export default function TrapGhostPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               contents: [{ parts: [{ text: promptData.prompt }] }],
-              generationConfig: { temperature: promptData.temperature ?? 0.9, topP: 0.95 },
+              generationConfig: {
+                temperature: promptData.temperature ?? 0.72,
+                topP: 0.95,
+                thinkingConfig: { thinkingBudget: -1 },
+              },
             }),
           }
         );
@@ -506,7 +516,23 @@ export default function TrapGhostPage() {
       syllableSync, phoneticAdlibs, smartBarsMode, sectionVoices,
       geminiApiKey, geminiModel, producerName, refTrackOpen, refTrackLyrics, dynamicSongForm]);
 
-  // ===== Copy lyrics =====
+  // ===== Copy for Suno AI (Clean Bracketed Format) =====
+  const handleCopySuno = useCallback(async () => {
+    if (!lyrics) return;
+    try {
+      const clean = lyrics
+        .replace(/^###\s*(\[[^\]]+\])/gm, "$1")
+        .replace(/^\*+Interpr[èe]te?:\s*([^*\n]+)\*+$/gim, "")
+        .replace(/^\s*[\r\n]/gm, "\n")
+        .trim();
+      await navigator.clipboard.writeText(clean);
+      toast.success("⚡ Letra copiada limpia (lista para Suno AI)");
+    } catch {
+      toast.error("No se pudo copiar");
+    }
+  }, [lyrics]);
+
+  // ===== Copy lyrics (raw) =====
   const handleCopy = useCallback(async () => {
     if (!lyrics) return;
     try {
@@ -1393,9 +1419,9 @@ export default function TrapGhostPage() {
                       <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                     )) : (
                       <>
-                        <SelectItem value="gemini-2.0-flash">🔥 Gemini 2.0 Flash (rápido)</SelectItem>
-                        <SelectItem value="gemini-2.5-flash">✨ Gemini 2.5 Flash</SelectItem>
-                        <SelectItem value="gemini-2.5-pro">✨ Gemini 2.5 Pro (máxima calidad)</SelectItem>
+                        <SelectItem value="gemini-2.5-flash">✨ Gemini 2.5 Flash (Thinking Máximo · Recomendado)</SelectItem>
+                        <SelectItem value="gemini-2.5-pro">✨ Gemini 2.5 Pro (Máxima Calidad Lírica)</SelectItem>
+                        <SelectItem value="gemini-2.0-flash">🔥 Gemini 2.0 Flash</SelectItem>
                         <SelectItem value="gemini-1.5-flash">📊 Gemini 1.5 Flash</SelectItem>
                         <SelectItem value="gemini-1.5-pro">📊 Gemini 1.5 Pro</SelectItem>
                       </>
@@ -2314,57 +2340,115 @@ export default function TrapGhostPage() {
                   </div>
                 )}
                 {lyrics && (
-                  <div className="ml-auto flex gap-1.5 flex-wrap">
-                    <Button variant="ghost" size="sm" onClick={handleCopy} className="text-muted-foreground hover:text-slime h-8" title="Copiar (Ctrl+Shift+C)">
+                  <div className="ml-auto flex gap-1.5 flex-wrap items-center">
+                    <Button variant="default" size="sm" onClick={handleCopySuno} className="bg-slime text-black font-semibold hover:bg-slime/90 glow-slime h-8 px-3" title="Copiar letra 100% limpia para Suno AI (sin markdown)">
+                      <Zap className="w-3.5 h-3.5 mr-1 fill-black" />Copiar para Suno
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={handleCopy} className="text-muted-foreground hover:text-slime h-8" title="Copiar texto plano">
                       <Copy className="w-3.5 h-3.5 mr-1" />Copiar
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={handleCopyMarkdown} className="text-muted-foreground hover:text-slime h-8" title="Copiar como Markdown">
-                      <FileText className="w-3.5 h-3.5 mr-1" />MD
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={handleDownload} className="text-muted-foreground hover:text-slime h-8" title="Descargar .txt">
-                      <Download className="w-3.5 h-3.5 mr-1" />.txt
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={handleExportPDF} className="text-muted-foreground hover:text-slime h-8" title="Exportar como PDF">
-                      <FileText className="w-3.5 h-3.5 mr-1" />PDF
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleTranslate("en")} disabled={translating} className="text-muted-foreground hover:text-cyber h-8" title="Traducir al inglés">
-                      <Languages className="w-3.5 h-3.5 mr-1" />EN
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleTranslate("es")} disabled={translating} className="text-muted-foreground hover:text-cyber h-8" title="Traducir al español">
-                      <Languages className="w-3.5 h-3.5 mr-1" />ES
-                    </Button>
-                    {history.length > 0 && (
-                      <Button variant="ghost" size="sm" onClick={() => setRemixOpen(!remixOpen)} className="text-muted-foreground hover:text-purple-400 h-8" title="Remix (combinar secciones)">
-                        <Sparkles className="w-3.5 h-3.5 mr-1" />Remix
-                      </Button>
-                    )}
-                    <Button variant="ghost" size="sm" onClick={handleCritic} disabled={criticLoading} className="text-muted-foreground hover:text-yellow-400 h-8" title="Crítico de letra (feedback IA)">
-                      <MessageSquare className="w-3.5 h-3.5 mr-1" />Crítico
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={handleProducerTag} disabled={producerTagLoading} className="text-muted-foreground hover:text-purple-400 h-8" title="Generar Producer Tag personalizado">
-                      <Disc3 className="w-3.5 h-3.5 mr-1" />Tag
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => { setPolishOpen(true); setPolishError(null); }} disabled={polishLoading} className="text-muted-foreground hover:text-cyber h-8" title="Agent Polish — 4 agentes IA revisan y mejoran la letra">
                       <Sparkles className="w-3.5 h-3.5 mr-1" />Polish
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setRefTrackOpen(!refTrackOpen)} className={`h-8 ${refTrackOpen ? "text-sky-400" : "text-muted-foreground hover:text-sky-400"}`} title="Reference Track Importer — pega una canción y replica su ADN estructural">
+                    <Button variant="ghost" size="sm" onClick={handleCritic} disabled={criticLoading} className="text-muted-foreground hover:text-yellow-400 h-8" title="Crítico de letra (feedback IA)">
+                      <MessageSquare className="w-3.5 h-3.5 mr-1" />Crítico
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setRefTrackOpen(!refTrackOpen)} className={`h-8 ${refTrackOpen ? "text-sky-400" : "text-muted-foreground hover:text-sky-400"}`} title="Reference Track Importer">
                       <Music2 className="w-3.5 h-3.5 mr-1" />Ref Track
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleSocialCaption("instagram")} disabled={socialLoading} className="text-muted-foreground hover:text-pink-400 h-8" title="Caption para Instagram">
-                      <Instagram className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleSocialCaption("twitter")} disabled={socialLoading} className="text-muted-foreground hover:text-cyan-400 h-8" title="Caption para Twitter">
-                      <Twitter className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleSocialCaption("tiktok")} disabled={socialLoading} className="text-muted-foreground hover:text-foreground h-8" title="Caption para TikTok">
-                      <Video className="w-3.5 h-3.5" />
-                    </Button>
+
+                    {/* Export Dropdown */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground h-8">
+                          <Download className="w-3.5 h-3.5 mr-1" />Exportar <ChevronDown className="w-3 h-3 ml-1" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-card/95 backdrop-blur-md border-border/60">
+                        <DropdownMenuItem onClick={handleCopyMarkdown} className="text-xs cursor-pointer">
+                          <FileText className="w-3.5 h-3.5 mr-2 text-slime" />Copiar como Markdown (.md)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleDownload} className="text-xs cursor-pointer">
+                          <Download className="w-3.5 h-3.5 mr-2 text-cyber" />Descargar archivo .txt
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleExportPDF} className="text-xs cursor-pointer">
+                          <FileText className="w-3.5 h-3.5 mr-2 text-purple-400" />Exportar a PDF
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {/* Translate Dropdown */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" disabled={translating} className="text-muted-foreground hover:text-cyber h-8">
+                          <Languages className="w-3.5 h-3.5 mr-1" />Traducir <ChevronDown className="w-3 h-3 ml-1" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-card/95 backdrop-blur-md border-border/60">
+                        <DropdownMenuItem onClick={() => handleTranslate("en")} className="text-xs cursor-pointer">
+                          🇺🇸 Traducir al inglés (EN)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleTranslate("es")} className="text-xs cursor-pointer">
+                          🇪🇸 Traducir al español (ES)
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {/* Social & Media Dropdown */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-pink-400 h-8">
+                          <Share2 className="w-3.5 h-3.5 mr-1" />Social <ChevronDown className="w-3 h-3 ml-1" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-card/95 backdrop-blur-md border-border/60">
+                        <DropdownMenuItem onClick={() => handleSocialCaption("instagram")} disabled={socialLoading} className="text-xs cursor-pointer">
+                          <Instagram className="w-3.5 h-3.5 mr-2 text-pink-400" />Instagram Caption
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleSocialCaption("twitter")} disabled={socialLoading} className="text-xs cursor-pointer">
+                          <Twitter className="w-3.5 h-3.5 mr-2 text-cyan-400" />Twitter / X Post
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleSocialCaption("tiktok")} disabled={socialLoading} className="text-xs cursor-pointer">
+                          <Video className="w-3.5 h-3.5 mr-2 text-foreground" />TikTok Script
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={handleProducerTag} disabled={producerTagLoading} className="text-xs cursor-pointer">
+                          <Disc3 className="w-3.5 h-3.5 mr-2 text-purple-400" />Generar Producer Tag
+                        </DropdownMenuItem>
+                        {history.length > 0 && (
+                          <DropdownMenuItem onClick={() => setRemixOpen(!remixOpen)} className="text-xs cursor-pointer">
+                            <Sparkles className="w-3.5 h-3.5 mr-2 text-purple-400" />Remix de Secciones
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+
                     <Button variant="ghost" size="sm" onClick={() => handleGenerate(false)} disabled={loading} className="text-muted-foreground hover:text-slime h-8" title="Otra letra (Ctrl+Enter)">
                       <RotateCcw className="w-3.5 h-3.5 mr-1" />Otra
                     </Button>
                   </div>
                 )}
               </div>
+
+              {/* Suno Quick Style Prompt Banner */}
+              {lyrics && sunoStylePrompt && (
+                <div className="mb-4 px-3.5 py-2.5 rounded-lg bg-black/50 border border-cyber/30 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
+                    <Sparkles className="w-3.5 h-3.5 text-cyber shrink-0" />
+                    <span className="text-muted-foreground text-[11px] shrink-0 font-medium">Suno Style:</span>
+                    <span className="text-cyber text-[11px] font-mono truncate">{sunoStylePrompt}</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { navigator.clipboard.writeText(sunoStylePrompt); toast.success("Suno Style Prompt copiado"); }}
+                    className="border-cyber/40 text-cyber hover:bg-cyber/10 h-7 text-[11px] shrink-0 font-mono"
+                    title="Copiar prompt de estilo para Suno"
+                  >
+                    <Copy className="w-3 h-3 mr-1" /> Copiar Estilo
+                  </Button>
+                </div>
+              )}
 
               {loading && !lyrics ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4">
