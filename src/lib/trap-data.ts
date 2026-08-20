@@ -563,3 +563,30 @@ export const PALETTE_TAGS: PaletteTag[] = [
 ];
 
 export const PALETTE_TAG_GROUPS = ["Trap", "Drill", "Rap", "Global", "Instrumentos", "FX", "Vibes"];
+
+// ===== PRODUCER TAG ARCHETYPES =====
+export interface ProducerTagArchetype {
+  id: string;
+  name: string;
+  icon: string;
+  vibe: string;
+  referenceTag: string;
+  description: string;
+  color: string;
+}
+
+export const PRODUCER_TAG_ARCHETYPES: ProducerTagArchetype[] = [
+  { id: "metro", name: "Metro Boomin", icon: "🗡️", vibe: "Oscuro & Amenazante", referenceTag: "If Metro don't trust you, I'm gon' shoot you", description: "Voz susurrada o sample amenazante, aura cinematográfica oscura", color: "#8b5cf6" },
+  { id: "tay_keith", name: "Tay Keith", icon: "💣", vibe: "Hype & Agresivo", referenceTag: "Tay Keith, fuck these niggas up!", description: "Grito hype con energía cruda de Memphis / Drill", color: "#ef4444" },
+  { id: "pierre", name: "Pi'erre Bourne", icon: "🍄", vibe: "Trippy & Chill", referenceTag: "Yo Pierre, you wanna come out here?", description: "Sample de sitcom/comedia con reverb psicodélico y melodía", color: "#ec4899" },
+  { id: "southside", name: "Southside / 808 Mafia", icon: "🩸", vibe: "Seco & Directo", referenceTag: "Southside on the track / 808 Mafia", description: "Cadencia seca y amenazante con sirena de 808 Mafia", color: "#f97316" },
+  { id: "f1lthy", name: "F1lthy / BNYX", icon: "⚡", vibe: "Rage & Caos", referenceTag: "Wake up F1lthy! / BNYX!", description: "Distorsión overblown, estética vamp/rage caótica", color: "#06b6d4" },
+  { id: "wheezy", name: "Wheezy", icon: "🚀", vibe: "Wave & Slatt", referenceTag: "Wheezy outta here", description: "Flow espacial, casual y elegante de Atlanta", color: "#3b82f6" },
+  { id: "murda", name: "Murda Beatz", icon: "💎", vibe: "Punchy & Clean", referenceTag: "Murda on the beat, so it's not nice", description: "Punchline memorable y sonido nítido de club", color: "#eab308" },
+  { id: "bizarrap", name: "Bizarrap / Latin", icon: "🔌", vibe: "Music Sessions", referenceTag: "BZRP Music Sessions", description: "Sabor latino urbano moderno, directo e icónico", color: "#10b981" },
+  { id: "smart", name: "Smart Contextual", icon: "🧠", vibe: "100% Letra", referenceTag: "Tag creado desde tus punchlines", description: "Extrae el concepto y rima central de tu canción", color: "#00ff41" },
+];
+
+export function getProducerTagArchetypeById(id: string): ProducerTagArchetype | undefined {
+  return PRODUCER_TAG_ARCHETYPES.find(a => a.id === id);
+}

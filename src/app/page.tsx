@@ -27,9 +27,9 @@ import {
 } from "lucide-react";
 import {
   ARTISTS_DATA, MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, PRODUCERS, RHYME_SCHEMES,
-  BEAT_TYPES, FEATURE_SIMS,
+  BEAT_TYPES, FEATURE_SIMS, PRODUCER_TAG_ARCHETYPES, getProducerTagArchetypeById,
   getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, generateBeatPrompt,
-  type Artist, type BeatPrompt
+  type Artist, type BeatPrompt, type ProducerTagArchetype
 } from "@/lib/trap-data";
 import { buildSpanglishInstruction, buildSunoStylePrompt, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
 import { getFlowProfile, getCadenceLabel, type FlowProfile } from "@/lib/artist-flow-profiles";
@@ -221,9 +221,10 @@ export default function TrapGhostPage() {
   const [loadingModels, setLoadingModels] = useState<boolean>(false);
   const [fixingFromCritic, setFixingFromCritic] = useState<boolean>(false);
   // Producer Tag Generator
-  const [producerTags, setProducerTags] = useState<{ text: string; style: string }[]>([]);
+  const [producerTags, setProducerTags] = useState<{ text: string; style: string; language?: string; archetypeName?: string; sunoFormatted?: string }[]>([]);
   const [producerTagLoading, setProducerTagLoading] = useState<boolean>(false);
   const [producerTagOpen, setProducerTagOpen] = useState<boolean>(false);
+  const [selectedProducerArchetype, setSelectedProducerArchetype] = useState<string>("smart");
   // Agent Polish (multi-agente IA)
   const [polishResult, setPolishResult] = useState<{
     originalScore: number;
@@ -1106,66 +1107,69 @@ export default function TrapGhostPage() {
   }, [polishResult, spanglishPercent]);
 
   // ===== Producer Tag Generator =====
-  const handleProducerTag = useCallback(async () => {
-    if (!lyrics) {
-      toast.error("Genera una letra primero");
-      return;
-    }
+  // ===== Producer Tag Generator (Arquetipos + Contexto de Letra) =====
+  const handleProducerTag = useCallback(async (archetypeId?: string) => {
+    const archId = archetypeId ?? selectedProducerArchetype;
+    setSelectedProducerArchetype(archId);
     setProducerTagLoading(true);
     setProducerTagOpen(true);
-    setProducerTags([]);
     try {
       const res = await fetch("/api/producer-tag", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          producerName,
-          producerId,
+          producerName: producerName || "Markoff",
+          archetypeId: archId,
           lyrics,
           artistName: artist?.name ?? "Libre",
           moodId,
+          spanglishPercent,
           geminiApiKey: geminiApiKey || undefined,
           geminiModel,
         }),
       });
-      const data: { tags?: { text: string; style: string }[]; error?: string } = await res.json();
+      const data: { tags?: { text: string; style: string; language?: string; archetypeName?: string; sunoFormatted?: string }[]; error?: string } = await res.json();
       if (!res.ok || data.error) {
         throw new Error(data.error || "Error generando producer tag");
       }
       setProducerTags(data.tags ?? []);
-      toast.success("Producer tags generados");
+      const archObj = getProducerTagArchetypeById(archId);
+      toast.success(`Tags generados: ${archObj?.name ?? "Markoff Studio"}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error desconocido");
     } finally {
       setProducerTagLoading(false);
     }
-  }, [lyrics, producerName, producerId, artist, moodId, geminiApiKey, geminiModel]);
+  }, [lyrics, producerName, selectedProducerArchetype, artist, moodId, spanglishPercent, geminiApiKey, geminiModel]);
 
-  // ===== Inyectar producer tag en la letra =====
+  // ===== Inyectar producer tag en la letra (Suno Native Format) =====
   const injectProducerTag = useCallback((tagText: string) => {
-    if (!lyrics) return;
-    // Si la letra ya empieza con el tag, no duplicar
-    if (lyrics.startsWith(`"${tagText}"`) || lyrics.includes(`"${tagText}"`)) {
+    if (!lyrics) {
+      toast.error("Primero genera una letra");
+      return;
+    }
+    const cleanTag = tagText.replace(/^["']|["']$/g, "").trim();
+    if (lyrics.includes(cleanTag)) {
       toast.error("Ese tag ya está en la letra");
       return;
     }
-    // Buscar el primer ### [Intro] o ### [ y inyectar antes
-    const introMatch = lyrics.match(/###\s*\[Intro\]/i);
-    if (introMatch) {
-      const idx = introMatch.index!;
-      const before = lyrics.slice(0, idx);
-      const after = lyrics.slice(idx);
-      const newLyrics = `${before}"${tagText}"\n${after}`;
-      setLyrics(newLyrics);
-      toast.success(`Tag inyectado: "${tagText}"`);
+
+    const tagSunoBlock = `[Intro: Whispered Producer Tag]\n"${cleanTag}"\n(Yeah!)\n\n[Beat Drop - Heavy 808]`;
+
+    // Si ya existe un [Intro...] al principio, reemplazar o anteponer limpiamente
+    const introRegex = /^(?:###\s*)?\[Intro[^\]]*\][\s\S]*?(?=(?:###\s*)?\[(?:Verse|Chorus|Pre-Chorus|Bridge|Hook))/i;
+    let newLyrics = "";
+    if (introRegex.test(lyrics)) {
+      newLyrics = lyrics.replace(introRegex, `${tagSunoBlock}\n\n`);
+    } else if (/^(?:###\s*)?\[/m.test(lyrics)) {
+      newLyrics = `${tagSunoBlock}\n\n${lyrics.trim()}`;
     } else {
-      // Si no hay Intro, poner al principio
-      const newLyrics = `"${tagText}"\n\n${lyrics}`;
-      setLyrics(newLyrics);
-      toast.success(`Tag inyectado: "${tagText}"`);
+      newLyrics = `${tagSunoBlock}\n\n${lyrics.trim()}`;
     }
-    setProducerTagOpen(false);
-  }, [lyrics]);
+
+    setLyrics(newLyrics);
+    toast.success(`⚡ Tag de "${producerName || "Markoff"}" inyectado para Suno AI`);
+  }, [lyrics, producerName]);
 
   // ===== Cover art generation (AI image) =====
   const handleCoverArt = useCallback(async () => {
@@ -2355,6 +2359,9 @@ export default function TrapGhostPage() {
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setRefTrackOpen(!refTrackOpen)} className={`h-8 ${refTrackOpen ? "text-sky-400" : "text-muted-foreground hover:text-sky-400"}`} title="Reference Track Importer">
                       <Music2 className="w-3.5 h-3.5 mr-1" />Ref Track
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => { setProducerTagOpen(!producerTagOpen); if (!producerTags.length && lyrics) handleProducerTag("smart"); }} className={`h-8 ${producerTagOpen ? "text-purple-400 bg-purple-400/10" : "text-muted-foreground hover:text-purple-400"}`} title="Markoff Producer Tag Studio">
+                      <Disc3 className="w-3.5 h-3.5 mr-1 text-purple-400" />Tag Studio
                     </Button>
 
                     {/* Export Dropdown */}
@@ -3650,52 +3657,165 @@ export default function TrapGhostPage() {
               </Card>
             )}
 
-            {/* --- Producer Tag Generator Panel --- */}
+            {/* --- Markoff Producer Tag Studio Panel --- */}
             {producerTagOpen && (
-              <Card className="glass-card p-5 space-y-3 animate-fade-slide">
+              <Card className="glass-card p-5 space-y-4 animate-fade-slide border-purple-500/30 glow-cyber">
+                {/* Header */}
                 <div className="flex items-center gap-2">
-                  <Disc3 className="w-5 h-5 text-purple-400" />
-                  <h2 className="font-display text-lg font-semibold">Producer Tag Generator</h2>
-                  <Badge variant="outline" className="ml-auto text-[10px] border-purple-400/40 text-purple-400">
-                    {producerName}
-                  </Badge>
-                  <Button variant="ghost" size="sm" onClick={() => { setProducerTagOpen(false); setProducerTags([]); }} className="text-muted-foreground hover:text-foreground h-8">
+                  <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/40 flex items-center justify-center">
+                    <Disc3 className="w-4 h-4 text-purple-400 animate-spin-slow" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-display text-lg font-bold text-purple-300">Producer Tag Studio</h2>
+                      <Badge variant="outline" className="text-[9px] border-purple-400/50 text-purple-300 bg-purple-500/10">
+                        Suno AI Native
+                      </Badge>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Arquetipos de leyenda adaptados a tu letra para "{producerName || "Markoff"}"</p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setProducerTagOpen(false)} className="ml-auto text-muted-foreground hover:text-foreground h-8 w-8 p-0">
                     ✕
                   </Button>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Genera 5 variants de producer tag para "{producerName}" adaptadas a la letra y el mood de la canción.
-                  Click en uno para inyectarlo al inicio de la letra.
-                </p>
+
+                {/* Producer Name Input Bar */}
+                <div className="rounded-lg bg-black/40 border border-purple-500/20 p-2.5 flex items-center gap-2">
+                  <Label className="text-[11px] text-purple-300 font-medium shrink-0">Nombre de Productor:</Label>
+                  <Input
+                    value={producerName}
+                    onChange={(e) => setProducerName(e.target.value)}
+                    placeholder="Markoff"
+                    className="bg-black/60 font-mono text-[11px] h-7 border-purple-500/30 text-purple-200"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      try {
+                        localStorage.setItem("producer_name", producerName.trim() || "Markoff");
+                        toast.success("Nombre de productor guardado");
+                      } catch {}
+                    }}
+                    className="border-purple-500/30 text-purple-300 hover:bg-purple-500/10 text-[10px] h-7 shrink-0"
+                  >
+                    Guardar
+                  </Button>
+                </div>
+
+                {/* Archetype Quick Buttons */}
+                <div className="space-y-1.5">
+                  <p className="text-[10px] text-muted-foreground uppercase font-medium">Selecciona un arquetipo de productor:</p>
+                  <div className="grid grid-cols-3 sm:grid-cols-3 gap-1.5">
+                    {PRODUCER_TAG_ARCHETYPES.map((arch) => {
+                      const isSelected = selectedProducerArchetype === arch.id;
+                      return (
+                        <button
+                          key={arch.id}
+                          onClick={() => handleProducerTag(arch.id)}
+                          disabled={producerTagLoading}
+                          className={`p-2 rounded-lg border text-left transition-all duration-200 flex flex-col justify-between ${
+                            isSelected
+                              ? "border-purple-400 bg-purple-500/20 shadow-[0_0_12px_rgba(168,85,247,0.3)]"
+                              : "border-border/40 bg-black/30 hover:border-purple-500/40 hover:bg-black/50"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between w-full">
+                            <span className="text-xs">{arch.icon}</span>
+                            <span className="text-[8px] text-muted-foreground font-mono truncate">{arch.name.split(" ")[0]}</span>
+                          </div>
+                          <p className="font-display text-[11px] font-bold text-foreground mt-1 truncate">{arch.name}</p>
+                          <p className="text-[9px] text-purple-300/70 truncate">{arch.vibe}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Generated Tags Results */}
                 {producerTagLoading ? (
-                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="flex flex-col items-center justify-center py-10 gap-3">
                     <div className="trap-spinner" />
-                    <p className="text-sm text-muted-foreground">Generando tags para {producerName}...</p>
+                    <p className="text-sm text-purple-300 font-medium">Analizando barras y componiendo tags para {producerName || "Markoff"}...</p>
+                    <p className="text-[11px] text-muted-foreground/70">Adaptando cadencia e inyectando contexto lírico</p>
                   </div>
                 ) : producerTags.length > 0 ? (
-                  <div className="space-y-2">
-                    {producerTags.map((tag, i) => (
-                      <div
-                        key={i}
-                        className="rounded-lg border border-purple-400/30 bg-purple-400/5 p-3 hover:border-purple-400/60 hover:bg-purple-400/10 cursor-pointer transition-all"
-                        onClick={() => injectProducerTag(tag.text)}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground uppercase font-medium">Tags listos para Suno ({producerTags.length}):</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleProducerTag(selectedProducerArchetype)}
+                        disabled={producerTagLoading}
+                        className="text-[10px] text-purple-300 hover:text-purple-200 h-6 px-2"
                       >
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[9px] border-purple-400/30 text-purple-400 shrink-0">
-                            {tag.style}
-                          </Badge>
-                          <p className="text-[13px] text-foreground italic flex-1">"{tag.text}"</p>
-                          <span className="text-[10px] text-muted-foreground shrink-0">Click para inyectar →</span>
+                        <RefreshCw className="w-2.5 h-2.5 mr-1" /> Regenerar
+                      </Button>
+                    </div>
+
+                    <div className="space-y-2 max-h-80 overflow-y-auto custom-scroll pr-1">
+                      {producerTags.map((tag, i) => (
+                        <div
+                          key={i}
+                          className="rounded-lg border border-purple-500/30 bg-purple-950/20 p-3 hover:border-purple-400/60 transition-all space-y-2"
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5">
+                              <Badge variant="outline" className="text-[9px] border-purple-400/40 text-purple-300 bg-purple-500/10">
+                                {tag.archetypeName || tag.style}
+                              </Badge>
+                              {tag.language && (
+                                <Badge variant="outline" className="text-[9px] border-border/50 text-muted-foreground">
+                                  {tag.language === "en" ? "🇺🇸 US Trap" : tag.language === "es" ? "🇪🇸 Español" : "🌐 Spanglish"}
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-[9px] text-muted-foreground/60 font-mono">Suno [Intro]</span>
+                          </div>
+
+                          <p className="text-[13px] font-medium text-foreground italic leading-relaxed pl-2 border-l-2 border-purple-400">
+                            "{tag.text}"
+                          </p>
+
+                          <div className="flex gap-2 justify-end pt-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                navigator.clipboard.writeText(tag.text);
+                                toast.success("Producer tag copiado");
+                              }}
+                              className="border-border/40 hover:bg-white/5 text-[10px] h-7 px-2.5"
+                            >
+                              <Copy className="w-3 h-3 mr-1" /> Copiar
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => injectProducerTag(tag.text)}
+                              className="bg-purple-600 hover:bg-purple-500 text-white font-semibold text-[10px] h-7 px-3 shadow-[0_0_10px_rgba(168,85,247,0.4)]"
+                            >
+                              <Zap className="w-3 h-3 mr-1 fill-white" /> Inyectar en [Intro]
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                    <Button variant="outline" size="sm" onClick={handleProducerTag} disabled={producerTagLoading} className="w-full border-purple-400/30 hover:bg-purple-400/10 hover:text-purple-400 h-8">
-                      <RefreshCw className="w-3.5 h-3.5 mr-1" />Generar otros
-                    </Button>
+                      ))}
+                    </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground text-center py-8">Esperando tags...</p>
+                  <div className="rounded-lg border border-border/40 bg-black/20 p-6 text-center space-y-2">
+                    <Disc3 className="w-8 h-8 text-purple-400/50 mx-auto" />
+                    <p className="text-xs text-muted-foreground">Haz click en cualquier arquetipo arriba para generar tags únicos adaptados a la temática de tu canción.</p>
+                  </div>
                 )}
+
+                {/* Suno AI Pro-Tip */}
+                <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-2.5 flex items-start gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-purple-300/90 leading-normal">
+                    <strong>Suno AI Tip:</strong> Al pulsar "Inyectar en [Intro]", el tag se coloca como <code className="text-purple-200">[Intro: Whispered Producer Tag]</code> antes de <code className="text-purple-200">[Beat Drop - Heavy 808]</code> para que el motor de Suno reproduzca el tag aislado y luego suelte el beat con máxima contundencia.
+                  </p>
+                </div>
               </Card>
             )}
 

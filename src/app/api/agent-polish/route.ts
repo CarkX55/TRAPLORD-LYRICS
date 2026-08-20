@@ -55,9 +55,9 @@ async function callLLM(prompt: string, body: AgentPolishBody): Promise<string> {
   }
 }
 
-// Extract chorus/hook sections from lyrics (between ### [Chorus] markers)
+// Extract chorus/hook sections from lyrics (supports [Chorus], [Hook], ### [Chorus])
 function extractChorus(lyrics: string): string {
-  const sections = lyrics.split(/###\s*\[/);
+  const sections = lyrics.split(/(?:###\s*)?\[/);
   const chorusSections = sections.filter(s => /Chorus|Hook|Estribillo/i.test(s.substring(0, 40)));
   return chorusSections.length > 0 ? chorusSections.join("\n---\n") : "(no chorus found)";
 }
