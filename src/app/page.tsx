@@ -1152,14 +1152,86 @@ export default function TrapGhostPage() {
     }
   }, [lyrics, artist, artistId, moodId, spanglishPercent, bpmVibe, structure, geminiApiKey, geminiModel, polishAutoIterate]);
 
+  // ===== Auto-corregir letra desde el Crítico =====
+  const handleFixFromCritic = useCallback(async () => {
+    if (!lyrics || !criticResult) return;
+    if (!geminiApiKey?.trim()) {
+      toast.error("Necesitas tu API Key de Gemini para auto-corregir");
+      return;
+    }
+    setFixingFromCritic(true);
+    try {
+      const structurePlan = structure.sections.map(s => `[${s.name}]`).join(", ");
+      const res = await fetch("/api/agent-polish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lyrics,
+          artistName: artist?.name ?? "Libre",
+          artistId,
+          moodId,
+          spanglishPercent,
+          bpmRange: bpmVibe.range,
+          structurePlan,
+          geminiApiKey: geminiApiKey || undefined,
+          geminiModel,
+          autoIterate: false,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Error al auto-corregir");
+
+      if (data.polishedLyrics) {
+        const prevEntry: HistoryEntry = {
+          id: `critic-orig-${Date.now()}`,
+          artistId,
+          artistName: artist?.name ?? "Libre",
+          timestamp: new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) + " (Pre-Crítico)",
+          fullLyrics: lyrics,
+          analysis,
+          spanglishPercent,
+        };
+        setHistory(prev => [prevEntry, ...prev.slice(0, 19)]);
+        setLyrics(data.polishedLyrics);
+        setAnalysis(analyzeLanguageRatio(data.polishedLyrics, spanglishPercent));
+        setCriticOpen(false);
+        toast.success(`⚡ ¡Letra corregida con el feedback del Crítico! (${data.originalScore} → ${data.finalScore} pts)`);
+        setTimeout(() => lyricsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al auto-corregir con el crítico");
+    } finally {
+      setFixingFromCritic(false);
+    }
+  }, [lyrics, criticResult, artist, artistId, moodId, spanglishPercent, bpmVibe, structure, geminiApiKey, geminiModel, analysis]);
+
   // ===== Aplicar letra pulida =====
   const applyPolishedLyrics = useCallback(() => {
-    if (!polishResult?.polishedLyrics) return;
+    if (!polishResult?.polishedLyrics) {
+      toast.error("No hay letra pulida disponible");
+      return;
+    }
+    // Guardar versión anterior en historial
+    if (lyrics) {
+      const prevEntry: HistoryEntry = {
+        id: `polish-orig-${Date.now()}`,
+        artistId,
+        artistName: artist?.name ?? "Libre",
+        timestamp: new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) + " (Pre-Polish)",
+        fullLyrics: lyrics,
+        analysis,
+        spanglishPercent,
+      };
+      setHistory(prev => [prevEntry, ...prev.slice(0, 19)]);
+    }
+
     setLyrics(polishResult.polishedLyrics);
     setAnalysis(analyzeLanguageRatio(polishResult.polishedLyrics, spanglishPercent));
     setPolishOpen(false);
-    toast.success("Letra pulida aplicada");
-  }, [polishResult, spanglishPercent]);
+    toast.success(`✨ ¡Letra pulida aplicada con éxito! (${polishResult.originalScore} → ${polishResult.finalScore} pts)`);
+    setTimeout(() => lyricsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+  }, [polishResult, lyrics, artist, artistId, analysis, spanglishPercent]);
+
 
   // ===== Producer Tag Generator =====
   // ===== Producer Tag Generator (Arquetipos + Contexto de Letra) =====
@@ -3154,6 +3226,19 @@ export default function TrapGhostPage() {
                             </div>
                           ))}
                         </div>
+
+                        {/* Auto-fix from Critic button */}
+                        <Button
+                          onClick={handleFixFromCritic}
+                          disabled={fixingFromCritic}
+                          className="w-full bg-gradient-to-r from-yellow-500 to-amber-600 text-black font-semibold hover:opacity-90 h-11 cursor-pointer"
+                        >
+                          {fixingFromCritic ? (
+                            <><div className="trap-spinner !w-4 !h-4 !border-2 mr-2 !border-black" />Auto-corrigiendo según el crítico...</>
+                          ) : (
+                            <><Sparkles className="w-4 h-4 mr-2" />⚡ Auto-Corregir Letra con el Crítico</>
+                          )}
+                        </Button>
                       </>
                     )}
                   </>

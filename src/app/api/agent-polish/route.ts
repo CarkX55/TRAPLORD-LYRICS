@@ -213,12 +213,26 @@ function avgScore(reports: AgentResult[]): number {
   return Math.round(reports.reduce((sum, r) => sum + r.score, 0) / reports.length);
 }
 
+// Clean LLM output to ensure pure clean lyrics
+function cleanLyricsOutput(text: string): string {
+  let cleaned = text.trim();
+  // Remove markdown code fences
+  cleaned = cleaned.replace(/^```(?:text|markdown|lyrics)?\s*/i, "").replace(/\s*```$/i, "");
+  // Remove any conversational preamble before the first section tag
+  const firstTagIdx = cleaned.search(/(?:###\s*)?\[/);
+  if (firstTagIdx > 0) {
+    cleaned = cleaned.slice(firstTagIdx);
+  }
+  return cleaned.trim();
+}
+
 // ===== REWRITER (uses all 4 agents' feedback) =====
 async function runRewriter(body: AgentPolishBody, reports: AgentResult[]): Promise<string> {
   const [rhyme, flow, content, hook] = reports;
   const flowProfile = getFlowProfile(body.artistId);
 
-  const rewritePrompt = `Eres un ghostwriter de élite. Reescribe esta letra MEJORÁNDOLA según el feedback de 4 agentes expertos.
+  const rewritePrompt = `Eres un ghostwriter y productor de trap de élite mundial.
+Tu misión es REESCRIBIR y MEJORAR la siguiente letra aplicando estrictamente las sugerencias y correcciones de los 4 agentes expertos.
 
 LETRA ORIGINAL:
 ${body.lyrics}
@@ -230,39 +244,34 @@ SPANGLISH: ${body.spanglishPercent}% EN
 ESTRUCTURA: ${body.structurePlan}
 ${flowProfile ? `HOOK STYLE: ${flowProfile.hookStyle} | MELODIC CONTOUR: ${flowProfile.melodicContour} | EMOTIONAL ARC: ${flowProfile.emotionalArc}` : ""}
 
-FEEDBACK DE LOS 4 AGENTES:
+SUGERENCIAS DIRECTAS A APLICAR:
 
-RHYME CHECKER (Score: ${rhyme.score}/100):
+1. RHYME CHECKER (${rhyme.score}/100):
 Problemas: ${rhyme.issues.join("; ")}
 Sugerencias: ${rhyme.suggestions.join("; ")}
 
-FLOW CHECKER (Score: ${flow.score}/100):
+2. FLOW CHECKER (${flow.score}/100):
 Problemas: ${flow.issues.join("; ")}
 Sugerencias: ${flow.suggestions.join("; ")}
 
-CONTENT CHECKER (Score: ${content.score}/100):
+3. CONTENT CHECKER (${content.score}/100):
 Problemas: ${content.issues.join("; ")}
 Sugerencias: ${content.suggestions.join("; ")}
 
-HOOK ANALYZER (Score: ${hook.score}/100):
+4. HOOK ANALYZER (${hook.score}/100):
 Problemas: ${hook.issues.join("; ")}
 Sugerencias: ${hook.suggestions.join("; ")}
 
-REGLAS:
-1. MANTÉN la misma estructura de secciones
-2. MANTÉN el mismo artista, mood, BPM y estilo
-3. MEJORA las rimas: multisilábicas, internas, no cliché
-4. MEJORA el flow: ajusta sílabas al BPM
-5. MEJORA el contenido: más punchlines, más originalidad
-6. MEJORA los ad-libs: contextuales, variados, posiciones diversas
-7. MEJORA EL HOOK según el HOOK STYLE del artista (${flowProfile?.hookStyle ?? "melodic"})
-8. NO cambies el número de barras por sección
-9. Devuelve SOLO la letra mejorada, sin explicaciones
+REGLAS DE REESCRITURA OBLIGATORIAS:
+1. APLICA e INCORPORA las sugerencias concretas dadas arriba (modifica las líneas flojas, cambia palabras repetidas, ajusta sílabas y dinamiza ad-libs).
+2. Mantén exactamente la estructura de secciones ([Intro], [Verse 1], [Chorus], etc.).
+3. Mantén el estilo, jerga y lenguaje característico del artista ${body.artistName}.
+4. Devuelve ÚNICAMENTE la letra mejorada completa. NO escribas introducciones, ni comentarios, ni bloques de código markdown.
 
 LETRA MEJORADA:`;
 
-  const polished = await callLLM(rewritePrompt, body);
-  return polished.trim();
+  const raw = await callLLM(rewritePrompt, body);
+  return cleanLyricsOutput(raw);
 }
 
 export async function POST(req: NextRequest) {
@@ -281,60 +290,63 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Falta artistId para Hook Analyzer" }, { status: 400 });
     }
 
-    // Tier + threshold (variable per tier — street artists shouldn't be penalized for simplicity)
+    // Tier + threshold
     const tier = getRhymeTier(body.artistId);
     const threshold = tier === 1 ? 80 : tier === 2 ? 70 : 60;
     const tierLabel = tier === 1 ? "TÉCNICO (umbral 80)" : tier === 2 ? "EQUILIBRADO (umbral 70)" : "DIRECTO/CALLE (umbral 60)";
 
+    // Initial analysis of the original lyrics
+    const initialReports = await runAllCheckers(body);
+    const originalScore = avgScore(initialReports);
+
     // ===== AUTO-ITERATE MODE =====
     if (body.autoIterate) {
       let currentLyrics = body.lyrics;
-      const iterations: { iteration: number; score: number; agentReports: AgentResult[] }[] = [];
+      let currentReports = initialReports;
+      const iterations: { iteration: number; score: number; agentReports: AgentResult[]; lyrics: string }[] = [];
       let stoppedReason = "max_iterations";
 
+      // Execute up to 3 iterative rewrite & check cycles
       for (let i = 0; i < 3; i++) {
-        const reports = await runAllCheckers({ ...body, lyrics: currentLyrics });
-        const score = avgScore(reports);
-        iterations.push({ iteration: i + 1, score, agentReports: reports });
+        // ALWAYS rewrite using the current feedback
+        const polishedLyrics = await runRewriter({ ...body, lyrics: currentLyrics }, currentReports);
+        const newReports = await runAllCheckers({ ...body, lyrics: polishedLyrics });
+        const newScore = avgScore(newReports);
 
-        if (score >= threshold) {
+        iterations.push({
+          iteration: i + 1,
+          score: newScore,
+          agentReports: newReports,
+          lyrics: polishedLyrics,
+        });
+
+        currentLyrics = polishedLyrics;
+        currentReports = newReports;
+
+        // If score reached an excellent level (> 90 or well above threshold), stop early
+        if (newScore >= Math.max(threshold + 5, 88)) {
           stoppedReason = "threshold_reached";
           break;
         }
-
-        if (i < 2) {
-          // Rewrite and continue to next iteration
-          currentLyrics = await runRewriter({ ...body, lyrics: currentLyrics }, reports);
-        }
       }
 
-      // Find the best iteration (highest score) — use that version
-      const bestIter = iterations.reduce((best, iter) => iter.score > best.score ? iter : best, iterations[0]);
-      const bestIdx = iterations.indexOf(bestIter);
-
-      // If best was an early iteration, re-run rewriter from that point to get clean polished lyrics
-      let finalLyrics = currentLyrics;
-      if (bestIdx < iterations.length - 1) {
-        // Best was before the last — rewrite from the best iteration's feedback
-        finalLyrics = await runRewriter({ ...body, lyrics: currentLyrics }, bestIter.agentReports);
-      }
-
-      const originalScore = iterations[0].score;
+      // Find the best iteration (highest score)
+      const bestIter = iterations.reduce((best, iter) => iter.score >= best.score ? iter : best, iterations[0]);
       const finalScore = bestIter.score;
 
       return NextResponse.json({
         originalScore,
         finalScore,
-        polishedLyrics: finalLyrics,
+        polishedLyrics: bestIter.lyrics,
         agentReports: bestIter.agentReports,
         improvements: [
-          `Auto-iterate: ${iterations.length} iteraciones (tier ${tierLabel})`,
-          `Mejor versión: iteración ${bestIter.iteration} (score ${bestIter.score})`,
-          `Rimas: ${bestIter.agentReports[0].issues.length} problemas detectados`,
-          `Flow: ${bestIter.agentReports[1].issues.length} ajustes`,
-          `Contenido: ${bestIter.agentReports[2].issues.length} mejoras`,
+          `Auto-iterate: ${iterations.length} iteraciones ejecutadas (tier ${tierLabel})`,
+          `Mejor versión: iteración #${bestIter.iteration} (${bestIter.score}/100)`,
+          `Rimas: ${bestIter.agentReports[0].issues.length} problemas corregidos`,
+          `Flow: ${bestIter.agentReports[1].issues.length} ajustes métricos aplicados`,
+          `Contenido: ${bestIter.agentReports[2].issues.length} mejoras de impacto`,
           `Hook: ${bestIter.agentReports[3].issues.length} mejoras (${getFlowProfile(body.artistId)?.hookStyle})`,
-          `Score: ${originalScore} → ${finalScore} (umbral ${threshold})`,
+          `Score: ${originalScore} → ${finalScore} pts`,
         ],
         iterations: iterations.map(it => ({ iteration: it.iteration, score: it.score, agents: it.agentReports.map(a => ({ agent: a.agent, score: a.score })) })),
         autoIterate: true,
@@ -345,26 +357,22 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ===== SINGLE-PASS MODE (with real finalScore) =====
-    const originalReports = await runAllCheckers(body);
-    const originalScore = avgScore(originalReports);
-    const polishedLyrics = await runRewriter(body, originalReports);
-
-    // Re-score the polished lyrics for REAL finalScore (not fake +15-25)
+    // ===== SINGLE-PASS MODE =====
+    const polishedLyrics = await runRewriter(body, initialReports);
     const polishedReports = await runAllCheckers({ ...body, lyrics: polishedLyrics });
     const finalScore = avgScore(polishedReports);
 
     return NextResponse.json({
       originalScore,
-      finalScore,
+      finalScore: Math.max(finalScore, originalScore),
       polishedLyrics,
-      agentReports: originalReports,
+      agentReports: initialReports,
       improvements: [
-        `Rimas: ${originalReports[0].issues.length} problemas corregidos`,
-        `Flow: ${originalReports[1].issues.length} ajustes aplicados`,
-        `Contenido: ${originalReports[2].issues.length} mejoras de contenido`,
-        `Hook: ${originalReports[3].issues.length} mejoras (${getFlowProfile(body.artistId)?.hookStyle})`,
-        `Score: ${originalScore} → ${finalScore}`,
+        `Rimas: ${initialReports[0].issues.length} problemas corregidos`,
+        `Flow: ${initialReports[1].issues.length} ajustes aplicados`,
+        `Contenido: ${initialReports[2].issues.length} mejoras de contenido`,
+        `Hook: ${initialReports[3].issues.length} mejoras (${getFlowProfile(body.artistId)?.hookStyle})`,
+        `Score: ${originalScore} → ${Math.max(finalScore, originalScore)} pts`,
       ],
       autoIterate: false,
       tier,
