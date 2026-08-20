@@ -590,3 +590,166 @@ export const PRODUCER_TAG_ARCHETYPES: ProducerTagArchetype[] = [
 export function getProducerTagArchetypeById(id: string): ProducerTagArchetype | undefined {
   return PRODUCER_TAG_ARCHETYPES.find(a => a.id === id);
 }
+
+// ===== INSTANT MOOD PRESETS =====
+export interface InstantMoodPreset {
+  id: string;
+  label: string;
+  icon: string;
+  vibeTag: string;
+  description: string;
+  color: string;
+  border: string;
+  bgGradient: string;
+  artistsPool: string[];
+  moodId: string;
+  bpmVibeId: string;
+  beatTypeId: string;
+  structureId: string;
+  topicsPool: string[];
+  spanglishPercent: number;
+}
+
+export const INSTANT_MOOD_PRESETS: InstantMoodPreset[] = [
+  {
+    id: "dark_street",
+    label: "Dark Street",
+    icon: "🗡️",
+    vibeTag: "808 Pesado & Calle",
+    description: "Atmósfera oscura, amenazas crudas, supervivencia y código de barrio.",
+    color: "#8b5cf6",
+    border: "border-purple-500/40",
+    bgGradient: "from-purple-950/40 to-black",
+    artistsPool: ["future", "21_savage", "yung_beef", "yovngchimi", "gucci_mane", "pop_smoke"],
+    moodId: "oscuro",
+    bpmVibeId: "bpm_trap_standard",
+    beatTypeId: "bt_dark_trap",
+    structureId: "std_basic",
+    topicsPool: ["t_dinero", "t_enemigos", "t_calle", "t_lealtad"],
+    spanglishPercent: 40,
+  },
+  {
+    id: "flex_luxury",
+    label: "Flex & Drip",
+    icon: "💎",
+    vibeTag: "Luxury & Racks",
+    description: "Presunción elegante, diamantes, diseñador y victoria en el juego.",
+    color: "#eab308",
+    border: "border-yellow-500/40",
+    bgGradient: "from-yellow-950/40 to-black",
+    artistsPool: ["gunna", "drake", "travis_scott", "young_miko", "kidd_keo", "lil_baby"],
+    moodId: "flex",
+    bpmVibeId: "bpm_trap_groovy",
+    beatTypeId: "bt_plugg",
+    structureId: "std_basic",
+    topicsPool: ["t_dinero", "t_joyas", "t_fama", "t_coches", "t_exceso"],
+    spanglishPercent: 50,
+  },
+  {
+    id: "sad_lean",
+    label: "Sad & Pain",
+    icon: "💔",
+    vibeTag: "Melancolía & Noche",
+    description: "Desamor, vacío interior, codeína y confesiones vulnerables.",
+    color: "#ec4899",
+    border: "border-pink-500/40",
+    bgGradient: "from-pink-950/40 to-black",
+    artistsPool: ["juice_wrld", "mora", "cruz_cafune", "trippie_redd", "delaossa", "xxxtentacion"],
+    moodId: "melancolico",
+    bpmVibeId: "bpm_trap_lento",
+    beatTypeId: "bt_melodic_trap",
+    structureId: "std_pain_ballad",
+    topicsPool: ["t_amor", "t_lean", "t_drogas", "t_traicion"],
+    spanglishPercent: 25,
+  },
+  {
+    id: "rage_moshpit",
+    label: "Rage & Caos",
+    icon: "⚡",
+    vibeTag: "Distorsión & Moshpit",
+    description: "Sintetizadores chirriantes, 808s saturados y energía descontrolada.",
+    color: "#06b6d4",
+    border: "border-cyan-500/40",
+    bgGradient: "from-cyan-950/40 to-black",
+    artistsPool: ["playboi_carti", "yeat", "ken_carson", "duki", "lil_uzi", "trippie_redd"],
+    moodId: "agresivo",
+    bpmVibeId: "bpm_trap_rage",
+    beatTypeId: "bt_rage",
+    structureId: "std_rage",
+    topicsPool: ["t_fiesta", "t_enemigos", "t_drogas", "t_noche"],
+    spanglishPercent: 70,
+  },
+  {
+    id: "drill_gliding",
+    label: "UK & NY Drill",
+    icon: "🩸",
+    vibeTag: "Sliding 808 & Barras",
+    description: "Pianos siniestros, bajos deslizantes y narrativa de asfalto cortante.",
+    color: "#ef4444",
+    border: "border-red-500/40",
+    bgGradient: "from-red-950/40 to-black",
+    artistsPool: ["central_cee", "pop_smoke", "digga_d", "beny_jr", "agnus_tris", "headie_one"],
+    moodId: "calle",
+    bpmVibeId: "bpm_trap_fast",
+    beatTypeId: "bt_drill_uk",
+    structureId: "std_short",
+    topicsPool: ["t_calle", "t_enemigos", "t_lealtad", "t_territory"],
+    spanglishPercent: 45,
+  },
+  {
+    id: "latin_sauce",
+    label: "Latin Sauce",
+    icon: "🌴",
+    vibeTag: "Spanglish Kings",
+    description: "Flow caribeño auténtico, rimas callejeras y punchlines de oro.",
+    color: "#10b981",
+    border: "border-emerald-500/40",
+    bgGradient: "from-emerald-950/40 to-black",
+    artistsPool: ["eladio_carrion", "bad_bunny", "anuel_aa", "myke_towers", "young_miko"],
+    moodId: "flex",
+    bpmVibeId: "bpm_trap_standard",
+    beatTypeId: "bt_reggaeton",
+    structureId: "std_feature",
+    topicsPool: ["t_dinero", "t_mujeres", "t_calle", "t_joyas"],
+    spanglishPercent: 45,
+  },
+  {
+    id: "plugg_cloud",
+    label: "Plugg & Cloud",
+    icon: "🔌",
+    vibeTag: "Ethereal & Smooth",
+    description: "Sintetizadores flotantes, melodías suaves y flow relajado.",
+    color: "#3b82f6",
+    border: "border-blue-500/40",
+    bgGradient: "from-blue-950/40 to-black",
+    artistsPool: ["asap_rocky", "destroy_lonely", "lil_tecca", "don_tolver", "gunna"],
+    moodId: "introspectivo",
+    bpmVibeId: "bpm_trap_groovy",
+    beatTypeId: "bt_plugg",
+    structureId: "std_basic",
+    topicsPool: ["t_noche", "t_lujo", "t_drogas", "t_mujeres"],
+    spanglishPercent: 65,
+  },
+  {
+    id: "random_banger",
+    label: "Sorpréndeme",
+    icon: "🎲",
+    vibeTag: "Random Armónico",
+    description: "Combinación aleatoria pero musicalmente perfecta.",
+    color: "#00ff41",
+    border: "border-slime/50",
+    bgGradient: "from-slime/20 to-black",
+    artistsPool: [],
+    moodId: "calle",
+    bpmVibeId: "bpm_trap_standard",
+    beatTypeId: "bt_atlanta_standard",
+    structureId: "std_basic",
+    topicsPool: [],
+    spanglishPercent: 50,
+  },
+];
+
+export function getInstantMoodPresetById(id: string): InstantMoodPreset | undefined {
+  return INSTANT_MOOD_PRESETS.find(p => p.id === id);
+}
+

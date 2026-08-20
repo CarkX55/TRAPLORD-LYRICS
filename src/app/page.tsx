@@ -28,8 +28,9 @@ import {
 import {
   ARTISTS_DATA, MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, PRODUCERS, RHYME_SCHEMES,
   BEAT_TYPES, FEATURE_SIMS, PRODUCER_TAG_ARCHETYPES, getProducerTagArchetypeById,
+  INSTANT_MOOD_PRESETS, getInstantMoodPresetById,
   getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, generateBeatPrompt,
-  type Artist, type BeatPrompt, type ProducerTagArchetype
+  type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset
 } from "@/lib/trap-data";
 import { buildSpanglishInstruction, buildSunoStylePrompt, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
 import { getFlowProfile, getCadenceLabel, type FlowProfile } from "@/lib/artist-flow-profiles";
@@ -225,6 +226,7 @@ export default function TrapGhostPage() {
   const [producerTagLoading, setProducerTagLoading] = useState<boolean>(false);
   const [producerTagOpen, setProducerTagOpen] = useState<boolean>(false);
   const [selectedProducerArchetype, setSelectedProducerArchetype] = useState<string>("smart");
+  const [activeInstantMood, setActiveInstantMood] = useState<string | null>(null);
   // Agent Polish (multi-agente IA)
   const [polishResult, setPolishResult] = useState<{
     originalScore: number;
@@ -348,6 +350,39 @@ export default function TrapGhostPage() {
     }
     artistDefaultApplied.current = false;
   }, [artistId]);
+
+  // ===== Apply Instant Mood Preset =====
+  const applyInstantMood = useCallback((presetId: string) => {
+    setActiveInstantMood(presetId);
+    const preset = getInstantMoodPresetById(presetId);
+    if (!preset) return;
+
+    if (preset.id === "random_banger") {
+      const allPresets = INSTANT_MOOD_PRESETS.filter(p => p.id !== "random_banger");
+      const randomPreset = allPresets[Math.floor(Math.random() * allPresets.length)];
+      applyInstantMood(randomPreset.id);
+      return;
+    }
+
+    // Pick random artist from pool
+    const randomArtistId = preset.artistsPool[Math.floor(Math.random() * preset.artistsPool.length)];
+    if (randomArtistId) {
+      setArtistId(randomArtistId);
+    }
+
+    setMoodId(preset.moodId);
+    setBpmVibeId(preset.bpmVibeId);
+    setBeatTypeId(preset.beatTypeId);
+    setStructureId(preset.structureId);
+    setSpanglishPercent(preset.spanglishPercent);
+
+    // Pick 2-3 topics from pool
+    const shuffled = [...preset.topicsPool].sort(() => 0.5 - Math.random());
+    setSelectedTopics(shuffled.slice(0, 3));
+
+    const artistObj = getArtistById(randomArtistId);
+    toast.success(`⚡ Mood aplicado: ${preset.icon} ${preset.label} · ${artistObj?.name ?? "Trap"}`);
+  }, []);
 
   // ===== Topic toggle =====
   const toggleTopic = useCallback((id: string) => {
@@ -1432,6 +1467,54 @@ export default function TrapGhostPage() {
                     )}
                   </SelectContent>
                 </Select>
+              </div>
+            </Card>
+
+            {/* --- Instant Trap Moods & Randomizer Card --- */}
+            <Card className="glass-card p-5 space-y-3.5 border-slime/30 glow-slime">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-slime/10 border border-slime/30 flex items-center justify-center">
+                  <Flame className="w-4 h-4 text-slime" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-display text-lg font-bold gradient-text-trap">Instant Trap Moods</h2>
+                    <Badge variant="outline" className="text-[9px] border-slime/40 text-slime bg-slime/10">
+                      ⚡ 1-Click Vibe
+                    </Badge>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Preselecciones armónicas aleatorias según la vibra que buscas</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {INSTANT_MOOD_PRESETS.map((preset) => {
+                  const isActive = activeInstantMood === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      onClick={() => applyInstantMood(preset.id)}
+                      className={`p-2.5 rounded-lg border text-left transition-all duration-200 flex flex-col justify-between group relative overflow-hidden ${
+                        isActive
+                          ? `${preset.border} bg-white/10 shadow-[0_0_12px_rgba(0,255,65,0.25)] ring-1 ring-white/30`
+                          : `${preset.border} bg-black/40 hover:bg-black/70 hover:scale-[1.02]`
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-base">{preset.icon}</span>
+                        <span className="text-[8px] text-muted-foreground font-mono uppercase">{preset.id === "random_banger" ? "Auto" : "Mood"}</span>
+                      </div>
+                      <div className="mt-1.5 space-y-0.5">
+                        <p className="font-display text-xs font-bold text-foreground group-hover:text-white truncate">
+                          {preset.label}
+                        </p>
+                        <p className="text-[9px] text-muted-foreground font-medium truncate" style={{ color: preset.color }}>
+                          {preset.vibeTag}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </Card>
 
