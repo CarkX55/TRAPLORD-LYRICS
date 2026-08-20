@@ -261,6 +261,26 @@ export default function TrapGhostPage() {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [advOpen, setAdvOpen] = useState<boolean>(false);
 
+  // Section Collapsible States
+  const [apiKeyOpen, setApiKeyOpen] = useState<boolean>(true);
+  const [instantMoodsOpen, setInstantMoodsOpen] = useState<boolean>(true);
+  const [artistOpen, setArtistOpen] = useState<boolean>(true);
+  const [moodOpen, setMoodOpen] = useState<boolean>(true);
+  const [spanglishOpen, setSpanglishOpen] = useState<boolean>(true);
+  const [bpmOpen, setBpmOpen] = useState<boolean>(true);
+  const [presetsOpen, setPresetsOpen] = useState<boolean>(true);
+
+  const toggleAllSections = useCallback((expand: boolean) => {
+    setApiKeyOpen(expand);
+    setInstantMoodsOpen(expand);
+    setArtistOpen(expand);
+    setMoodOpen(expand);
+    setSpanglishOpen(expand);
+    setBpmOpen(expand);
+    setAdvOpen(expand);
+    setPresetsOpen(expand);
+  }, []);
+
   const lyricsRef = useRef<HTMLDivElement>(null);
 
   // ===== Load presets from localStorage on mount =====
@@ -1413,463 +1433,530 @@ export default function TrapGhostPage() {
           {/* ===== LEFT: Controls ===== */}
           <div className="space-y-5">
 
-            {/* --- API Key & Model Card --- */}
-            <Card className="glass-card p-5 space-y-3">
+            {/* --- Controls Overview & Expand/Collapse All Toolbar --- */}
+            <div className="flex items-center justify-between px-1 bg-black/30 border border-border/30 rounded-lg p-2 backdrop-blur-sm">
               <div className="flex items-center gap-2">
-                <Key className="w-5 h-5 text-cyber" />
-                <h2 className="font-display text-lg font-semibold">API Key de Gemini</h2>
-                <Badge variant="outline" className={`ml-auto text-[10px] ${geminiApiKey ? "border-slime/40 text-slime" : "border-yellow-400/40 text-yellow-400"}`}>
-                  {geminiApiKey ? "✓ Configurada" : "⚠ Vacía (usa Z.ai SDK)"}
-                </Badge>
+                <Settings2 className="w-3.5 h-3.5 text-slime" />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Controles de Canción</span>
               </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Pon tu API Key de Google Gemini para usar la app desde cualquier sitio. Consíguela gratis en{" "}
-                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-cyber underline">aistudio.google.com</a>
-              </p>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">API Key</Label>
-                <div className="flex gap-2">
-                  <Input type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)} placeholder="AIza..." className="bg-black/40 font-mono text-[11px]" />
-                  <Button variant="outline" size="sm" onClick={() => {
-                    try {
-                      localStorage.setItem("gemini_api_key", geminiApiKey.trim());
-                      localStorage.setItem("gemini_model", geminiModel);
-                      localStorage.setItem("producer_name", producerName);
-                      toast.success("API Key guardada");
-                      if (geminiApiKey.trim()) fetchGeminiModels(geminiApiKey);
-                    } catch { toast.error("No se pudo guardar"); }
-                  }} className="border-slime/30 hover:bg-slime/10 hover:text-slime shrink-0">
-                    <Save className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="sm" onClick={() => toggleAllSections(true)} className="text-[10px] text-muted-foreground hover:text-slime h-6 px-2">
+                  Desplegar todo
+                </Button>
+                <span className="text-muted-foreground/30 text-[10px]">|</span>
+                <Button variant="ghost" size="sm" onClick={() => toggleAllSections(false)} className="text-[10px] text-muted-foreground hover:text-cyber h-6 px-2">
+                  Retraer todo
+                </Button>
               </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs text-muted-foreground">Modelo de Gemini</Label>
-                  {availableModels.length > 0 && (
-                    <Badge variant="outline" className="text-[9px] border-slime/30 text-slime">{availableModels.length} disponibles</Badge>
-                  )}
-                  {loadingModels && <span className="text-[10px] text-muted-foreground">Cargando...</span>}
-                </div>
-                <Select value={geminiModel} onValueChange={setGeminiModel}>
-                  <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {availableModels.length > 0 ? availableModels.map(m => (
-                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                    )) : (
-                      <>
-                        <SelectItem value="gemini-2.5-flash">✨ Gemini 2.5 Flash (Thinking Máximo · Recomendado)</SelectItem>
-                        <SelectItem value="gemini-2.5-pro">✨ Gemini 2.5 Pro (Máxima Calidad Lírica)</SelectItem>
-                        <SelectItem value="gemini-2.0-flash">🔥 Gemini 2.0 Flash</SelectItem>
-                        <SelectItem value="gemini-1.5-flash">📊 Gemini 1.5 Flash</SelectItem>
-                        <SelectItem value="gemini-1.5-pro">📊 Gemini 1.5 Pro</SelectItem>
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </Card>
+            </div>
+
+            {/* --- API Key & Model Card --- */}
+            <Collapsible open={apiKeyOpen} onOpenChange={setApiKeyOpen}>
+              <Card className="glass-card p-5 space-y-3">
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-2 w-full text-left group cursor-pointer">
+                    <Key className="w-5 h-5 text-cyber shrink-0" />
+                    <h2 className="font-display text-lg font-semibold group-hover:text-cyber transition-colors">API Key de Gemini</h2>
+                    <Badge variant="outline" className={`ml-auto text-[10px] ${geminiApiKey ? "border-slime/40 text-slime" : "border-yellow-400/40 text-yellow-400"}`}>
+                      {geminiApiKey ? "✓ Configurada" : "⚠ Vacía (usa Z.ai SDK)"}
+                    </Badge>
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${apiKeyOpen ? "rotate-180" : ""}`} />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-3 pt-2 animate-fade-slide">
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Pon tu API Key de Google Gemini para usar la app desde cualquier sitio. Consíguela gratis en{" "}
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-cyber underline">aistudio.google.com</a>
+                  </p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">API Key</Label>
+                    <div className="flex gap-2">
+                      <Input type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)} placeholder="AIza..." className="bg-black/40 font-mono text-[11px]" />
+                      <Button variant="outline" size="sm" onClick={() => {
+                        try {
+                          localStorage.setItem("gemini_api_key", geminiApiKey.trim());
+                          localStorage.setItem("gemini_model", geminiModel);
+                          localStorage.setItem("producer_name", producerName);
+                          toast.success("API Key guardada");
+                          if (geminiApiKey.trim()) fetchGeminiModels(geminiApiKey);
+                        } catch { toast.error("No se pudo guardar"); }
+                      }} className="border-slime/30 hover:bg-slime/10 hover:text-slime shrink-0">
+                        <Save className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground">Modelo de Gemini</Label>
+                      {availableModels.length > 0 && (
+                        <Badge variant="outline" className="text-[9px] border-slime/30 text-slime">{availableModels.length} disponibles</Badge>
+                      )}
+                      {loadingModels && <span className="text-[10px] text-muted-foreground">Cargando...</span>}
+                    </div>
+                    <Select value={geminiModel} onValueChange={setGeminiModel}>
+                      <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {availableModels.length > 0 ? availableModels.map(m => (
+                          <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                        )) : (
+                          <>
+                            <SelectItem value="gemini-2.5-flash">✨ Gemini 2.5 Flash (Thinking Máximo · Recomendado)</SelectItem>
+                            <SelectItem value="gemini-2.5-pro">✨ Gemini 2.5 Pro (Máxima Calidad Lírica)</SelectItem>
+                            <SelectItem value="gemini-2.0-flash">🔥 Gemini 2.0 Flash</SelectItem>
+                            <SelectItem value="gemini-1.5-flash">📊 Gemini 1.5 Flash</SelectItem>
+                            <SelectItem value="gemini-1.5-pro">📊 Gemini 1.5 Pro</SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
 
             {/* --- Instant Trap Moods & Randomizer Card --- */}
-            <Card className="glass-card p-5 space-y-3.5 border-slime/30 glow-slime">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-slime/10 border border-slime/30 flex items-center justify-center">
-                  <Flame className="w-4 h-4 text-slime" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="font-display text-lg font-bold gradient-text-trap">Instant Trap Moods</h2>
-                    <Badge variant="outline" className="text-[9px] border-slime/40 text-slime bg-slime/10">
-                      ⚡ 1-Click Vibe
-                    </Badge>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">Preselecciones armónicas aleatorias según la vibra que buscas</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {INSTANT_MOOD_PRESETS.map((preset) => {
-                  const isActive = activeInstantMood === preset.id;
-                  return (
-                    <button
-                      key={preset.id}
-                      onClick={() => applyInstantMood(preset.id)}
-                      className={`p-2.5 rounded-lg border text-left transition-all duration-200 flex flex-col justify-between group relative overflow-hidden ${
-                        isActive
-                          ? `${preset.border} bg-white/10 shadow-[0_0_12px_rgba(0,255,65,0.25)] ring-1 ring-white/30`
-                          : `${preset.border} bg-black/40 hover:bg-black/70 hover:scale-[1.02]`
-                      }`}
-                    >
-                      <div className="flex items-center justify-between w-full">
-                        <span className="text-base">{preset.icon}</span>
-                        <span className="text-[8px] text-muted-foreground font-mono uppercase">{preset.id === "random_banger" ? "Auto" : "Mood"}</span>
+            <Collapsible open={instantMoodsOpen} onOpenChange={setInstantMoodsOpen}>
+              <Card className="glass-card p-5 space-y-3.5 border-slime/30 glow-slime">
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-2 w-full text-left group cursor-pointer">
+                    <div className="w-8 h-8 rounded-lg bg-slime/10 border border-slime/30 flex items-center justify-center shrink-0">
+                      <Flame className="w-4 h-4 text-slime" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h2 className="font-display text-lg font-bold gradient-text-trap truncate">Instant Trap Moods</h2>
+                        <Badge variant="outline" className="text-[9px] border-slime/40 text-slime bg-slime/10 shrink-0">
+                          ⚡ 1-Click Vibe
+                        </Badge>
                       </div>
-                      <div className="mt-1.5 space-y-0.5">
-                        <p className="font-display text-xs font-bold text-foreground group-hover:text-white truncate">
-                          {preset.label}
-                        </p>
-                        <p className="text-[9px] text-muted-foreground font-medium truncate" style={{ color: preset.color }}>
-                          {preset.vibeTag}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </Card>
+                      <p className="text-[10px] text-muted-foreground truncate">Preselecciones armónicas aleatorias según la vibra</p>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${instantMoodsOpen ? "rotate-180" : ""}`} />
+                  </button>
+                </CollapsibleTrigger>
 
-            {/* --- Artist & Feature --- */}
-            <Card className="glass-card p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <Disc3 className="w-5 h-5 text-slime" />
-                <h2 className="font-display text-lg font-semibold">Identidad del Artista</h2>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Artista Principal</Label>
-                  <Select value={artistId} onValueChange={(v) => { artistDefaultApplied.current = true; setArtistId(v); }}>
-                    <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {ARTISTS_DATA.map(group => (
-                        <SelectGroup key={group.label}>
-                          <SelectLabel className="text-slime">{group.label}</SelectLabel>
-                          {group.artists.map(a => (
-                            <SelectItem key={a.id} value={a.id}>
-                              <span className="flex items-center gap-2">
-                                <span>👤</span>{a.name}
-                                <span className="text-muted-foreground text-xs">· {a.origin}</span>
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Feature (opcional)</Label>
-                  <Select value={featureArtistId} onValueChange={setFeatureArtistId}>
-                    <SelectTrigger className="bg-black/40"><SelectValue placeholder="Sin invitado" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">— Sin feature —</SelectItem>
-                      {ARTISTS_DATA.flatMap(g => g.artists).filter(a => a.id !== artistId).map(a => (
-                        <SelectItem key={a.id} value={a.id}>👤 {a.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              {/* Feature Sim selector */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                  <Star className="w-3.5 h-3.5" /> Tipo de colaboración (Feature Sim)
-                </Label>
-                <Select value={featureSimId} onValueChange={setFeatureSimId}>
-                  <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {FEATURE_SIMS.map(f => (
-                      <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {featureSimId !== "solo" && featureSim && (
-                  <p className="text-[11px] text-muted-foreground">{featureSim.description}</p>
-                )}
-              </div>
-              {artist && (
-                <div className="rounded-lg border border-slime/20 bg-slime/5 p-3 text-sm">
-                  <p className="font-semibold text-slime mb-1">{artist.name} <span className="text-muted-foreground text-xs font-normal">· {artist.origin}</span></p>
-                  <p className="text-muted-foreground text-[13px] leading-relaxed">{artist.style}</p>
-                  {artist.defaultSpanglish !== undefined && (
-                    <button
-                      onClick={() => setSpanglishPercent(artist.defaultSpanglish!)}
-                      className="mt-2 text-[11px] text-slime/80 hover:text-slime underline underline-offset-2"
-                    >
-                      ✨ Aplicar Spanglish sugerido del artista ({artist.defaultSpanglish}% EN)
-                    </button>
-                  )}
-                </div>
-              )}
-            </Card>
-
-            {/* --- Mood & Topics --- */}
-            <Card className="glass-card p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <Flame className="w-5 h-5 text-cyber" />
-                <h2 className="font-display text-lg font-semibold">Mood & Temática</h2>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Mood (atmósfera)</Label>
-                <Select value={moodId} onValueChange={setMoodId}>
-                  <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {MOODS.map(m => {
-                      const Icon = MOOD_ICONS[m.id] ?? Flame;
+                <CollapsibleContent className="pt-2 animate-fade-slide">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {INSTANT_MOOD_PRESETS.map((preset) => {
+                      const isActive = activeInstantMood === preset.id;
                       return (
-                        <SelectItem key={m.id} value={m.id}>
-                          <span className="flex items-center gap-2"><Icon className="w-3.5 h-3.5" />{m.label}</span>
-                        </SelectItem>
+                        <button
+                          key={preset.id}
+                          onClick={() => applyInstantMood(preset.id)}
+                          className={`p-2.5 rounded-lg border text-left transition-all duration-200 flex flex-col justify-between group relative overflow-hidden cursor-pointer ${
+                            isActive
+                              ? `${preset.border} bg-white/10 shadow-[0_0_12px_rgba(0,255,65,0.25)] ring-1 ring-white/30`
+                              : `${preset.border} bg-black/40 hover:bg-black/70 hover:scale-[1.02]`
+                          }`}
+                        >
+                          <div className="flex items-center justify-between w-full">
+                            <span className="text-base">{preset.icon}</span>
+                            <span className="text-[8px] text-muted-foreground font-mono uppercase">{preset.id === "random_banger" ? "Auto" : "Mood"}</span>
+                          </div>
+                          <div className="mt-1.5 space-y-0.5">
+                            <p className="font-display text-xs font-bold text-foreground group-hover:text-white truncate">
+                              {preset.label}
+                            </p>
+                            <p className="text-[9px] text-muted-foreground font-medium truncate" style={{ color: preset.color }}>
+                              {preset.vibeTag}
+                            </p>
+                          </div>
+                        </button>
                       );
                     })}
-                  </SelectContent>
-                </Select>
-                {(() => {
-                  const mood = MOODS.find(m => m.id === moodId);
-                  return mood ? <p className="text-[12px] text-muted-foreground leading-relaxed">{mood.description}</p> : null;
-                })()}
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Temas (selecciona varios)</Label>
-                <div className="flex flex-wrap gap-2">
-                  {TOPICS.map(t => (
-                    <button
-                      key={t.id}
-                      className="tag-chip"
-                      data-active={selectedTopics.includes(t.id)}
-                      onClick={() => toggleTopic(t.id)}
-                    >
-                      {selectedTopics.includes(t.id) && <Sparkles className="w-3 h-3" />}
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Tema personalizado (idea a la carta)</Label>
-                <Textarea
-                  value={customTopic}
-                  onChange={(e) => setCustomTopic(e.target.value)}
-                  placeholder="Ej: una noche robando coches en Madrid con mi hermano pequeño..."
-                  className="bg-black/40 resize-none"
-                  rows={2}
-                />
-              </div>
-            </Card>
-
-            {/* --- Spanglish Ratio (THE FIX) --- */}
-            <Card className="glass-card p-5 space-y-4 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-slime/5 rounded-full blur-3xl" />
-              <div className="flex items-center gap-2 relative">
-                <Languages className="w-5 h-5 text-slime" />
-                <h2 className="font-display text-lg font-semibold">Spanglish Ratio</h2>
-                <Badge variant="outline" className="ml-auto border-slime/40 text-slime gap-1">
-                  <Target className="w-3 h-3" />
-                  Verificado
-                </Badge>
-              </div>
-
-              {/* The actual ratio bar */}
-              <div className="ratio-bar relative">
-                <div className="es-segment" style={{ width: `${100 - spanglishPercent}%` }} />
-                <div className="en-segment" style={{ width: `${spanglishPercent}%` }} />
-                {/* target marker is implicit (the bar IS the target) */}
-              </div>
-              <div className="flex justify-between text-xs font-medium">
-                <span className="text-cyber">🇪🇸 Español {100 - spanglishPercent}%</span>
-                <span className="text-slime">English {spanglishPercent}% 🇺🇸</span>
-              </div>
-
-              {/* Custom slider */}
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={spanglishPercent}
-                onChange={(e) => setSpanglishPercent(Number(e.target.value))}
-                className="spanglish-slider"
-                style={sliderStyle}
-                aria-label="Spanglish ratio"
-              />
-              <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>100% ES</span><span>50/50</span><span>100% EN</span>
-              </div>
-
-              {/* Live label (FIXED: unified with prompt logic) */}
-              <div className="rounded-lg border border-slime/20 bg-black/30 p-3">
-                <p className="text-[13px] font-medium text-slime">{spanglishInfo.label}</p>
-                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                  {spanglishInfo.prompt.replace(/\*\*[^*]*\*\*\.?/g, "").trim()}
-                </p>
-              </div>
-
-              {/* Auto-correct toggle */}
-              <div className="flex items-center justify-between gap-3 pt-1">
-                <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-slime" />
-                  <div>
-                    <Label className="text-[13px] cursor-pointer">Verificación post-generación</Label>
-                    <p className="text-[11px] text-muted-foreground">Analiza el ratio real y ofrece regenerar si se desvía &gt;20%</p>
                   </div>
-                </div>
-                <Switch checked={autoCorrect} onCheckedChange={setAutoCorrect} />
-              </div>
-            </Card>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
 
-            {/* --- BPM & Structure --- */}
-            <Card className="glass-card p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <Gauge className="w-5 h-5 text-slime" />
-                <h2 className="font-display text-lg font-semibold">BPM & Estructura</h2>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Vibe / BPM</Label>
-                <Select value={bpmVibeId} onValueChange={setBpmVibeId}>
-                  <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {BPM_VIBES.map(b => (
-                      <SelectItem key={b.id} value={b.id}>
-                        <span className="flex items-center gap-2">
-                          <span className="bpm-pulse" style={{ "--bpm-dur": `${60 / parseInt(b.range.split("-")[1] ?? "130")}s` } as React.CSSProperties} />
-                          {b.label} <span className="text-muted-foreground text-xs">({b.range})</span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-[12px] text-muted-foreground">{bpmVibe.description} · Densidad: {bpmVibe.density}</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Estructura</Label>
-                <Select value={structureId} onValueChange={setStructureId}>
-                  <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {STRUCTURES.map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {structure.sections.map((s, i) => (
-                    <Badge key={i} variant="outline" className="text-[10px] py-0.5 px-2 border-border/50">
-                      {s.name}
+            {/* --- Artist & Feature --- */}
+            <Collapsible open={artistOpen} onOpenChange={setArtistOpen}>
+              <Card className="glass-card p-5 space-y-4">
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-2 w-full text-left group cursor-pointer">
+                    <Disc3 className="w-5 h-5 text-slime shrink-0" />
+                    <h2 className="font-display text-lg font-semibold group-hover:text-slime transition-colors">Identidad del Artista</h2>
+                    <Badge variant="outline" className="ml-auto text-[10px] border-slime/40 text-slime truncate max-w-[150px]">
+                      {artist?.name ?? "Libre"}
                     </Badge>
-                  ))}
-                </div>
-              </div>
-              {/* Beat Type selector */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                  <Waves className="w-3.5 h-3.5" /> Beat Type (subgénero · Suno/Udio)
-                </Label>
-                <Select value={beatTypeId || "none"} onValueChange={(v) => setBeatTypeId(v === "none" ? "" : v)}>
-                  <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— Auto (sin tipo específico) —</SelectItem>
-                    {BEAT_TYPES.map(b => (
-                      <SelectItem key={b.id} value={b.id}>{b.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {beatType && (
-                  <div className="rounded-md border border-slime/20 bg-slime/5 p-2.5">
-                    <p className="text-[11px] text-muted-foreground">{beatType.description}</p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {beatType.sunoTags.map((tag, i) => (
-                        <Badge key={i} variant="outline" className="text-[9px] border-slime/30 text-slime">{tag}</Badge>
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${artistOpen ? "rotate-180" : ""}`} />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-4 pt-2 animate-fade-slide">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Artista Principal</Label>
+                      <Select value={artistId} onValueChange={(v) => { artistDefaultApplied.current = true; setArtistId(v); }}>
+                        <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {ARTISTS_DATA.map(group => (
+                            <SelectGroup key={group.label}>
+                              <SelectLabel className="text-slime">{group.label}</SelectLabel>
+                              {group.artists.map(a => (
+                                <SelectItem key={a.id} value={a.id}>
+                                  <span className="flex items-center gap-2">
+                                    <span>👤</span>{a.name}
+                                    <span className="text-muted-foreground text-xs">· {a.origin}</span>
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Feature (opcional)</Label>
+                      <Select value={featureArtistId} onValueChange={setFeatureArtistId}>
+                        <SelectTrigger className="bg-black/40"><SelectValue placeholder="Sin invitado" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">— Sin feature —</SelectItem>
+                          {ARTISTS_DATA.flatMap(g => g.artists).filter(a => a.id !== artistId).map(a => (
+                            <SelectItem key={a.id} value={a.id}>👤 {a.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {/* Feature Sim selector */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <Star className="w-3.5 h-3.5" /> Tipo de colaboración (Feature Sim)
+                    </Label>
+                    <Select value={featureSimId} onValueChange={setFeatureSimId}>
+                      <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {FEATURE_SIMS.map(f => (
+                          <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {featureSimId !== "solo" && featureSim && (
+                      <p className="text-[11px] text-muted-foreground">{featureSim.description}</p>
+                    )}
+                  </div>
+                  {artist && (
+                    <div className="rounded-lg border border-slime/20 bg-slime/5 p-3 text-sm">
+                      <p className="font-semibold text-slime mb-1">{artist.name} <span className="text-muted-foreground text-xs font-normal">· {artist.origin}</span></p>
+                      <p className="text-muted-foreground text-[13px] leading-relaxed">{artist.style}</p>
+                      {artist.defaultSpanglish !== undefined && (
+                        <button
+                          onClick={() => setSpanglishPercent(artist.defaultSpanglish!)}
+                          className="mt-2 text-[11px] text-slime/80 hover:text-slime underline underline-offset-2"
+                        >
+                          ✨ Aplicar Spanglish sugerido del artista ({artist.defaultSpanglish}% EN)
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* --- Mood & Topics --- */}
+            <Collapsible open={moodOpen} onOpenChange={setMoodOpen}>
+              <Card className="glass-card p-5 space-y-4">
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-2 w-full text-left group cursor-pointer">
+                    <Flame className="w-5 h-5 text-cyber shrink-0" />
+                    <h2 className="font-display text-lg font-semibold group-hover:text-cyber transition-colors">Mood & Temática</h2>
+                    <Badge variant="outline" className="ml-auto text-[10px] border-cyber/40 text-cyber truncate max-w-[170px]">
+                      {MOODS.find(m => m.id === moodId)?.label?.split(" ")[1] ?? moodId} · {selectedTopics.length} temas
+                    </Badge>
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${moodOpen ? "rotate-180" : ""}`} />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-4 pt-2 animate-fade-slide">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Mood (atmósfera)</Label>
+                    <Select value={moodId} onValueChange={setMoodId}>
+                      <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {MOODS.map(m => {
+                          const Icon = MOOD_ICONS[m.id] ?? Flame;
+                          return (
+                            <SelectItem key={m.id} value={m.id}>
+                              <span className="flex items-center gap-2"><Icon className="w-3.5 h-3.5" />{m.label}</span>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    {(() => {
+                      const mood = MOODS.find(m => m.id === moodId);
+                      return mood ? <p className="text-[12px] text-muted-foreground leading-relaxed">{mood.description}</p> : null;
+                    })()}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Temas (selecciona varios)</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {TOPICS.map(t => (
+                        <button
+                          key={t.id}
+                          className="tag-chip cursor-pointer"
+                          data-active={selectedTopics.includes(t.id)}
+                          onClick={() => toggleTopic(t.id)}
+                        >
+                          {selectedTopics.includes(t.id) && <Sparkles className="w-3 h-3" />}
+                          {t.label}
+                        </button>
                       ))}
                     </div>
                   </div>
-                )}
-              </div>
-              {/* Section Voice Assignment */}
-              <div className="space-y-2 rounded-lg border border-border/40 bg-black/20 p-3">
-                <div className="flex items-center gap-1.5">
-                  <Mic className="w-3.5 h-3.5 text-slime" />
-                  <Label className="text-xs text-muted-foreground">Asignación de voces por sección</Label>
-                </div>
-                <p className="text-[10px] text-muted-foreground/70 -mt-1">Asigna quién rapea cada sección y cuántas barras</p>
-                <div className="space-y-1.5 max-h-72 overflow-y-auto custom-scroll pr-1">
-                  {structure.sections.map((sec, secIdx) => {
-                    const assign = sectionVoices.find(v => v.sectionName === sec.name);
-                    const isVerseOrChorus = sec.type === "verse" || sec.type === "chorus";
-                    return (
-                      <div key={`${sec.name}-${secIdx}`} className="flex items-center gap-2 p-2 rounded-md border border-border/40 bg-black/30">
-                        <span className="text-[11px] font-medium min-w-0 flex-1 truncate">{sec.name}</span>
-                        <Select
-                          value={assign?.voice ?? "auto"}
-                          onValueChange={(v) => {
-                            setSectionVoices(prev => {
-                              const others = prev.filter(p => p.sectionName !== sec.name);
-                              if (v === "auto") return others;
-                              return [...others, { sectionName: sec.name, voice: v, bars: assign?.bars }];
-                            });
-                          }}
-                        >
-                          <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[150px] sm:w-[170px]"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="auto">— Auto —</SelectItem>
-                            <SelectItem value="main">Main Artist</SelectItem>
-                            {featureArtist && <SelectItem value="feature">Feature Artist</SelectItem>}
-                            <SelectItem value="both">Both (Unísono)</SelectItem>
-                            <SelectItem value="hype">Hype Man</SelectItem>
-                            <SelectSeparator className="bg-border/40" />
-                            {ARTISTS_DATA.map(group => (
-                              <SelectGroup key={group.label}>
-                                <SelectLabel className="text-slime/80 px-2 py-1 text-[10px] font-semibold">{group.label}</SelectLabel>
-                                {group.artists.map(a => (
-                                  <SelectItem key={a.id} value={a.id}>
-                                    <span className="flex items-center gap-1.5"><span>👤</span>{a.name}<span className="text-muted-foreground text-[10px]">· {a.origin}</span></span>
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {isVerseOrChorus && (
-                          <Select
-                            value={assign?.bars ? String(assign.bars) : "0"}
-                            onValueChange={(v) => {
-                              const bars = parseInt(v);
-                              setSectionVoices(prev => {
-                                const others = prev.filter(p => p.sectionName !== sec.name);
-                                const currentVoice = assign?.voice ?? "auto";
-                                if (currentVoice === "auto" && bars === 0) return others;
-                                return [...others, { sectionName: sec.name, voice: currentVoice, bars: bars || undefined }];
-                              });
-                            }}
-                          >
-                            <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[60px]"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="0">Auto</SelectItem>
-                              <SelectItem value="4">4</SelectItem>
-                              <SelectItem value="8">8</SelectItem>
-                              <SelectItem value="12">12</SelectItem>
-                              <SelectItem value="16">16</SelectItem>
-                              <SelectItem value="24">24</SelectItem>
-                              <SelectItem value="32">32</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
-                        {isVerseOrChorus && (
-                          <Select
-                            value={assign?.density ?? "auto"}
-                            onValueChange={(v) => {
-                              const density = v === "auto" ? undefined : v as "sparse" | "normal" | "dense" | "extra_dense";
-                              setSectionVoices(prev => {
-                                const others = prev.filter(p => p.sectionName !== sec.name);
-                                const currentVoice = assign?.voice ?? "auto";
-                                const currentBars = assign?.bars;
-                                if (currentVoice === "auto" && !currentBars && !density) return others;
-                                return [...others, { sectionName: sec.name, voice: currentVoice, bars: currentBars, density }];
-                              });
-                            }}
-                          >
-                            <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[70px]"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="auto">Auto</SelectItem>
-                              <SelectItem value="sparse">Sparse</SelectItem>
-                              <SelectItem value="normal">Normal</SelectItem>
-                              <SelectItem value="dense">Dense</SelectItem>
-                              <SelectItem value="extra_dense">X-Dense</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Tema personalizado (idea a la carta)</Label>
+                    <Textarea
+                      value={customTopic}
+                      onChange={(e) => setCustomTopic(e.target.value)}
+                      placeholder="Ej: una noche robando coches en Madrid con mi hermano pequeño..."
+                      className="bg-black/40 resize-none"
+                      rows={2}
+                    />
+                  </div>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* --- Spanglish Ratio (THE FIX) --- */}
+            <Collapsible open={spanglishOpen} onOpenChange={setSpanglishOpen}>
+              <Card className="glass-card p-5 space-y-4 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-slime/5 rounded-full blur-3xl" />
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-2 w-full text-left relative z-10 group cursor-pointer">
+                    <Languages className="w-5 h-5 text-slime shrink-0" />
+                    <h2 className="font-display text-lg font-semibold group-hover:text-slime transition-colors">Spanglish Ratio</h2>
+                    <Badge variant="outline" className="ml-auto border-slime/40 text-slime gap-1 text-[10px]">
+                      {100 - spanglishPercent}% ES / {spanglishPercent}% EN
+                    </Badge>
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${spanglishOpen ? "rotate-180" : ""}`} />
+                  </button>
+                </CollapsibleTrigger>
+
+                <CollapsibleContent className="space-y-4 pt-2 relative z-10 animate-fade-slide">
+                  {/* The actual ratio bar */}
+                  <div className="ratio-bar relative">
+                    <div className="es-segment" style={{ width: `${100 - spanglishPercent}%` }} />
+                    <div className="en-segment" style={{ width: `${spanglishPercent}%` }} />
+                  </div>
+                  <div className="flex justify-between text-xs font-medium">
+                    <span className="text-cyber">🇪🇸 Español {100 - spanglishPercent}%</span>
+                    <span className="text-slime">English {spanglishPercent}% 🇺🇸</span>
+                  </div>
+
+                  {/* Custom slider */}
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={spanglishPercent}
+                    onChange={(e) => setSpanglishPercent(Number(e.target.value))}
+                    className="spanglish-slider"
+                    style={sliderStyle}
+                    aria-label="Spanglish ratio"
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>100% ES</span><span>50/50</span><span>100% EN</span>
+                  </div>
+
+                  {/* Live label (FIXED: unified with prompt logic) */}
+                  <div className="rounded-lg border border-slime/20 bg-black/30 p-3">
+                    <p className="text-[13px] font-medium text-slime">{spanglishInfo.label}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                      {spanglishInfo.prompt.replace(/\*\*[^*]*\*\*\.?/g, "").trim()}
+                    </p>
+                  </div>
+
+                  {/* Auto-correct toggle */}
+                  <div className="flex items-center justify-between gap-3 pt-1">
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-slime" />
+                      <div>
+                        <Label className="text-[13px] cursor-pointer">Verificación post-generación</Label>
+                        <p className="text-[11px] text-muted-foreground">Analiza el ratio real y ofrece regenerar si se desvía &gt;20%</p>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </Card>
+                    </div>
+                    <Switch checked={autoCorrect} onCheckedChange={setAutoCorrect} />
+                  </div>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* --- BPM & Structure --- */}
+            <Collapsible open={bpmOpen} onOpenChange={setBpmOpen}>
+              <Card className="glass-card p-5 space-y-4">
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-2 w-full text-left group cursor-pointer">
+                    <Gauge className="w-5 h-5 text-slime shrink-0" />
+                    <h2 className="font-display text-lg font-semibold group-hover:text-slime transition-colors">BPM & Estructura</h2>
+                    <Badge variant="outline" className="ml-auto text-[10px] border-slime/40 text-slime truncate max-w-[170px]">
+                      {bpmVibe.range} BPM · {structure.label.split(" ")[0]}
+                    </Badge>
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${bpmOpen ? "rotate-180" : ""}`} />
+                  </button>
+                </CollapsibleTrigger>
+
+                <CollapsibleContent className="space-y-4 pt-2 animate-fade-slide">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Vibe / BPM</Label>
+                    <Select value={bpmVibeId} onValueChange={setBpmVibeId}>
+                      <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {BPM_VIBES.map(b => (
+                          <SelectItem key={b.id} value={b.id}>
+                            <span className="flex items-center gap-2">
+                              <span className="bpm-pulse" style={{ "--bpm-dur": `${60 / parseInt(b.range.split("-")[1] ?? "130")}s` } as React.CSSProperties} />
+                              {b.label} <span className="text-muted-foreground text-xs">({b.range})</span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[12px] text-muted-foreground">{bpmVibe.description} · Densidad: {bpmVibe.density}</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Estructura</Label>
+                    <Select value={structureId} onValueChange={setStructureId}>
+                      <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {STRUCTURES.map(s => (
+                          <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {structure.sections.map((s, i) => (
+                        <Badge key={i} variant="outline" className="text-[10px] py-0.5 px-2 border-border/50">
+                          {s.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Beat Type selector */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <Waves className="w-3.5 h-3.5" /> Beat Type (subgénero · Suno/Udio)
+                    </Label>
+                    <Select value={beatTypeId || "none"} onValueChange={(v) => setBeatTypeId(v === "none" ? "" : v)}>
+                      <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— Auto (sin tipo específico) —</SelectItem>
+                        {BEAT_TYPES.map(b => (
+                          <SelectItem key={b.id} value={b.id}>{b.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {beatType && (
+                      <div className="rounded-md border border-slime/20 bg-slime/5 p-2.5">
+                        <p className="text-[11px] text-muted-foreground">{beatType.description}</p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {beatType.sunoTags.map((tag, i) => (
+                            <Badge key={i} variant="outline" className="text-[9px] border-slime/30 text-slime">{tag}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Section Voice Assignment */}
+                  <div className="space-y-2 rounded-lg border border-border/40 bg-black/20 p-3">
+                    <div className="flex items-center gap-1.5">
+                      <Mic className="w-3.5 h-3.5 text-slime" />
+                      <Label className="text-xs text-muted-foreground">Asignación de voces por sección</Label>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/70 -mt-1">Asigna quién rapea cada sección y cuántas barras</p>
+                    <div className="space-y-1.5 max-h-72 overflow-y-auto custom-scroll pr-1">
+                      {structure.sections.map((sec, secIdx) => {
+                        const assign = sectionVoices.find(v => v.sectionName === sec.name);
+                        const isVerseOrChorus = sec.type === "verse" || sec.type === "chorus";
+                        return (
+                          <div key={`${sec.name}-${secIdx}`} className="flex items-center gap-2 p-2 rounded-md border border-border/40 bg-black/30">
+                            <span className="text-[11px] font-medium min-w-0 flex-1 truncate">{sec.name}</span>
+                            <Select
+                              value={assign?.voice ?? "auto"}
+                              onValueChange={(v) => {
+                                setSectionVoices(prev => {
+                                  const others = prev.filter(p => p.sectionName !== sec.name);
+                                  if (v === "auto") return others;
+                                  return [...others, { sectionName: sec.name, voice: v, bars: assign?.bars }];
+                                });
+                              }}
+                            >
+                              <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[150px] sm:w-[170px]"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="auto">— Auto —</SelectItem>
+                                <SelectItem value="main">Main Artist</SelectItem>
+                                {featureArtist && <SelectItem value="feature">Feature Artist</SelectItem>}
+                                <SelectItem value="both">Both (Unísono)</SelectItem>
+                                <SelectItem value="hype">Hype Man</SelectItem>
+                                <SelectSeparator className="bg-border/40" />
+                                {ARTISTS_DATA.map(group => (
+                                  <SelectGroup key={group.label}>
+                                    <SelectLabel className="text-slime/80 px-2 py-1 text-[10px] font-semibold">{group.label}</SelectLabel>
+                                    {group.artists.map(a => (
+                                      <SelectItem key={a.id} value={a.id}>
+                                        <span className="flex items-center gap-1.5"><span>👤</span>{a.name}<span className="text-muted-foreground text-[10px]">· {a.origin}</span></span>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {isVerseOrChorus && (
+                              <Select
+                                value={assign?.bars ? String(assign.bars) : "0"}
+                                onValueChange={(v) => {
+                                  const bars = parseInt(v);
+                                  setSectionVoices(prev => {
+                                    const others = prev.filter(p => p.sectionName !== sec.name);
+                                    const currentVoice = assign?.voice ?? "auto";
+                                    if (currentVoice === "auto" && bars === 0) return others;
+                                    return [...others, { sectionName: sec.name, voice: currentVoice, bars: bars || undefined }];
+                                  });
+                                }}
+                              >
+                                <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[60px]"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="0">Auto</SelectItem>
+                                  <SelectItem value="4">4</SelectItem>
+                                  <SelectItem value="8">8</SelectItem>
+                                  <SelectItem value="12">12</SelectItem>
+                                  <SelectItem value="16">16</SelectItem>
+                                  <SelectItem value="24">24</SelectItem>
+                                  <SelectItem value="32">32</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
+                            {isVerseOrChorus && (
+                              <Select
+                                value={assign?.density ?? "auto"}
+                                onValueChange={(v) => {
+                                  const density = v === "auto" ? undefined : v as "sparse" | "normal" | "dense" | "extra_dense";
+                                  setSectionVoices(prev => {
+                                    const others = prev.filter(p => p.sectionName !== sec.name);
+                                    const currentVoice = assign?.voice ?? "auto";
+                                    const currentBars = assign?.bars;
+                                    if (currentVoice === "auto" && !currentBars && !density) return others;
+                                    return [...others, { sectionName: sec.name, voice: currentVoice, bars: currentBars, density }];
+                                  });
+                                }}
+                              >
+                                <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[70px]"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="auto">Auto</SelectItem>
+                                  <SelectItem value="sparse">Sparse</SelectItem>
+                                  <SelectItem value="normal">Normal</SelectItem>
+                                  <SelectItem value="dense">Dense</SelectItem>
+                                  <SelectItem value="extra_dense">X-Dense</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
 
             {/* --- Advanced --- */}
             <Collapsible open={advOpen} onOpenChange={setAdvOpen}>
@@ -2163,30 +2250,43 @@ export default function TrapGhostPage() {
 
             {/* --- Presets --- */}
             {presets.length > 0 && (
-              <Card className="glass-card p-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Save className="w-5 h-5 text-slime" />
-                  <h2 className="font-display text-lg font-semibold">Mis Presets</h2>
-                  <Button variant="ghost" size="sm" className="ml-auto text-muted-foreground hover:text-cyber" onClick={clearPresets}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-                <div className="space-y-2 max-h-48 overflow-y-auto custom-scroll">
-                  {presets.map((p, i) => (
-                    <button
-                      key={i}
-                      onClick={() => loadPreset(p)}
-                      className="w-full text-left rounded-lg border border-border/40 bg-black/20 hover:border-slime/40 hover:bg-slime/5 p-3 transition-colors"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[13px] font-medium truncate">{p.label}</span>
-                        <span className="text-[10px] text-muted-foreground shrink-0">{p.date}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </Card>
+              <Collapsible open={presetsOpen} onOpenChange={setPresetsOpen}>
+                <Card className="glass-card p-5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <CollapsibleTrigger asChild>
+                      <button className="flex items-center gap-2 flex-1 text-left group cursor-pointer">
+                        <Save className="w-5 h-5 text-slime shrink-0" />
+                        <h2 className="font-display text-lg font-semibold group-hover:text-slime transition-colors">Mis Presets</h2>
+                        <Badge variant="outline" className="ml-auto text-[10px] border-slime/40 text-slime">
+                          {presets.length} guardados
+                        </Badge>
+                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${presetsOpen ? "rotate-180" : ""}`} />
+                      </button>
+                    </CollapsibleTrigger>
+                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-cyber h-7 w-7 p-0 shrink-0" onClick={clearPresets} title="Limpiar todos los presets">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                  <CollapsibleContent className="pt-2 animate-fade-slide">
+                    <div className="space-y-2 max-h-48 overflow-y-auto custom-scroll">
+                      {presets.map((p, i) => (
+                        <button
+                          key={i}
+                          onClick={() => loadPreset(p)}
+                          className="w-full text-left rounded-lg border border-border/40 bg-black/20 hover:border-slime/40 hover:bg-slime/5 p-3 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[13px] font-medium truncate">{p.label}</span>
+                            <span className="text-[10px] text-muted-foreground shrink-0">{p.date}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
             )}
+
           </div>
 
           {/* ===== RIGHT: Output ===== */}
