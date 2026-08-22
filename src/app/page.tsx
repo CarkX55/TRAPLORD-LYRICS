@@ -29,8 +29,9 @@ import {
   ARTISTS_DATA, MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, PRODUCERS, RHYME_SCHEMES,
   BEAT_TYPES, FEATURE_SIMS, PRODUCER_TAG_ARCHETYPES, getProducerTagArchetypeById,
   INSTANT_MOOD_PRESETS, getInstantMoodPresetById,
+  DIRTY_LEVELS, getDirtyLevel, REPETITION_PATTERNS, getRepetitionPatternById,
   getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, generateBeatPrompt,
-  type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset
+  type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset, type DirtyLevel, type RepetitionPattern
 } from "@/lib/trap-data";
 import { buildSpanglishInstruction, buildSunoStylePrompt, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
 import { getFlowProfile, getCadenceLabel, type FlowProfile } from "@/lib/artist-flow-profiles";
@@ -227,6 +228,7 @@ export default function TrapGhostPage() {
   const [producerTagOpen, setProducerTagOpen] = useState<boolean>(false);
   const [selectedProducerArchetype, setSelectedProducerArchetype] = useState<string>("smart");
   const [activeInstantMood, setActiveInstantMood] = useState<string | null>(null);
+  const [dirtyLevel, setDirtyLevel] = useState<number>(2); // 1: Clean, 2: Street, 3: Dirty, 4: Filthy
   // Agent Polish (multi-agente IA)
   const [polishResult, setPolishResult] = useState<{
     originalScore: number;
@@ -400,6 +402,10 @@ export default function TrapGhostPage() {
     const shuffled = [...preset.topicsPool].sort(() => 0.5 - Math.random());
     setSelectedTopics(shuffled.slice(0, 3));
 
+    if (preset.defaultDirtyLevel !== undefined) {
+      setDirtyLevel(preset.defaultDirtyLevel);
+    }
+
     const artistObj = getArtistById(randomArtistId);
     toast.success(`⚡ Mood aplicado: ${preset.icon} ${preset.label} · ${artistObj?.name ?? "Trap"}`);
   }, []);
@@ -418,6 +424,7 @@ export default function TrapGhostPage() {
       artistId,
       featureArtistId: featureArtistId === "none" ? "" : featureArtistId,
       moodId,
+      dirtyLevel,
       topics: selectedTopics,
       customTopic,
       spanglishPercent,
@@ -934,6 +941,7 @@ export default function TrapGhostPage() {
     } else {
       setSpanglishPercent(Math.floor(Math.random() * 101));
     }
+    setDirtyLevel(Math.floor(Math.random() * 4) + 1);
     setTemperature(0.7 + Math.random() * 0.6);
     toast.success(`🎲 Configuración aleatoria: ${randomArtist.name} · ${randomMood.label}`);
   }, []);
@@ -954,6 +962,7 @@ export default function TrapGhostPage() {
           artistId,
           featureArtistId: featureArtistId === "none" ? "" : featureArtistId,
           moodId,
+          dirtyLevel,
           topics: selectedTopics,
           customTopic,
           spanglishPercent,
@@ -964,6 +973,7 @@ export default function TrapGhostPage() {
           producerTag,
           customDictionary,
           dynamicMarkers,
+          sectionVoices: sectionVoices.length > 0 ? sectionVoices : undefined,
           chorusLanguageOverride: chorusLangOverride,
           versesLanguageOverride: versesLangOverride,
           barCountOverride: barCountOverride > 0 ? barCountOverride : undefined,
@@ -1785,6 +1795,58 @@ export default function TrapGhostPage() {
                       rows={2}
                     />
                   </div>
+
+                  {/* Nivel de Actitud / Dirty Level */}
+                  <div className="space-y-2.5 pt-3 border-t border-border/40">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <span>🔞</span> Nivel de Actitud / Dirty Level
+                      </Label>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] gap-1 font-semibold transition-colors"
+                        style={{
+                          borderColor: `${getDirtyLevel(dirtyLevel).color}80`,
+                          color: getDirtyLevel(dirtyLevel).color,
+                          backgroundColor: `${getDirtyLevel(dirtyLevel).color}15`,
+                        }}
+                      >
+                        {getDirtyLevel(dirtyLevel).label}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      {DIRTY_LEVELS.map(dl => {
+                        const active = dirtyLevel === dl.level;
+                        return (
+                          <button
+                            key={dl.id}
+                            type="button"
+                            onClick={() => setDirtyLevel(dl.level)}
+                            className={`py-2 px-2 rounded-lg border text-center transition-all cursor-pointer ${
+                              active
+                                ? "shadow-md scale-[1.02] ring-1"
+                                : "border-border/40 bg-black/20 text-muted-foreground hover:border-border hover:text-foreground"
+                            }`}
+                            style={active ? {
+                              borderColor: dl.color,
+                              backgroundColor: `${dl.color}15`,
+                              color: dl.color,
+                              ringColor: `${dl.color}40`,
+                              boxShadow: `0 0 10px ${dl.color}25`
+                            } : undefined}
+                            title={dl.description}
+                          >
+                            <div className="text-base mb-0.5">{dl.icon}</div>
+                            <div className="text-[10px] font-bold truncate leading-tight">{dl.name}</div>
+                            <div className="text-[9px] opacity-75 truncate">{dl.badge}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      {getDirtyLevel(dirtyLevel).description}
+                    </p>
+                  </div>
                 </CollapsibleContent>
               </Card>
             </Collapsible>
@@ -1939,87 +2001,138 @@ export default function TrapGhostPage() {
                       {structure.sections.map((sec, secIdx) => {
                         const assign = sectionVoices.find(v => v.sectionName === sec.name);
                         const isVerseOrChorus = sec.type === "verse" || sec.type === "chorus";
+                        const repPatternId = assign?.repetitionPattern ?? "none";
+                        const repPattern = getRepetitionPatternById(repPatternId);
+                        const showCustomKeywordInput = repPatternId === "mantra" || repPatternId === "staccato";
+
                         return (
-                          <div key={`${sec.name}-${secIdx}`} className="flex items-center gap-2 p-2 rounded-md border border-border/40 bg-black/30">
-                            <span className="text-[11px] font-medium min-w-0 flex-1 truncate">{sec.name}</span>
-                            <Select
-                              value={assign?.voice ?? "auto"}
-                              onValueChange={(v) => {
-                                setSectionVoices(prev => {
-                                  const others = prev.filter(p => p.sectionName !== sec.name);
-                                  if (v === "auto") return others;
-                                  return [...others, { sectionName: sec.name, voice: v, bars: assign?.bars }];
-                                });
-                              }}
-                            >
-                              <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[150px] sm:w-[170px]"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="auto">— Auto —</SelectItem>
-                                <SelectItem value="main">Main Artist</SelectItem>
-                                {featureArtist && <SelectItem value="feature">Feature Artist</SelectItem>}
-                                <SelectItem value="both">Both (Unísono)</SelectItem>
-                                <SelectItem value="hype">Hype Man</SelectItem>
-                                <SelectSeparator className="bg-border/40" />
-                                {ARTISTS_DATA.map(group => (
-                                  <SelectGroup key={group.label}>
-                                    <SelectLabel className="text-slime/80 px-2 py-1 text-[10px] font-semibold">{group.label}</SelectLabel>
-                                    {group.artists.map(a => (
-                                      <SelectItem key={a.id} value={a.id}>
-                                        <span className="flex items-center gap-1.5"><span>👤</span>{a.name}<span className="text-muted-foreground text-[10px]">· {a.origin}</span></span>
-                                      </SelectItem>
-                                    ))}
-                                  </SelectGroup>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {isVerseOrChorus && (
+                          <div key={`${sec.name}-${secIdx}`} className="p-2 rounded-md border border-border/40 bg-black/30 space-y-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[11px] font-medium min-w-[65px] flex-1 truncate text-slime">{sec.name}</span>
                               <Select
-                                value={assign?.bars ? String(assign.bars) : "0"}
+                                value={assign?.voice ?? "auto"}
                                 onValueChange={(v) => {
-                                  const bars = parseInt(v);
                                   setSectionVoices(prev => {
                                     const others = prev.filter(p => p.sectionName !== sec.name);
-                                    const currentVoice = assign?.voice ?? "auto";
-                                    if (currentVoice === "auto" && bars === 0) return others;
-                                    return [...others, { sectionName: sec.name, voice: currentVoice, bars: bars || undefined }];
+                                    if (v === "auto" && !assign?.bars && !assign?.density && (!assign?.repetitionPattern || assign.repetitionPattern === "none")) return others;
+                                    return [...others, { ...assign, sectionName: sec.name, voice: v }];
                                   });
                                 }}
                               >
-                                <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[60px]"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[125px] sm:w-[140px]"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="0">Auto</SelectItem>
-                                  <SelectItem value="4">4</SelectItem>
-                                  <SelectItem value="8">8</SelectItem>
-                                  <SelectItem value="12">12</SelectItem>
-                                  <SelectItem value="16">16</SelectItem>
-                                  <SelectItem value="24">24</SelectItem>
-                                  <SelectItem value="32">32</SelectItem>
+                                  <SelectItem value="auto">— Voz: Auto —</SelectItem>
+                                  <SelectItem value="main">Main Artist</SelectItem>
+                                  {featureArtist && <SelectItem value="feature">Feature Artist</SelectItem>}
+                                  <SelectItem value="both">Both (Unísono)</SelectItem>
+                                  <SelectItem value="hype">Hype Man</SelectItem>
+                                  <SelectSeparator className="bg-border/40" />
+                                  {ARTISTS_DATA.map(group => (
+                                    <SelectGroup key={group.label}>
+                                      <SelectLabel className="text-slime/80 px-2 py-1 text-[10px] font-semibold">{group.label}</SelectLabel>
+                                      {group.artists.map(a => (
+                                        <SelectItem key={a.id} value={a.id}>
+                                          <span className="flex items-center gap-1.5"><span>👤</span>{a.name}<span className="text-muted-foreground text-[10px]">· {a.origin}</span></span>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectGroup>
+                                  ))}
                                 </SelectContent>
                               </Select>
-                            )}
-                            {isVerseOrChorus && (
+                              {isVerseOrChorus && (
+                                <Select
+                                  value={assign?.bars ? String(assign.bars) : "0"}
+                                  onValueChange={(v) => {
+                                    const bars = parseInt(v);
+                                    setSectionVoices(prev => {
+                                      const others = prev.filter(p => p.sectionName !== sec.name);
+                                      const currentVoice = assign?.voice ?? "auto";
+                                      return [...others, { ...assign, sectionName: sec.name, voice: currentVoice, bars: bars || undefined }];
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[50px]"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="0">Auto</SelectItem>
+                                    <SelectItem value="4">4b</SelectItem>
+                                    <SelectItem value="8">8b</SelectItem>
+                                    <SelectItem value="12">12b</SelectItem>
+                                    <SelectItem value="16">16b</SelectItem>
+                                    <SelectItem value="24">24b</SelectItem>
+                                    <SelectItem value="32">32b</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              {isVerseOrChorus && (
+                                <Select
+                                  value={assign?.density ?? "auto"}
+                                  onValueChange={(v) => {
+                                    const density = v === "auto" ? undefined : v as "sparse" | "normal" | "dense" | "extra_dense";
+                                    setSectionVoices(prev => {
+                                      const others = prev.filter(p => p.sectionName !== sec.name);
+                                      const currentVoice = assign?.voice ?? "auto";
+                                      return [...others, { ...assign, sectionName: sec.name, voice: currentVoice, density }];
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[60px]"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="auto">Auto</SelectItem>
+                                    <SelectItem value="sparse">Sparse</SelectItem>
+                                    <SelectItem value="normal">Normal</SelectItem>
+                                    <SelectItem value="dense">Dense</SelectItem>
+                                    <SelectItem value="extra_dense">X-Dense</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
+
+                              {/* Repetition Pattern Selector */}
                               <Select
-                                value={assign?.density ?? "auto"}
+                                value={repPatternId}
                                 onValueChange={(v) => {
-                                  const density = v === "auto" ? undefined : v as "sparse" | "normal" | "dense" | "extra_dense";
                                   setSectionVoices(prev => {
                                     const others = prev.filter(p => p.sectionName !== sec.name);
                                     const currentVoice = assign?.voice ?? "auto";
-                                    const currentBars = assign?.bars;
-                                    if (currentVoice === "auto" && !currentBars && !density) return others;
-                                    return [...others, { sectionName: sec.name, voice: currentVoice, bars: currentBars, density }];
+                                    return [...others, { ...assign, sectionName: sec.name, voice: currentVoice, repetitionPattern: v === "none" ? undefined : v }];
                                   });
                                 }}
                               >
-                                <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[70px]"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className={`bg-black/40 h-7 text-[10px] w-[130px] sm:w-[145px] ${repPatternId !== "none" ? "border-cyber/60 text-cyber font-medium" : "text-muted-foreground"}`}>
+                                  <SelectValue placeholder="Patrón Flow" />
+                                </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="auto">Auto</SelectItem>
-                                  <SelectItem value="sparse">Sparse</SelectItem>
-                                  <SelectItem value="normal">Normal</SelectItem>
-                                  <SelectItem value="dense">Dense</SelectItem>
-                                  <SelectItem value="extra_dense">X-Dense</SelectItem>
+                                  {REPETITION_PATTERNS.map(p => (
+                                    <SelectItem key={p.id} value={p.id}>
+                                      <span className="flex items-center gap-1.5">
+                                        <span>{p.icon}</span> {p.label}
+                                      </span>
+                                    </SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
+                            </div>
+
+                            {/* Optional Keyword & Description for active repetition pattern */}
+                            {repPattern && repPattern.id !== "none" && (
+                              <div className="flex items-center gap-2 pl-2.5 pr-2 py-1 rounded border border-cyber/30 bg-cyber/5 text-[10px]">
+                                <span className="text-cyber shrink-0 font-medium">{repPattern.icon} {repPattern.label}:</span>
+                                <span className="text-muted-foreground flex-1 truncate">{repPattern.description}</span>
+                                {showCustomKeywordInput && (
+                                  <Input
+                                    value={assign?.customKeyword ?? ""}
+                                    onChange={(e) => {
+                                      const kw = e.target.value;
+                                      setSectionVoices(prev => {
+                                        const others = prev.filter(p => p.sectionName !== sec.name);
+                                        const currentVoice = assign?.voice ?? "auto";
+                                        return [...others, { ...assign, sectionName: sec.name, voice: currentVoice, customKeyword: kw || undefined }];
+                                      });
+                                    }}
+                                    placeholder="Palabra/Frase a repetir..."
+                                    className="h-6 text-[10px] bg-black/60 border-cyber/40 w-36 sm:w-44 font-mono px-2"
+                                  />
+                                )}
+                              </div>
                             )}
                           </div>
                         );
@@ -3646,7 +3759,7 @@ export default function TrapGhostPage() {
                 />
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => {
-                    const generated = buildSunoStylePrompt({ beatType, bpmVibe, moodId, artistId, producerId, structureLabel: structure.label });
+                    const generated = buildSunoStylePrompt({ beatType, bpmVibe, moodId, artistId, producerId, structureLabel: structure.label, dirtyLevel });
                     setSunoStylePrompt(generated);
                     toast.success("Suno style prompt auto-generado");
                   }} className="border-cyber/30 hover:bg-cyber/10 hover:text-cyber h-8">

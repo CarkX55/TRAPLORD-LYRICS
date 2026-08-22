@@ -608,6 +608,7 @@ export interface InstantMoodPreset {
   structureId: string;
   topicsPool: string[];
   spanglishPercent: number;
+  defaultDirtyLevel?: number;
 }
 
 export const INSTANT_MOOD_PRESETS: InstantMoodPreset[] = [
@@ -627,6 +628,7 @@ export const INSTANT_MOOD_PRESETS: InstantMoodPreset[] = [
     structureId: "std_basic",
     topicsPool: ["t_dinero", "t_enemigos", "t_calle", "t_lealtad"],
     spanglishPercent: 40,
+    defaultDirtyLevel: 3,
   },
   {
     id: "flex_luxury",
@@ -644,6 +646,7 @@ export const INSTANT_MOOD_PRESETS: InstantMoodPreset[] = [
     structureId: "std_basic",
     topicsPool: ["t_dinero", "t_joyas", "t_fama", "t_coches", "t_exceso"],
     spanglishPercent: 50,
+    defaultDirtyLevel: 2,
   },
   {
     id: "sad_lean",
@@ -661,6 +664,7 @@ export const INSTANT_MOOD_PRESETS: InstantMoodPreset[] = [
     structureId: "std_pain_ballad",
     topicsPool: ["t_amor", "t_lean", "t_drogas", "t_traicion"],
     spanglishPercent: 25,
+    defaultDirtyLevel: 2,
   },
   {
     id: "rage_moshpit",
@@ -678,6 +682,7 @@ export const INSTANT_MOOD_PRESETS: InstantMoodPreset[] = [
     structureId: "std_rage",
     topicsPool: ["t_fiesta", "t_enemigos", "t_drogas", "t_noche"],
     spanglishPercent: 70,
+    defaultDirtyLevel: 4,
   },
   {
     id: "drill_gliding",
@@ -695,6 +700,7 @@ export const INSTANT_MOOD_PRESETS: InstantMoodPreset[] = [
     structureId: "std_short",
     topicsPool: ["t_calle", "t_enemigos", "t_lealtad", "t_territory"],
     spanglishPercent: 45,
+    defaultDirtyLevel: 3,
   },
   {
     id: "latin_sauce",
@@ -712,6 +718,7 @@ export const INSTANT_MOOD_PRESETS: InstantMoodPreset[] = [
     structureId: "std_feature",
     topicsPool: ["t_dinero", "t_mujeres", "t_calle", "t_joyas"],
     spanglishPercent: 45,
+    defaultDirtyLevel: 2,
   },
   {
     id: "plugg_cloud",
@@ -729,6 +736,7 @@ export const INSTANT_MOOD_PRESETS: InstantMoodPreset[] = [
     structureId: "std_basic",
     topicsPool: ["t_noche", "t_lujo", "t_drogas", "t_mujeres"],
     spanglishPercent: 65,
+    defaultDirtyLevel: 2,
   },
   {
     id: "random_banger",
@@ -746,10 +754,141 @@ export const INSTANT_MOOD_PRESETS: InstantMoodPreset[] = [
     structureId: "std_basic",
     topicsPool: [],
     spanglishPercent: 50,
+    defaultDirtyLevel: 2,
   },
 ];
 
 export function getInstantMoodPresetById(id: string): InstantMoodPreset | undefined {
   return INSTANT_MOOD_PRESETS.find(p => p.id === id);
 }
+
+// ===== DIRTY LEVEL SYSTEM =====
+export interface DirtyLevel {
+  level: number;
+  id: string;
+  name: string;
+  label: string;
+  badge: string;
+  icon: string;
+  color: string;
+  description: string;
+  instruction: string;
+}
+
+export const DIRTY_LEVELS: DirtyLevel[] = [
+  {
+    level: 1,
+    id: "clean",
+    name: "Clean / Flex",
+    label: "💎 Clean / Flex Elegante",
+    badge: "Radio Friendly",
+    icon: "💎",
+    color: "#38bdf8",
+    description: "Sin groserías pesadas. Enfoque en dinero, marcas, ropa de diseño y éxito.",
+    instruction: "MODO CLEAN / RADIO FRIENDLY: Cero groserías pesadas ni obscenidades explícitas. Enfoque en ostentación de lujo, diseñador, éxito, trabajo duro, superación y flex elegante apto para radio y playlists comerciales."
+  },
+  {
+    level: 2,
+    id: "street",
+    name: "Street / Callejero",
+    label: "🩸 Street / Callejero Real",
+    badge: "Estándar Trap",
+    icon: "🩸",
+    color: "#00ff41",
+    description: "Jerga cruda de barrio, códigos de calle, supervivencia, lealtad y beef directo.",
+    instruction: "MODO STREET / CALLEJERO REAL: Jerga auténtica de barrio, códigos de lealtad de crew, supervivencia, enemigos, dinero de la calle y actitud desafiante sin censura pero orgánica."
+  },
+  {
+    level: 3,
+    id: "dirty",
+    name: "Dirty / Freak",
+    label: "🔞 Dirty / Freak & Explicit",
+    badge: "Explícito",
+    icon: "🔞",
+    color: "#ec4899",
+    description: "Temática cruda de noche de hotel, sexo explícito, strippers, sustancias y descaro.",
+    instruction: "MODO DIRTY / FREAK & EXPLICIT: Letras explícitas sin rodeos. Enfoque en club nocturno, strippers, noche de hotel, sexo descarado, hedonismo, sustancias, toxicidad y actitud sucia y carnal (estilo Young Beef, Future en modo toxic, La Zowi, Juicy J, 21 Savage)."
+  },
+  {
+    level: 4,
+    id: "filthy",
+    name: "Filthy / Caos",
+    label: "💀 Filthy / Caos & Sin Censura",
+    badge: "Máxima Crudeza",
+    icon: "💀",
+    color: "#ef4444",
+    description: "Máxima crudeza verbal, lenguaje explícito desatado y actitud sin frenos.",
+    instruction: "MODO FILTHY / CAOS TOTAL: Crudeza verbal extrema sin ningún tipo de filtro. Agresión pura, barras siniestras, imaginería explícita pesada, lenguaje visceral y actitud over-the-top estilo Memphis Evil Trap, Glo Gang y Southside."
+  }
+];
+
+export function getDirtyLevel(level: number): DirtyLevel {
+  return DIRTY_LEVELS.find(d => d.level === level) || DIRTY_LEVELS[1];
+}
+
+// ===== REPETITION PATTERNS PER SECTION =====
+export interface RepetitionPattern {
+  id: string;
+  label: string;
+  icon: string;
+  sunoTag: string;
+  description: string;
+  example: string;
+}
+
+export const REPETITION_PATTERNS: RepetitionPattern[] = [
+  {
+    id: "none",
+    label: "Auto / Flow Natural",
+    icon: "🎙️",
+    sunoTag: "",
+    description: "Flow estándar del perfil del artista sin patrón forzado.",
+    example: "Barras continuas tradicionales"
+  },
+  {
+    id: "mantra",
+    label: "Mantra Hipnótico (3x/4x)",
+    icon: "🔁",
+    sunoTag: "Hypnotic repetitive mantra, heavy 808s",
+    description: "Repite un concepto o palabra clave 3 o 4 veces por compás con cadencia pesada.",
+    example: "Pikete, pikete, pikete... (Yeah!) / Racks on racks on racks"
+  },
+  {
+    id: "staccato",
+    label: "Staccato Chants",
+    icon: "⚡",
+    sunoTag: "Staccato drill chants, rhythmic delivery",
+    description: "Palabras cortadas y percusivas que golpean con el hi-hat y el bajo.",
+    example: "Trap, trap, Glock, Glock, no te me coloques"
+  },
+  {
+    id: "call_response",
+    label: "Call & Response Sucio",
+    icon: "💬",
+    sunoTag: "Dirty call and response, layered ad-libs",
+    description: "Barra principal seguida de una réplica o remate explícito entre paréntesis (ad-lib).",
+    example: "Ella quiere la cadena (tócala) / dice que no frena (móntala)"
+  },
+  {
+    id: "stutter",
+    label: "Stutter / Tartamudeo",
+    icon: "🔂",
+    sunoTag: "Stutter vocal flow, fast chops",
+    description: "Repetición rítmica de la primera sílaba o palabra al inicio de las barras.",
+    example: "M-M-Markoff en el beat / to-toda la noche"
+  },
+  {
+    id: "echo",
+    label: "Echo / Fade Out",
+    icon: "🌊",
+    sunoTag: "Echo fade vocals, spatial reverb",
+    description: "Desvanecimiento de la última palabra con puntos suspensivos.",
+    example: "en la suite... en la suite... en la suite..."
+  }
+];
+
+export function getRepetitionPatternById(id: string): RepetitionPattern | undefined {
+  return REPETITION_PATTERNS.find(p => p.id === id);
+}
+
 

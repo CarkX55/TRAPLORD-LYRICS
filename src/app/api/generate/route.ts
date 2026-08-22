@@ -13,6 +13,7 @@ interface GenerateBody {
   artistId: string;
   featureArtistId?: string;
   moodId: string;
+  dirtyLevel?: number;
   topics: string[];
   customTopic: string;
   spanglishPercent: number;
@@ -43,7 +44,7 @@ interface GenerateBody {
   syllableSync?: boolean;
   phoneticAdlibs?: boolean;
   smartBarsMode?: boolean;
-  sectionVoices?: { sectionName: string; voice: string; bars?: number; density?: "sparse" | "normal" | "dense" | "extra_dense" }[];
+  sectionVoices?: { sectionName: string; voice: string; bars?: number; density?: "sparse" | "normal" | "dense" | "extra_dense"; repetitionPattern?: string; customKeyword?: string }[];
 }
 
 // Get a reference for an artist: curated DB first, then generate on-the-fly (sandbox uses z-ai SDK)
@@ -122,6 +123,8 @@ export async function POST(req: NextRequest) {
       featureArtistReference: featRef,
       referenceTrack: refTrack,
       dynamicSongForm: body.dynamicSongForm,
+      dirtyLevel: body.dirtyLevel,
+      sectionVoices: body.sectionVoices,
     });
 
     // Call the LLM via z-ai-web-dev-sdk (server-side only)

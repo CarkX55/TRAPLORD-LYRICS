@@ -1,6 +1,4 @@
-// Prompt Builder — Suno AI Native + Guided Thinking Protocol + Organic Code-Switching
-
-import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, type SongStructure, type BpmVibe, type BeatType } from "./trap-data";
+import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, getDirtyLevel, getRepetitionPatternById, type SongStructure, type BpmVibe, type BeatType } from "./trap-data";
 import { getFlowProfile, getBreathInstruction, getCadenceLabel, type FlowProfile } from "./artist-flow-profiles";
 import { getArtistReference, type ArtistReference } from "./artist-references";
 import type { TrackAnalysis } from "./track-analyzer";
@@ -35,12 +33,15 @@ export interface SectionVoiceAssignment {
   voice: string;
   bars?: number;
   density?: "sparse" | "normal" | "dense" | "extra_dense";
+  repetitionPattern?: string; // "none" | "mantra" | "staccato" | "call_response" | "stutter" | "echo"
+  customKeyword?: string; // optional custom word or phrase to repeat
 }
 
 export interface PromptParams {
   artistId: string;
   featureArtistId: string;
   moodId: string;
+  dirtyLevel?: number;
   topics: string[];
   customTopic: string;
   spanglishPercent: number;
@@ -198,7 +199,29 @@ export function buildSystemPrompt(params: PromptParams): string {
         }
       }
 
-      lines.push(`[${s.name}: ${voice}] — ${bars}${dynamicNote}`);
+      // Repetition Pattern Rule per section
+      let repTag = "";
+      let repInstruction = "";
+      if (voiceAssign?.repetitionPattern && voiceAssign.repetitionPattern !== "none") {
+        const repPattern = getRepetitionPatternById(voiceAssign.repetitionPattern);
+        if (repPattern) {
+          if (repPattern.sunoTag) repTag = `, ${repPattern.sunoTag}`;
+          const kw = voiceAssign.customKeyword?.trim();
+          if (repPattern.id === "mantra") {
+            repInstruction = ` → [REGLA MANTRA: Repite ${kw ? `la palabra/frase "${kw}"` : "un concepto o palabra clave"} 3 o 4 veces por compás con cadencia pesada e hipnótica e inserta comas y puntos suspensivos]`;
+          } else if (repPattern.id === "staccato") {
+            repInstruction = ` → [REGLA STACCATO: Emplea palabras cortadas percusivas ${kw ? `como "${kw}"` : ""} que golpeen al unísono con el 808 y el hi-hat]`;
+          } else if (repPattern.id === "call_response") {
+            repInstruction = ` → [REGLA CALL & RESPONSE: Cada barra principal debe tener una réplica o remate directo entre paréntesis como ad-lib]`;
+          } else if (repPattern.id === "stutter") {
+            repInstruction = ` → [REGLA STUTTER: Usa tartamudeo rítmico de la primera sílaba o palabra al inicio de las barras]`;
+          } else if (repPattern.id === "echo") {
+            repInstruction = ` → [REGLA ECHO: Desvanece el final de las barras con puntos suspensivos y ecos repetidos]`;
+          }
+        }
+      }
+
+      lines.push(`[${s.name}: ${voice}${repTag}] — ${bars}${dynamicNote}${repInstruction}`);
 
       if (useDynamicForm && songFormStyle === "beat_drop") {
         if (isIntro) {
@@ -299,6 +322,9 @@ export function buildSystemPrompt(params: PromptParams): string {
     adlibsBlock = `\n# 🗣️ AD-LIBS NATIVOS PARA SUNO\nEjemplos icónicos:\n${adlibsStyle.join("\n")}\nREGLAS DE AD-LIBS:\n1. Ad-libs SIEMPRE entre paréntesis: (Yeah!), (Brrr!), (Let's go!). Suno los ubicará automáticamente como pistas de fondo en estéreo.\n2. ESPACIO Y AIRE: Máximo 1 ad-lib cada 2 o 3 barras. Deja que la voz principal respire, no satures cada línea.\n3. CONTEXTO: El ad-lib debe responder al remate de la barra previa.`;
   }
 
+  const dirty = getDirtyLevel(params.dirtyLevel ?? 2);
+  const dirtyBlock = `\n# 🔞 NIVEL DE ACTITUD / DIRTY LEVEL: ${dirty.label.toUpperCase()} (${dirty.badge})\n${dirty.instruction}`;
+
   const prompt = `Eres un Ghostwriter de élite del Trap y Rap contemporáneo. Escribes letras auténticas, con groove callejero y perfectamente estructuradas para ser producidas y cantadas en SUNO AI.
 
 # 🧠 PROTOCOLO DE RAZONAMIENTO INTERNO (THINKING PROTOCOL)
@@ -314,6 +340,7 @@ ${spanglish.prompt}
 ${featureArtist ? `- **Feature**: ${featureArtist.name} (${featureArtist.origin}) — ${featureArtist.style}` : "- **Feature**: Ninguno."}
 - **BPM & Vibra**: ${params.bpmVibe.range} BPM (${params.bpmVibe.label}).
 - **Temática**: ${topicBlock}
+${dirtyBlock}
 ${narrativeBlock}
 ${dictionaryBlock}
 ${producerBlock}
@@ -354,6 +381,7 @@ export function buildSunoStylePrompt(params: {
   artistId: string;
   producerId: string;
   structureLabel: string;
+  dirtyLevel?: number;
 }): string {
   const tags: string[] = [];
 
@@ -383,6 +411,12 @@ export function buildSunoStylePrompt(params: {
   const flowProfile = getFlowProfile(params.artistId);
   if (flowProfile && flowProfile.vocalTags.length > 0) {
     tags.push(flowProfile.vocalTags.slice(0, 2).join(" "));
+  }
+
+  if (params.dirtyLevel === 3) {
+    tags.push("explicit delivery");
+  } else if (params.dirtyLevel === 4) {
+    tags.push("raw unfiltered vocals");
   }
 
   const unique = [...new Set(tags)];

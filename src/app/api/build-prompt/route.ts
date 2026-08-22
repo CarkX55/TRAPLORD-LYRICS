@@ -13,6 +13,7 @@ interface BuildPromptBody {
   artistId: string;
   featureArtistId?: string;
   moodId: string;
+  dirtyLevel?: number;
   topics: string[];
   customTopic: string;
   spanglishPercent: number;
@@ -32,7 +33,7 @@ interface BuildPromptBody {
   syllableSync?: boolean;
   phoneticAdlibs?: boolean;
   smartBarsMode?: boolean;
-  sectionVoices?: { sectionName: string; voice: string; bars?: number; density?: "sparse" | "normal" | "dense" | "extra_dense" }[];
+  sectionVoices?: { sectionName: string; voice: string; bars?: number; density?: "sparse" | "normal" | "dense" | "extra_dense"; repetitionPattern?: string; customKeyword?: string }[];
   chorusLanguageOverride?: "es" | "en" | "auto";
   versesLanguageOverride?: "es" | "en" | "auto";
   barCountOverride?: number;
@@ -148,6 +149,7 @@ export async function POST(req: NextRequest) {
       featureArtistReference: featRef,
       referenceTrack: refTrack,
       dynamicSongForm: body.dynamicSongForm,
+      dirtyLevel: body.dirtyLevel,
     });
 
     const spanglishInfo = buildSpanglishInstruction(body.spanglishPercent);
@@ -159,6 +161,7 @@ export async function POST(req: NextRequest) {
       artistId: body.artistId,
       producerId: body.producerId ?? "none",
       structureLabel: structure.label,
+      dirtyLevel: body.dirtyLevel,
     });
 
     return NextResponse.json({
