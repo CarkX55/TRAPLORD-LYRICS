@@ -1249,7 +1249,7 @@ export default function TrapGhostPage() {
   }, [polishResult, lyrics, artist, artistId, analysis, spanglishPercent]);
 
   // ===== Hook Variations Generator (Priority 1) =====
-  const handleGenerateHookVariations = useCallback(async () => {
+  const handleGenerateHookVariations = useCallback(async (targetArtist?: string) => {
     if (!artistId) {
       toast.error("Selecciona un artista primero");
       return;
@@ -1257,11 +1257,28 @@ export default function TrapGhostPage() {
     setHookVariationsLoading(true);
     setHookVariationsOpen(true);
     try {
+      let resolvedArtistId = artistId;
+      let resolvedArtistName = artist?.name ?? "Lead";
+
+      if (targetArtist && targetArtist.trim()) {
+        const cleanName = targetArtist.trim();
+        const found = ARTISTS_DATA.flatMap(g => g.artists).find(
+          a => a.name.toLowerCase() === cleanName.toLowerCase() || a.id === cleanName.toLowerCase()
+        );
+        if (found) {
+          resolvedArtistId = found.id;
+          resolvedArtistName = found.name;
+        } else {
+          resolvedArtistName = cleanName;
+        }
+      }
+
       const res = await fetch("/api/hook-variations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          artistId,
+          artistId: resolvedArtistId,
+          targetArtistName: resolvedArtistName,
           featureArtistId: featureArtistId === "none" ? undefined : featureArtistId,
           moodId,
           dirtyLevel,
@@ -1275,13 +1292,13 @@ export default function TrapGhostPage() {
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || "Error generando variantes de hook");
       setHookVariations(data.variations || []);
-      toast.success("3 variantes de hook generadas");
+      toast.success(`3 variantes de hook generadas para ${resolvedArtistName}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error generando variantes");
     } finally {
       setHookVariationsLoading(false);
     }
-  }, [artistId, featureArtistId, moodId, dirtyLevel, spanglishPercent, bpmVibe, lyrics, customTopic, geminiApiKey, geminiModel]);
+  }, [artistId, featureArtistId, moodId, dirtyLevel, spanglishPercent, bpmVibe, lyrics, customTopic, geminiApiKey, geminiModel, artist]);
 
   const handleApplyHookVariation = useCallback((variation: HookVariationOption) => {
     if (!lyrics) {
@@ -1308,10 +1325,10 @@ export default function TrapGhostPage() {
     };
     setHistory(prev => [entry, ...prev.slice(0, 19)]);
 
-    // Replace chorus/hook sections in lyrics
+    // Replace STRICTLY Chorus/Hook sections (never touching Pre-Chorus, Post-Chorus, Bridge, etc.)
     const newChorusText = variation.hookText.trim();
     let updatedLyrics = lyrics;
-    const chorusRegex = /(?:###?\s*)?\[(?:Chorus|Hook|Estribillo)[^\]]*\][^]*?(?=(?:###?\s*\[|$))/gi;
+    const chorusRegex = /(?:###?\s*)?\[\s*(?!(?:Pre|Post)[-\s])(?:Chorus|Hook|Estribillo|Coro)[^\]]*\][^]*?(?=(?:###?\s*\[|$))/gi;
     if (chorusRegex.test(lyrics)) {
       updatedLyrics = lyrics.replace(chorusRegex, `${newChorusText}\n\n`);
     } else {
@@ -2933,17 +2950,18 @@ export default function TrapGhostPage() {
                         const locked = isSectionLocked(secName);
                         const sectionContent = sec.lines.filter(l => l.trim()).join("\n");
                         const nonEmptyLines = sec.lines.filter(l => l.trim());
-                        const isChorusSec = /Chorus|Hook|Estribillo/i.test(sec.tag);
+                        // Strictly match Chorus/Hook/Estribillo/Coro (excluding Pre-Chorus, Post-Chorus, Pre-Hook, Post-Hook)
+                        const isChorusSec = /\[\s*(?!(?:Pre|Post)[-\s])(?:Chorus|Hook|Estribillo|Coro)/i.test(sec.tag);
                         return (
                           <div key={i} className="space-y-1 group relative">
                             <div className="flex items-center gap-2">
                               <div className="section-tag text-sm">{sec.tag}</div>
                               {isChorusSec && (
                                 <button
-                                  onClick={() => handleGenerateHookVariations()}
+                                  onClick={() => handleGenerateHookVariations(sec.interpreter || undefined)}
                                   disabled={hookVariationsLoading}
                                   className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-amber-400 hover:text-amber-300 hover:bg-amber-400/10 cursor-pointer"
-                                  title="⚡ Variantes de Hook (Mantra, Melódico, Punchy)"
+                                  title={`⚡ Variantes de Hook para ${sec.interpreter || "el Estribillo"} (Mantra, Melódico, Punchy)`}
                                 >
                                   <Sparkles className="w-3.5 h-3.5" />
                                 </button>

@@ -7,6 +7,7 @@ export const maxDuration = 60;
 
 interface HookVariationsBody {
   artistId: string;
+  targetArtistName?: string;
   featureArtistId?: string;
   moodId: string;
   dirtyLevel?: number;
@@ -37,18 +38,23 @@ export async function POST(req: NextRequest) {
     const artist = getArtistById(body.artistId);
     const flowProfile = getFlowProfile(body.artistId);
     const dirty = getDirtyLevel(body.dirtyLevel ?? 2);
+    const singerName = body.targetArtistName?.trim() || artist?.name || "Lead";
 
     const systemPrompt = `Eres un Ghostwriter y Topliner de élite en Trap y Música Urbana.
 Tu misión es componer EXACTAMENTE 3 VARIANTES DISTINTAS DE ESTRIBILLO (HOOK / CHORUS) de 4 a 8 compases optimizadas para SUNO AI.
 
-# PERFIL DEL ARTISTA
-- Artista: ${artist?.name ?? "Lead"} (${artist?.origin ?? "Trap"})
+# PERFIL DEL INTÉRPRETE DEL ESTRIBILLO
+- Intérprete del Estribillo: ${singerName}
 - Estilo: ${artist?.style ?? "Trap contemporáneo"}
 - Mood: ${body.moodId}
 - Spanglish objetivo: ${body.spanglishPercent}% inglés
 - Tempo: ${body.bpmRange} BPM
 - Nivel de actitud: ${dirty.label} (${dirty.badge})
-${body.conceptOrLyrics ? `- Contexto / Letra actual:\n${body.conceptOrLyrics.slice(0, 500)}` : ""}
+${body.conceptOrLyrics ? `- Contexto de la Canción:\n${body.conceptOrLyrics.slice(0, 500)}` : ""}
+
+# DIRECTIVA ESTRICTA:
+- Estás escribiendo EXCLUSIVAMENTE el [Chorus / Hook / Estribillo] para ${singerName}.
+- NO escribas un Pre-Chorus, ni una Intro, ni un Verso. La salida debe ser 100% un Estribillo pegadizo y bailable.
 
 # ESTILOS DE LAS 3 VARIANTES REQUERIDAS:
 1. "mantra": [MANTRA HIPNÓTICO] — Repetición pesada de una palabra/frase clave (3-4 veces con cadencia y comas para Suno), ultra pegadizo y bailable.
@@ -65,7 +71,7 @@ Devuelve EXCLUSIVAMENTE un JSON con este esquema (sin markdown, sin comentarios)
       "badge": "Repetitivo · Hypnotic",
       "icon": "🔁",
       "description": "Repetición hipnótica con cadencia pesada para reventar el club",
-      "hookText": "[Chorus: ${artist?.name ?? "Lead"}, Hypnotic repetitive mantra]\\nLínea 1 con ad-lib (Yeah!)\\nLínea 2...\\nLínea 3...\\nLínea 4"
+      "hookText": "[Chorus: ${singerName}, Hypnotic repetitive mantra]\\nLínea 1 con ad-lib (Yeah!)\\nLínea 2...\\nLínea 3...\\nLínea 4"
     },
     {
       "id": "melodic",
@@ -73,7 +79,7 @@ Devuelve EXCLUSIVAMENTE un JSON con este esquema (sin markdown, sin comentarios)
       "badge": "Singable · Melodic",
       "icon": "🎵",
       "description": "Líneas cantables y pegadizas con notas abiertas",
-      "hookText": "[Chorus: ${artist?.name ?? "Lead"}, Melodic flow]\\nLínea 1...\\nLínea 2...\\nLínea 3...\\nLínea 4"
+      "hookText": "[Chorus: ${singerName}, Melodic flow]\\nLínea 1...\\nLínea 2...\\nLínea 3...\\nLínea 4"
     },
     {
       "id": "punchy",
@@ -81,7 +87,7 @@ Devuelve EXCLUSIVAMENTE un JSON con este esquema (sin markdown, sin comentarios)
       "badge": "Street · Hard-hitting",
       "icon": "💥",
       "description": "Golpe seco, barras crudas y actitud dominante",
-      "hookText": "[Chorus: ${artist?.name ?? "Lead"}, Hard-hitting delivery]\\nLínea 1...\\nLínea 2...\\nLínea 3...\\nLínea 4"
+      "hookText": "[Chorus: ${singerName}, Hard-hitting delivery]\\nLínea 1...\\nLínea 2...\\nLínea 3...\\nLínea 4"
     }
   ]
 }
