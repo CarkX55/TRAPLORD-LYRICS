@@ -1039,6 +1039,38 @@ export const ARTIST_REFERENCES: Record<string, ArtistReference> = {
     verified: true,
     source: "real-knowledge",
   },
+
+  g_herbo: {
+    artistId: "g_herbo",
+    peakEra: "2016-2020 (Strictly 4 My Fans / Humble Beast / PTSD)",
+    verseBars: [
+      "I was in the trenches on Essex, 79th in the cold (150!)",
+      "Got PTSD from the shootouts, young niggas never grow old (Swervo!)",
+    ],
+    hookBars: [
+      "Still got PTSD from the trauma in the street (Yeah!)",
+      "NLMB forever, we don't ever accept defeat (Herbo!)",
+    ],
+    signatureBar: "G-Herbo, Swervo, 150, NLMB",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  king_von: {
+    artistId: "king_von",
+    peakEra: "2019-2020 (Grandson Vol. 1 / Welcome to O'Block)",
+    verseBars: [
+      "We was in the car, broad day, creeping down the street (Nah, nah)",
+      "Seen him at the store, hopped out, put him on his feet (Boom! Boom!)",
+    ],
+    hookBars: [
+      "Took her to the O, boy you know how it go (Von!)",
+      "Grandson in the cut, keep a thirty for the show (O'Block!)",
+    ],
+    signatureBar: "King Von, Grandson, Welcome to O'Block",
+    verified: true,
+    source: "real-knowledge",
+  },
 };
 
 export function getArtistReference(artistId: string): ArtistReference | null {

@@ -136,7 +136,7 @@ SPANGLISH TARGET: ${body.spanglishPercent}% EN
 Tu trabajo:
 1. ¿La narrativa es coherente de principio a fin?
 2. ¿Hay punchlines memorables? ¿Cuántas?
-3. ¿Evita clichés? ¿Es original?
+3. ¿Evita clichés prohibidos de IA (ej: "el asfalto no perdona", "fuego/juego/suelo", "haciendo money sin parar", "stacking paper to the ceiling", "caminando en la oscuridad")? Si encuentras alguno, márcalo como issue crítico y pide reemplazarlo por detalles concretos de calle.
 4. ¿Los ad-libs son contextuales o repetitivos?
 5. ¿Las transiciones entre secciones son naturales?
 
@@ -266,7 +266,8 @@ REGLAS DE REESCRITURA OBLIGATORIAS:
 1. APLICA e INCORPORA las sugerencias concretas dadas arriba (modifica las líneas flojas, cambia palabras repetidas, ajusta sílabas y dinamiza ad-libs).
 2. Mantén exactamente la estructura de secciones ([Intro], [Verse 1], [Chorus], etc.).
 3. Mantén el estilo, jerga y lenguaje característico del artista ${body.artistName}.
-4. Devuelve ÚNICAMENTE la letra mejorada completa. NO escribas introducciones, ni comentarios, ni bloques de código markdown.
+4. ELIMINA cualquier frase cliché o rima barata de IA ("el asfalto no perdona", "fuego/juego", "money sin parar", "stacking paper") y sustitúyela por marcas, números, acciones y detalles crudos de calle.
+5. Devuelve ÚNICAMENTE la letra mejorada completa. NO escribas introducciones, ni comentarios, ni bloques de código markdown.
 
 LETRA MEJORADA:`;
 

@@ -46,7 +46,7 @@ Criterios de análisis:
 4. Flow y métrica (¿las frases son cantables?)
 5. Ad-libs apropiados
 6. Cumplimiento del ratio spanglish
-7. Originalidad (¿evita clichés?)
+7. Originalidad y detección de clichés prohibidos (penaliza fórmulas gastadas como "el asfalto no perdona", "fuego/juego/suelo", "haciendo money sin parar", "stacking paper")
 8. Transiciones entre secciones
 
 Proporciona 3-5 puntos de feedback mezclando strengths, weaknesses y suggestions. Sé específico (cita líneas concretas cuando sea posible).

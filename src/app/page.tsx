@@ -30,9 +30,11 @@ import {
   BEAT_TYPES, FEATURE_SIMS, PRODUCER_TAG_ARCHETYPES, getProducerTagArchetypeById,
   INSTANT_MOOD_PRESETS, getInstantMoodPresetById,
   DIRTY_LEVELS, getDirtyLevel, REPETITION_PATTERNS, getRepetitionPatternById,
+  INSTRUMENTAL_BREAKS, getInstrumentalBreakById,
   getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, generateBeatPrompt,
-  type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset, type DirtyLevel, type RepetitionPattern
+  type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset, type DirtyLevel, type RepetitionPattern, type InstrumentalBreak
 } from "@/lib/trap-data";
+import type { HookVariationOption } from "@/app/api/hook-variations/route";
 import { buildSpanglishInstruction, buildSunoStylePrompt, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
 import { getFlowProfile, getCadenceLabel, type FlowProfile } from "@/lib/artist-flow-profiles";
 import { analyzeLanguageRatio, type LanguageAnalysis } from "@/lib/language-detector";
@@ -251,6 +253,10 @@ export default function TrapGhostPage() {
   const [refTrackOpen, setRefTrackOpen] = useState<boolean>(false);
   const [refTrackLyrics, setRefTrackLyrics] = useState<string>("");
   const [refTrackAnalysis, setRefTrackAnalysis] = useState<string | null>(null);
+  // Hook Variations (Priority 1)
+  const [hookVariationsOpen, setHookVariationsOpen] = useState<boolean>(false);
+  const [hookVariationsLoading, setHookVariationsLoading] = useState<boolean>(false);
+  const [hookVariations, setHookVariations] = useState<HookVariationOption[]>([]);
 
   // Output state
   const [lyrics, setLyrics] = useState<string>("");
@@ -1242,6 +1248,81 @@ export default function TrapGhostPage() {
     setTimeout(() => lyricsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
   }, [polishResult, lyrics, artist, artistId, analysis, spanglishPercent]);
 
+  // ===== Hook Variations Generator (Priority 1) =====
+  const handleGenerateHookVariations = useCallback(async () => {
+    if (!artistId) {
+      toast.error("Selecciona un artista primero");
+      return;
+    }
+    setHookVariationsLoading(true);
+    setHookVariationsOpen(true);
+    try {
+      const res = await fetch("/api/hook-variations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          artistId,
+          featureArtistId: featureArtistId === "none" ? undefined : featureArtistId,
+          moodId,
+          dirtyLevel,
+          spanglishPercent,
+          bpmRange: bpmVibe.range,
+          conceptOrLyrics: lyrics || customTopic || undefined,
+          geminiApiKey: geminiApiKey || undefined,
+          geminiModel,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Error generando variantes de hook");
+      setHookVariations(data.variations || []);
+      toast.success("3 variantes de hook generadas");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error generando variantes");
+    } finally {
+      setHookVariationsLoading(false);
+    }
+  }, [artistId, featureArtistId, moodId, dirtyLevel, spanglishPercent, bpmVibe, lyrics, customTopic, geminiApiKey, geminiModel]);
+
+  const handleApplyHookVariation = useCallback((variation: HookVariationOption) => {
+    if (!lyrics) {
+      setLyrics(variation.hookText);
+      setHookVariationsOpen(false);
+      toast.success(`✨ Hook "${variation.title}" aplicado`);
+      return;
+    }
+
+    // Backup current lyrics in history first
+    const langAnalysis = analyzeLanguageRatio(lyrics, spanglishPercent);
+    const entry: HistoryEntry = {
+      id: `hook-var-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) + " (Pre-Hook)",
+      artistName: `${artist?.name ?? "Trap"}`,
+      moodLabel: MOODS.find(m => m.id === moodId)?.label ?? moodId,
+      spanglishPercent,
+      actualEnglishPercent: langAnalysis.englishPercent,
+      deviation: langAnalysis.deviation,
+      status: langAnalysis.status,
+      lyricsPreview: lyrics.slice(0, 120).replace(/\n/g, " "),
+      fullLyrics: lyrics,
+      analysis: langAnalysis,
+    };
+    setHistory(prev => [entry, ...prev.slice(0, 19)]);
+
+    // Replace chorus/hook sections in lyrics
+    const newChorusText = variation.hookText.trim();
+    let updatedLyrics = lyrics;
+    const chorusRegex = /(?:###?\s*)?\[(?:Chorus|Hook|Estribillo)[^\]]*\][^]*?(?=(?:###?\s*\[|$))/gi;
+    if (chorusRegex.test(lyrics)) {
+      updatedLyrics = lyrics.replace(chorusRegex, `${newChorusText}\n\n`);
+    } else {
+      updatedLyrics = `${newChorusText}\n\n${lyrics}`;
+    }
+
+    setLyrics(updatedLyrics.trim());
+    setAnalysis(analyzeLanguageRatio(updatedLyrics, spanglishPercent));
+    toast.success(`✨ Hook "${variation.title}" aplicado a la canción`);
+    setHookVariationsOpen(false);
+  }, [lyrics, spanglishPercent, artist, moodId]);
 
   // ===== Producer Tag Generator =====
   // ===== Producer Tag Generator (Arquetipos + Contexto de Letra) =====
@@ -2009,36 +2090,43 @@ export default function TrapGhostPage() {
                           <div key={`${sec.name}-${secIdx}`} className="p-2 rounded-md border border-border/40 bg-black/30 space-y-1.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-[11px] font-medium min-w-[65px] flex-1 truncate text-slime">{sec.name}</span>
-                              <Select
-                                value={assign?.voice ?? "auto"}
-                                onValueChange={(v) => {
-                                  setSectionVoices(prev => {
-                                    const others = prev.filter(p => p.sectionName !== sec.name);
-                                    if (v === "auto" && !assign?.bars && !assign?.density && (!assign?.repetitionPattern || assign.repetitionPattern === "none")) return others;
-                                    return [...others, { ...assign, sectionName: sec.name, voice: v }];
-                                  });
-                                }}
-                              >
-                                <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[125px] sm:w-[140px]"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="auto">— Voz: Auto —</SelectItem>
-                                  <SelectItem value="main">Main Artist</SelectItem>
-                                  {featureArtist && <SelectItem value="feature">Feature Artist</SelectItem>}
-                                  <SelectItem value="both">Both (Unísono)</SelectItem>
-                                  <SelectItem value="hype">Hype Man</SelectItem>
-                                  <SelectSeparator className="bg-border/40" />
-                                  {ARTISTS_DATA.map(group => (
-                                    <SelectGroup key={group.label}>
-                                      <SelectLabel className="text-slime/80 px-2 py-1 text-[10px] font-semibold">{group.label}</SelectLabel>
-                                      {group.artists.map(a => (
-                                        <SelectItem key={a.id} value={a.id}>
-                                          <span className="flex items-center gap-1.5"><span>👤</span>{a.name}<span className="text-muted-foreground text-[10px]">· {a.origin}</span></span>
-                                        </SelectItem>
-                                      ))}
-                                    </SelectGroup>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                              {sec.type === "instrumental" ? (
+                                <Badge variant="outline" className="text-[10px] border-purple-400/50 text-purple-400 bg-purple-400/10 gap-1 ml-auto">
+                                  🎸 Solo Instrumental (Suno)
+                                </Badge>
+                              ) : (
+                                <Select
+                                  value={assign?.voice ?? "auto"}
+                                  onValueChange={(v) => {
+                                    setSectionVoices(prev => {
+                                      const others = prev.filter(p => p.sectionName !== sec.name);
+                                      if (v === "auto" && !assign?.bars && !assign?.density && (!assign?.repetitionPattern || assign.repetitionPattern === "none")) return others;
+                                      return [...others, { ...assign, sectionName: sec.name, voice: v }];
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[125px] sm:w-[155px]"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="auto">— Voz: Auto —</SelectItem>
+                                    <SelectItem value="main">Main Artist</SelectItem>
+                                    {featureArtist && <SelectItem value="feature">Feature Artist</SelectItem>}
+                                    {featureArtist && <SelectItem value="trading_2x2">🤝 Trading Bars (2x2)</SelectItem>}
+                                    <SelectItem value="both">Both (Unísono)</SelectItem>
+                                    <SelectItem value="hype">Hype Man</SelectItem>
+                                    <SelectSeparator className="bg-border/40" />
+                                    {ARTISTS_DATA.map(group => (
+                                      <SelectGroup key={group.label}>
+                                        <SelectLabel className="text-slime/80 px-2 py-1 text-[10px] font-semibold">{group.label}</SelectLabel>
+                                        {group.artists.map(a => (
+                                          <SelectItem key={a.id} value={a.id}>
+                                            <span className="flex items-center gap-1.5"><span>👤</span>{a.name}<span className="text-muted-foreground text-[10px]">· {a.origin}</span></span>
+                                          </SelectItem>
+                                        ))}
+                                      </SelectGroup>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
                               {isVerseOrChorus && (
                                 <Select
                                   value={assign?.bars ? String(assign.bars) : "0"}
@@ -2722,6 +2810,9 @@ export default function TrapGhostPage() {
                     <Button variant="ghost" size="sm" onClick={() => { setPolishOpen(true); setPolishError(null); }} disabled={polishLoading} className="text-muted-foreground hover:text-cyber h-8" title="Agent Polish — 4 agentes IA revisan y mejoran la letra">
                       <Sparkles className="w-3.5 h-3.5 mr-1" />Polish
                     </Button>
+                    <Button variant="ghost" size="sm" onClick={handleGenerateHookVariations} disabled={hookVariationsLoading} className={`h-8 ${hookVariationsOpen ? "text-amber-400 bg-amber-400/10" : "text-muted-foreground hover:text-amber-400"}`} title="⚡ Variantes de Hook — Genera 3 enfoques de estribillo (Mantra, Melódico, Punchlines)">
+                      <Sparkles className="w-3.5 h-3.5 mr-1 text-amber-400" />Hook Var
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={handleCritic} disabled={criticLoading} className="text-muted-foreground hover:text-yellow-400 h-8" title="Crítico de letra (feedback IA)">
                       <MessageSquare className="w-3.5 h-3.5 mr-1" />Crítico
                     </Button>
@@ -2842,13 +2933,24 @@ export default function TrapGhostPage() {
                         const locked = isSectionLocked(secName);
                         const sectionContent = sec.lines.filter(l => l.trim()).join("\n");
                         const nonEmptyLines = sec.lines.filter(l => l.trim());
+                        const isChorusSec = /Chorus|Hook|Estribillo/i.test(sec.tag);
                         return (
                           <div key={i} className="space-y-1 group relative">
                             <div className="flex items-center gap-2">
                               <div className="section-tag text-sm">{sec.tag}</div>
+                              {isChorusSec && (
+                                <button
+                                  onClick={() => handleGenerateHookVariations()}
+                                  disabled={hookVariationsLoading}
+                                  className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-amber-400 hover:text-amber-300 hover:bg-amber-400/10 cursor-pointer"
+                                  title="⚡ Variantes de Hook (Mantra, Melódico, Punchy)"
+                                >
+                                  <Sparkles className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                               <button
                                 onClick={() => toggleLockSection(secName, sectionContent)}
-                                className={`ml-auto opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded ${locked ? "opacity-100 text-slime" : "text-muted-foreground hover:text-slime"}`}
+                                className={`${!isChorusSec ? "ml-auto " : ""}opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded ${locked ? "opacity-100 text-slime" : "text-muted-foreground hover:text-slime"}`}
                                 title={locked ? "Desbloquear sección" : "Bloquear sección (mantener en re-gen)"}
                               >
                                 {locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
@@ -3082,6 +3184,104 @@ export default function TrapGhostPage() {
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground text-center py-8">Esperando generación...</p>
+                )}
+              </Card>
+            )}
+
+            {/* --- Hook Variations Panel (NEW — Priority 1) --- */}
+            {hookVariationsOpen && (
+              <Card className="glass-card p-5 space-y-4 animate-fade-slide border-amber-400/40 bg-black/40">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-amber-400/10 border border-amber-400/30 text-amber-400">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+                      Variantes de Hook / Estribillo
+                      <Badge variant="outline" className="text-[10px] border-amber-400/50 text-amber-400">3 Estilos</Badge>
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground">Composiciones alternativas de estribillo optimizadas para Suno AI</p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setHookVariationsOpen(false)} className="ml-auto text-muted-foreground hover:text-foreground h-8">
+                    ✕
+                  </Button>
+                </div>
+
+                {hookVariationsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <div className="trap-spinner !border-amber-400" />
+                    <p className="text-sm text-amber-400 font-medium">Cocinando 3 variantes de estribillo con estilos contrastados...</p>
+                    <p className="text-[11px] text-muted-foreground">Mantra Hipnótico · Melódico & Cantable · Punchlines de Calle</p>
+                  </div>
+                ) : hookVariations.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {hookVariations.map((v) => (
+                        <div key={v.id} className="rounded-xl border border-border/50 bg-black/30 hover:border-amber-400/50 transition-all p-3.5 flex flex-col justify-between space-y-2.5">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-1.5">
+                              <span className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                                <span>{v.icon}</span> {v.title}
+                              </span>
+                              <Badge variant="outline" className="text-[9px] py-0 px-1.5 border-amber-400/40 text-amber-400">
+                                {v.badge}
+                              </Badge>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground line-clamp-2">{v.description}</p>
+                            <div className="rounded-lg bg-black/50 border border-border/30 p-2.5 max-h-44 overflow-y-auto custom-scroll">
+                              <pre className="text-[11px] font-mono text-slime whitespace-pre-wrap leading-relaxed">{v.hookText}</pre>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 pt-1">
+                            <Button
+                              size="sm"
+                              onClick={() => handleApplyHookVariation(v)}
+                              className="w-full bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-600 hover:to-yellow-500 text-black font-semibold text-xs h-8 cursor-pointer"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 mr-1.5 fill-black" /> Aplicar a la Canción
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                navigator.clipboard.writeText(v.hookText);
+                                toast.success(`Hook "${v.title}" copiado`);
+                              }}
+                              className="border-border/40 hover:bg-white/5 h-8 px-2.5 shrink-0"
+                              title="Copiar texto del hook"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row justify-between items-center gap-2 pt-2 border-t border-border/30">
+                      <p className="text-[11px] text-muted-foreground">
+                        💡 Al aplicar una variante, se reemplazan los estribillos y tu versión anterior se guarda en el historial.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGenerateHookVariations}
+                        disabled={hookVariationsLoading}
+                        className="border-amber-400/40 text-amber-400 hover:bg-amber-400/10 h-8 text-xs shrink-0"
+                      >
+                        <RefreshCw className="w-3 h-3 mr-1.5" /> Regenerar 3 Opciones
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 space-y-2">
+                    <p className="text-sm text-muted-foreground">Genera 3 opciones de estribillo con ganchos contrastados.</p>
+                    <Button
+                      onClick={handleGenerateHookVariations}
+                      className="bg-amber-500 text-black font-semibold hover:bg-amber-400 h-9 cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" /> Generar Variantes Ahora
+                    </Button>
+                  </div>
                 )}
               </Card>
             )}

@@ -95,6 +95,8 @@ export const ARTISTS_DATA: ArtistGroup[] = [
       { id: "fivio_foreign", name: "Fivio Foreign", origin: "Brooklyn", style: "Flow melodic drill enérgico, acentos off-beat y ad-libs de fondo memorables (Baow!).", defaultSpanglish: 95, adlibs: ["Gang!", "Bow!", "Fivio", "Yeah", "Slide"], beatTags: ["ny drill", "melodic drill", "808 slide", "dark synth", "brooklyn bounce"] },
       { id: "chief_keef", name: "Chief Keef", origin: "Chicago", style: "Flow perezoso arrastrado detrás del beat, pionero indiscutible del drill de Chicago.", defaultSpanglish: 95, adlibs: ["Bang!", "Sosa", "Yeah", "Glo Gang", "Aye"], beatTags: ["chicago drill", "dark beat", "808 slide", "lazy flow", "young sosa"] },
       { id: "lil_durk", name: "Lil Durk", origin: "Chicago", style: "Flow melódico con autotune emotivo, dolor de calle, lealtad y tributos sentidos.", defaultSpanglish: 95, adlibs: ["Yeah", "Durk", "O Block", "No DJ", "Von"], beatTags: ["melodic drill", "auto-tune", "emotional 808", "chicago street", "dark piano"] },
+      { id: "g_herbo", name: "G-Herbo", origin: "Chicago", style: "Flow off-beat técnico agresivo, ametralladora de barras de calle, trauma real (PTSD), narrativa cruda de supervivencia de NLMB y voz rasposa sin autotune.", defaultSpanglish: 95, adlibs: ["G Herbo!", "150!", "Swervo", "Yeah", "Uh", "NLMB"], beatTags: ["chicago drill", "fast aggressive 808", "dark piano chords", "ptsd street trap", "rapid fire drums"] },
+      { id: "king_von", name: "King Von (RIP)", origin: "Chicago", style: "Storytelling thriller cinematográfico del drill, barras descriptivas en primera persona, voz intimidante y narrativa sangrienta de O-Block.", defaultSpanglish: 95, adlibs: ["Von!", "Grandson!", "Nah, nah", "Boom", "O'Block"], beatTags: ["chicago drill", "dark ominous piano", "sliding 808", "storytelling drill", "heavy snare"] },
       { id: "polo_g", name: "Polo G", origin: "Chicago", style: "Flow melódico introspectivo sobre trauma, supervivencia y superación personal.", defaultSpanglish: 95, adlibs: ["Yeah", "Polo", "No Cap", "Real", "Gang"], beatTags: ["melodic trap", "emotional piano", "smooth 808", "introspective", "chicago vibe"] },
     ],
   },
@@ -240,7 +242,7 @@ export const BPM_VIBES: BpmVibe[] = [
 export interface SongStructure {
   id: string;
   label: string;
-  sections: { name: string; type: "verse" | "chorus" | "intro" | "outro" | "bridge" | "hook" }[];
+  sections: { name: string; type: "verse" | "chorus" | "intro" | "outro" | "bridge" | "hook" | "instrumental" }[];
 }
 
 export const STRUCTURES: SongStructure[] = [
@@ -319,7 +321,46 @@ export const STRUCTURES: SongStructure[] = [
     { name: "Intro", type: "intro" }, { name: "Verse 1", type: "verse" }, { name: "Verse 2", type: "verse" },
     { name: "Verse 3", type: "verse" }, { name: "Verse 4", type: "verse" }, { name: "Outro", type: "outro" },
   ]},
+  { id: "std_trading_feature", label: "Colaboración Trading Bars (Intro-V1-C-V2(Trading 2x2)-C-Outro)", sections: [
+    { name: "Intro", type: "intro" },
+    { name: "Verse 1", type: "verse" },
+    { name: "Chorus", type: "chorus" },
+    { name: "Verse 2 (Trading Bars 2x2)", type: "verse" },
+    { name: "Chorus", type: "chorus" },
+    { name: "Outro", type: "outro" },
+  ]},
+  { id: "std_dynamic_drop", label: "Dinámica con Beat Drop & Solo (Intro-V1-Drop-C-V2-Solo-C-Outro)", sections: [
+    { name: "Intro", type: "intro" },
+    { name: "Verse 1", type: "verse" },
+    { name: "808 Sub-Bass Breakdown", type: "instrumental" },
+    { name: "Chorus", type: "chorus" },
+    { name: "Verse 2", type: "verse" },
+    { name: "Melodic Guitar Solo", type: "instrumental" },
+    { name: "Chorus", type: "chorus" },
+    { name: "Outro", type: "outro" },
+  ]},
 ];
+
+export interface InstrumentalBreak {
+  id: string;
+  name: string;
+  tag: string;
+  icon: string;
+  description: string;
+  sunoTag: string;
+}
+
+export const INSTRUMENTAL_BREAKS: InstrumentalBreak[] = [
+  { id: "808_breakdown", name: "808 Breakdown", tag: "[808 Sub-Bass Breakdown]", icon: "🔊", description: "Corte de batería con bajo 808 sostenido y saturado", sunoTag: "heavy 808 sub-bass breakdown, no drums" },
+  { id: "guitar_solo", name: "Guitar Solo", tag: "[Melodic Guitar Solo]", icon: "🎸", description: "Riff melódico de guitarra flamenca o emo trap", sunoTag: "melodic guitar solo, atmospheric lead" },
+  { id: "drum_cut", name: "Drum Cut / Pausa", tag: "[Drum Cut / Silence]", icon: "⏸️", description: "Silencio total de percusión para generar máxima tensión antes del drop", sunoTag: "dramatic silence, drum pause before drop" },
+  { id: "choir_build", name: "Coros Vocales", tag: "[Choir Vocal Build-up]", icon: "🕊️", description: "Voces corales que construyen la energía hacia el estribillo", sunoTag: "ethereal choir vocal crescendo, epic build" },
+  { id: "synth_bridge", name: "Puente Sintetizador", tag: "[Atmospheric Synth Bridge]", icon: "🎹", description: "Espacio instrumental atmosférico con sintes oscuros y texturas", sunoTag: "atmospheric synth pad solo, spacey soundscape" },
+];
+
+export function getInstrumentalBreakById(id: string): InstrumentalBreak | undefined {
+  return INSTRUMENTAL_BREAKS.find(b => b.id === id);
+}
 
 export interface Producer {
   id: string;

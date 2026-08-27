@@ -157,19 +157,35 @@ export function buildSystemPrompt(params: PromptParams): string {
         lines.push(`[Pre-Chorus: ${artist?.name ?? "Lead"}] — 2-4 barras (Rampa melódica que sube la energía hacia el chorus)`);
       }
 
+      if (s.type === "instrumental") {
+        lines.push(`[${s.name}] — 🚫 NO LYRICS (Solo de producción instrumental para Suno AI)`);
+        return lines;
+      }
+
       let voice = artist?.name ?? "Lead";
+      let isTrading2x2 = false;
       const voiceAssign = params.sectionVoices?.find(v => v.sectionName === s.name);
       if (voiceAssign) {
         const v = voiceAssign.voice;
         if (v === "main") voice = artist?.name ?? "Lead";
         else if (v === "feature" && featureArtist) voice = featureArtist.name;
         else if (v === "both") voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
+        else if (v === "trading_2x2") {
+          voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"} (Trading Bars 2x2)`;
+          isTrading2x2 = true;
+        }
         else if (v === "hype") voice = `${artist?.name ?? "Lead"} (Ad-libs only)`;
-        else if (v.startsWith("instrumental:")) voice = `🚫 NO LYRICS - [${v.replace("instrumental:", "")}]`;
+        else if (v.startsWith("instrumental:")) {
+          lines.push(`[${v.replace("instrumental:", "")}] — 🚫 NO LYRICS (Solo de producción instrumental para Suno AI)`);
+          return lines;
+        }
         else {
           const assignedArtist = getArtistById(v);
           if (assignedArtist) voice = assignedArtist.name;
         }
+      } else if (s.name.toLowerCase().includes("trading") && featureArtist) {
+        voice = `${artist?.name ?? "Lead"} & ${featureArtist.name} (Trading Bars 2x2)`;
+        isTrading2x2 = true;
       } else if (s.name.toLowerCase().includes("feature") && featureArtist) {
         voice = featureArtist.name;
       }
@@ -202,7 +218,9 @@ export function buildSystemPrompt(params: PromptParams): string {
       // Repetition Pattern Rule per section
       let repTag = "";
       let repInstruction = "";
-      if (voiceAssign?.repetitionPattern && voiceAssign.repetitionPattern !== "none") {
+      if (isTrading2x2) {
+        repInstruction = ` → [REGLA TRADING BARS 2x2: Alterna exactamente 2 barras de ${artist?.name ?? "Lead"} y 2 barras de ${featureArtist?.name ?? "Feature"} consecutivamente. Cada artista responde y se pica con el anterior, creando química y tensión colaborativa estilo Drip Harder / Rich Flex]`;
+      } else if (voiceAssign?.repetitionPattern && voiceAssign.repetitionPattern !== "none") {
         const repPattern = getRepetitionPatternById(voiceAssign.repetitionPattern);
         if (repPattern) {
           if (repPattern.sunoTag) repTag = `, ${repPattern.sunoTag}`;
@@ -331,7 +349,7 @@ export function buildSystemPrompt(params: PromptParams): string {
 Antes de redactar la letra definitiva, utiliza tus tokens de razonamiento interno para completar estas 4 fases:
 1. **Fase 1 (Concepto & Punchlines):** Define el concepto central, el hook melódico y el remate (punchline/payoff) de cada estrofa primero.
 2. **Fase 2 (Backtracking & Arquitectura de Rimas):** Establece los fonemas de rima objetivo (asonante/consonante) y construye las barras 1, 2 y 3 hacia el remate, asegurando que cada compás tenga entre 8 y 11 sílabas naturales.
-3. **Fase 3 (Filtro Antiparodia & Cringe Filter):** Evalúa críticamente cada barra: ¿Suena a canción real de trap o parece una parodia/caricatura forzada? Si alguna frase suena ortopédica o artificial, descártala y reescríbela con jerga callejera y musicalidad real.
+3. **Fase 3 (Filtro Antiparodia & Anti-Clichés Blacklist):** Evalúa críticamente cada barra contra la **Lista Negra de Clichés**. ¿Suena a canción real de trap o parece una parodia/caricatura forzada? Si alguna frase suena a cliché genérico de IA (ej: "el asfalto no perdona", "fuego/juego", "stacking paper to the ceiling"), DESCÁRTALA y reescríbela con detalles visuales concretos, marcas, jerga contemporánea y peso de calle real.
 4. **Fase 4 (Emisión Suno-Native):** Emite únicamente la letra estructurada con etiquetas entre corchetes [Section: Artist], limpia y lista para Suno.
 
 # 🎤 IDENTIDAD & ESTILO
@@ -353,8 +371,29 @@ ${adlibsBlock}
 ${rhymeLevelInstruction}
 - **Pocket Silábico**: Entre 8 y 11 sílabas por compás (evita versos gigantescos que aceleren la voz en Suno).
 - **Puntuación Rítmica**: Utiliza comas ',' y puntos suspensivos '...' para marcar los silencios y respiraciones del cantante.
-- **Rimas Orgánicas**: Rimas AABB o ABAB fluidas. Evita clichés baratos (vida/herida, amor/dolor).
+- **Rimas Orgánicas**: Rimas AABB o ABAB fluidas.
 - **Prohibido**: JAMÁS menciones el nombre real o apodo de ningún artista en la letra cantada a menos que sea un ad-lib propio.
+
+# 🚫 LISTA NEGRA DE CLICHÉS & FRASES PROHIBIDAS (ANTI-TROPES FILTER)
+Queda ESTRICTAMENTE PROHIBIDO usar las siguientes frases hechas, rimas baratas y fórmulas artificiales que delatan texto generado por IA. Sustitúyelas por imágenes callejeras concretas, marcas, acciones reales y jerga contemporánea:
+1. **Rimas y Clichés Genéricos en Español PROHIBIDOS:**
+   - ❌ "El asfalto no perdona / la calle no perdona / la jungla de cristal"
+   - ❌ "Haciendo money sin parar / contando billetes hasta el amanecer"
+   - ❌ "Fuego / juego / suelo / vuelo / cielo" (Rimas baratas de relleno)
+   - ❌ "Vida / herida / salida / caída"
+   - ❌ "Amor / dolor / rencor / calor"
+   - ❌ "Caminando en la oscuridad / brillando en la tempestad / luchando por mi verdad"
+   - ❌ "Volando como un avión / rompiendo el corazón / subiendo de nivel"
+   - ❌ "Soy el rey de la ciudad / viviendo mi realidad / nadie me va a parar"
+2. **Rimas y Clichés Genéricos en Inglés / US Trap PROHIBIDOS:**
+   - ❌ "Stacking paper to the ceiling / running up the bands" (Frases cliché gastadas)
+   - ❌ "Came from the bottom now I'm at the top" (A menos que se use con una anécdota ultra-específica)
+   - ❌ "Trap / rap / map / cap" (Cadena de rimas floja de IA)
+   - ❌ "Shining like a star / driving fast cars"
+   - ❌ "Money, power, respect / counting my checks"
+3. **DIRECTIVA DE SUSTITUCIÓN (REALISMO DE CALLE):**
+   - En lugar de frases abstractas como *"tengo mucho dinero"*, escribe el detalle exacto: *"tres mil pavos en la sudadera Rick Owens"*, *"el contador de billetes sonando en la mesa de cristal"*, *"patek con bisel helado"*.
+   - En lugar de *"la calle es dura"*, narra la escena: *"patrullas dando vueltas a las cuatro en el portal"*, *"el Glock con el selector quemando el bolsillo"*, *"tres llamadas perdidas del abogado"*.
 
 # 🎼 ESTRUCTURA DE LA CANCIÓN (SUNO NATIVE)
 Sigue esta estructura sin omitir ni añadir secciones:
