@@ -1103,6 +1103,198 @@ export const ARTIST_REFERENCES: Record<string, ArtistReference> = {
     verified: true,
     source: "real-knowledge",
   },
+
+  jeezy: {
+    artistId: "jeezy",
+    peakEra: "2005-2008 (TM:101 / The Recession)",
+    verseBars: [
+      "Standing in the kitchen with the baking soda handy (Yeeeeah!)",
+      "Trap or die, young nigga, moving work up in the Camry (That's riiiight!)",
+    ],
+    hookBars: [
+      "Last time I checked, I was the man on these streets (Ha-haaa!)",
+      "Trap star, rock star, certified in the beat (Let's get it!)",
+    ],
+    signatureBar: "Yeeeeah! I put on for my city, on-on for my city",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  ti: {
+    artistId: "ti",
+    peakEra: "2003-2006 (Trap Muzik / King)",
+    verseBars: [
+      "Bankhead bounced it, King of the South, I claimed it (Ayyy!)",
+      "Rubber band man, wild as the Taliban, never changed it (Grand Hustle!)",
+    ],
+    hookBars: [
+      "What you know about that? Loaded up with the heavy strap (King!)",
+      "You don't know nothing about that, real trap star on the map (Ayyy!)",
+    ],
+    signatureBar: "Ayyy! King of the South, I'm the Rubber Band Man",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  waka_flocka: {
+    artistId: "waka_flocka",
+    peakEra: "2010-2012 (Flockaveli)",
+    verseBars: [
+      "Hard in the paint, leave you stinking in the street! (FLOCKA!)",
+      "Brick Squad monopoly, stomping on the beat! (BOW BOW BOW!)",
+    ],
+    hookBars: [
+      "Rooster in the trap, I go hard in the paint (SQUAD!)",
+      "Leave you stinking, what the fuck you niggas think? (FLOCKA!)",
+    ],
+    signatureBar: "BOW BOW BOW! FLOCKA! Brick Squad in this bitch!",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  est_gee: {
+    artistId: "est_gee",
+    peakEra: "2021-2022 (Bigger Than Life Or Death)",
+    verseBars: [
+      "I was really in the trenches selling dog food in the snow (Gee!)",
+      "Turn the pressure up, they know who run the city from the floor (Mmm)",
+    ],
+    hookBars: [
+      "Bigger than life or death, we put the bag on top your head (Big Gee!)",
+      "Fifty round drum on the Glock, leave everybody dead (Yeah!)",
+    ],
+    signatureBar: "Gee! Everybody know how we coming, real street, no cap",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  nle_choppa: {
+    artistId: "nle_choppa",
+    peakEra: "2019-2020 (Cottonwood / Shotta Flow)",
+    verseBars: [
+      "Hop out the whip with the stick, you know we finna shoot (Ayy!)",
+      "I was sixteen with a dream, now look at the money, it grew (Shotta!)",
+    ],
+    hookBars: [
+      "Shotta Flow in the building, you know how we rock (NLE!)",
+      "Keep a thirty round clip, let it spray at the opps (Ayy!)",
+    ],
+    signatureBar: "Ayy! NLE the Top Shotta, no cap in my rap, yeah!",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  sheff_g: {
+    artistId: "sheff_g",
+    peakEra: "2019-2020 (One and Only)",
+    verseBars: [
+      "We came up out the trenches, look at how we winning now (Winners!)",
+      "They hated on the crew, but they can't turn the tempo down (Look!)",
+    ],
+    hookBars: [
+      "No sleep in the city, we shooting for the stars (Yeah!)",
+      "Winners Circle only, putting pain inside the bars (Look!)",
+    ],
+    signatureBar: "Winners! Sheff G, you know how we do it, Flatbush to the top",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  sleepy_hallow: {
+    artistId: "sleepy_hallow",
+    peakEra: "2020-2021 (Still Sleep? / 2055)",
+    verseBars: [
+      "I was really down bad, thinking about the better days (Sleepy!)",
+      "Now I'm counting up the racks, blowing smoke through the maze (Great John)",
+    ],
+    hookBars: [
+      "I just wanna fly away, 2055 where the skies are grey (Yeah!)",
+      "Tell me who gonna ride for me when the money fade away (Huh?)",
+    ],
+    signatureBar: "Great John on the beat, by the way... Sleepy!",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  glorilla: {
+    artistId: "glorilla",
+    peakEra: "2022-2024 (FNF / TGIF / Glorious)",
+    verseBars: [
+      "I'm in the club with my girls, getting money, living free (YEAH GLO!)",
+      "Don't worry about no man, all these niggas looking at me (Big Glo!)",
+    ],
+    hookBars: [
+      "I'm F-R-E-E, single as a dollar bill (ON WHAT?!)",
+      "Catch me living good, hundred thousand on the grill (YEAH GLO!)",
+    ],
+    signatureBar: "YEAH GLO! Big Glo in this bitch, you know what the fuck going on!",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  maxo_kream: {
+    artistId: "maxo_kream",
+    peakEra: "2018-2021 (Brandon Banks / Punken)",
+    verseBars: [
+      "Trapped in the Alief, roaches crawling in the kitchen sink (Trigger!)",
+      "Uncle was a junkie, learned to move before I learned to think (Maxo!)",
+    ],
+    hookBars: [
+      "Meet me at the corner store, loaded with the 44 (Kream!)",
+      "Weight of the world on my back, I kicked in the door (Yeah!)",
+    ],
+    signatureBar: "Trigger! Maxo Kream, Kream Clicc, straight out the Southwest",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  fredo_santana: {
+    artistId: "fredo_santana",
+    peakEra: "2013-2015 (Trappin Ain't Dead)",
+    verseBars: [
+      "Trappin' in the alley with the thirty in my coat (Fredo!)",
+      "Savage Squad Records, put the barrel down your throat (SSR!)",
+    ],
+    hookBars: [
+      "Trappin' ain't dead, boy, you know we getting cake (Yeah!)",
+      "Step inside my trap house, make your body shake (Savage Squad!)",
+    ],
+    signatureBar: "Fredo Santana in the cut, that's a scary sight, SSR!",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  miky_woodz: {
+    artistId: "miky_woodz",
+    peakEra: "2017-2019 (Before Famous / El OG)",
+    verseBars: [
+      "Desde Carolina controlando los piketes (Indicando!)",
+      "No me hablen de números si no cuadran los billetes (El OG!)",
+    ],
+    hookBars: [
+      "La Asociación de los 90 Piketes, cabrón (Wuh!)",
+      "Todo el dinero en efectivo dentro del calentón (Yeah!)",
+    ],
+    signatureBar: "Indicando! El OG, Miky Woodz, La Asociación de los 90 Piketes",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  luar_la_l: {
+    artistId: "luar_la_l",
+    peakEra: "2021-2023 (L3TRA / 100K)",
+    verseBars: [
+      "Salimos de noche con los palos ready para cazar (Luar!)",
+      "El que se lamba con Los L lo mandamos a enterrar (Los L!)",
+    ],
+    hookBars: [
+      "L3TRA de la calle, esto no es para jugar (Prrr!)",
+      "Cero feca, cabrón, aquí sí que hay que respetar (La L!)",
+    ],
+    signatureBar: "Prrr! Luar La L, Los L, tú sabes cómo zumbamos en la brega",
+    verified: true,
+    source: "real-knowledge",
+  },
 };
 
 export function getArtistReference(artistId: string): ArtistReference | null {
