@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { analyzeSunoReadiness, type SunoReadinessResult } from "@/lib/language-detector";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -24,6 +25,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No se proporcionó letra para criticar." }, { status: 400 });
     }
 
+    const sunoReadiness = analyzeSunoReadiness(body.lyrics);
+
     const prompt = `Eres un crítico experto de letras de trap/rap. Analiza la siguiente letra generada al estilo de "${body.artistName}" con mood "${body.moodLabel}" y target de spanglish ${body.spanglishTarget}%.
 
 DEBES devolver EXCLUSIVAMENTE un JSON válido con esta estructura (sin markdown, sin explicaciones):
@@ -43,11 +46,12 @@ Criterios de análisis:
 1. Coherencia narrativa (¿la historia tiene sentido?)
 2. Uso de slang auténtico del artista
 3. Densidad de punchlines
-4. Flow y métrica (¿las frases son cantables?)
-5. Ad-libs apropiados
+4. Flow y métrica (¿las frases son cantables y tienen pocket?)
+5. Ad-libs apropiados entre paréntesis
 6. Cumplimiento del ratio spanglish
 7. Originalidad y detección de clichés prohibidos (penaliza fórmulas gastadas como "el asfalto no perdona", "fuego/juego/suelo", "haciendo money sin parar", "stacking paper")
 8. Transiciones entre secciones
+9. Compatibilidad con Suno AI (¿están las secciones en [brackets] limpios sin markdown '###', ad-libs entre paréntesis y sin fugas de texto?)
 
 Proporciona 3-5 puntos de feedback mezclando strengths, weaknesses y suggestions. Sé específico (cita líneas concretas cuando sea posible).
 
@@ -81,11 +85,15 @@ ${body.lyrics}`;
         overallScore: 50,
         summary: raw.slice(0, 500),
         feedback: [],
+        sunoReadiness,
         raw: true,
       });
     }
 
-    return NextResponse.json(parsed);
+    return NextResponse.json({
+      ...parsed,
+      sunoReadiness,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido en el crítico.";
     console.error("[critic] error:", message);

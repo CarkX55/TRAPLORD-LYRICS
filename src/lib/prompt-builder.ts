@@ -74,6 +74,48 @@ export interface PromptParams {
   featureArtistReference?: ArtistReference | null;
   referenceTrack?: TrackAnalysis | null;
   dynamicSongForm?: boolean;
+  sunoTagsMode?: "detailed" | "minimal";
+}
+
+export function getSunoSectionHint(
+  sectionType: string,
+  artistId: string,
+  moodId: string,
+  bpmVibe: BpmVibe,
+  isDetailed: boolean = true
+): string {
+  if (!isDetailed) return "";
+  const profile = getFlowProfile(artistId);
+  const cadence = profile?.cadence ?? "triplet";
+  const hookStyle = profile?.hookStyle ?? "melodic";
+
+  const lowerType = sectionType.toLowerCase();
+  if (lowerType.includes("intro")) {
+    return "Atmospheric filtered pad, spoken intro";
+  }
+  if (lowerType.includes("pre-chorus") || lowerType.includes("pre chorus") || lowerType.includes("prechorus")) {
+    return "Rising melodic tension, vocal crescendo";
+  }
+  if (lowerType.includes("chorus") || lowerType.includes("hook") || lowerType.includes("estribillo")) {
+    if (hookStyle === "repetitive") return "Hypnotic repetitive mantra, layered harmonies";
+    if (hookStyle === "simple_punchy") return "Hard-hitting punchline hook, anthemic energy";
+    return "Layered melodic harmonies, wide anthemic auto-tune";
+  }
+  if (lowerType.includes("bridge") || lowerType.includes("puente")) {
+    return "Half-time beat switch, stripped vocal texture";
+  }
+  if (lowerType.includes("outro") || lowerType.includes("final")) {
+    return "Heavy 808 breakdown, echoing vocal fade, sudden cutoff";
+  }
+  if (lowerType.includes("verse") || lowerType.includes("verso")) {
+    if (cadence === "rapid_fire") return "Fast articulate triplet flow, rapid pocket";
+    if (cadence === "staccato") return "Sharp staccato delivery, hard-hitting cadence";
+    if (cadence === "legato") return "Slurred legato flow, smooth melodic pocket";
+    if (cadence === "conversational") return "Conversational storytelling flow, natural rhythm";
+    if (cadence === "syncopated") return "Syncopated off-beat bounce, rhythmic pocket";
+    return "Dynamic rhythmic flow, locked in the pocket";
+  }
+  return "";
 }
 
 export function buildSpanglishInstruction(percent: number): {
@@ -119,6 +161,7 @@ export function buildSystemPrompt(params: PromptParams): string {
   const artist = getArtistById(params.artistId);
   const featureArtist = params.featureArtistId ? getArtistById(params.featureArtistId) : null;
   const spanglish = buildSpanglishInstruction(params.spanglishPercent);
+  const isDetailedSuno = params.sunoTagsMode !== "minimal";
 
   // Topic construction
   let topicBlock: string;
@@ -154,7 +197,9 @@ export function buildSystemPrompt(params: PromptParams): string {
 
       // Pre-Chorus build
       if (useDynamicForm && (songFormStyle === "pre_chorus_build" || songFormStyle === "hybrid") && isChorus) {
-        lines.push(`[Pre-Chorus: ${artist?.name ?? "Lead"}] — 2-4 barras (Rampa melódica que sube la energía hacia el chorus)`);
+        const preHint = getSunoSectionHint("pre-chorus", params.artistId, params.moodId, params.bpmVibe, isDetailedSuno);
+        const preTag = preHint ? `, ${preHint}` : "";
+        lines.push(`[Pre-Chorus: ${artist?.name ?? "Lead"}${preTag}] — 2-4 barras (Rampa melódica que sube la energía hacia el chorus)`);
       }
 
       if (s.type === "instrumental") {
@@ -163,12 +208,13 @@ export function buildSystemPrompt(params: PromptParams): string {
       }
 
       let voice = artist?.name ?? "Lead";
+      let sectionArtistId = params.artistId;
       let isTrading2x2 = false;
       const voiceAssign = params.sectionVoices?.find(v => v.sectionName === s.name);
       if (voiceAssign) {
         const v = voiceAssign.voice;
-        if (v === "main") voice = artist?.name ?? "Lead";
-        else if (v === "feature" && featureArtist) voice = featureArtist.name;
+        if (v === "main") { voice = artist?.name ?? "Lead"; sectionArtistId = params.artistId; }
+        else if (v === "feature" && featureArtist) { voice = featureArtist.name; sectionArtistId = featureArtist.id; }
         else if (v === "both") voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
         else if (v === "trading_2x2") {
           voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"} (Trading Bars 2x2)`;
@@ -181,13 +227,14 @@ export function buildSystemPrompt(params: PromptParams): string {
         }
         else {
           const assignedArtist = getArtistById(v);
-          if (assignedArtist) voice = assignedArtist.name;
+          if (assignedArtist) { voice = assignedArtist.name; sectionArtistId = assignedArtist.id; }
         }
       } else if (s.name.toLowerCase().includes("trading") && featureArtist) {
         voice = `${artist?.name ?? "Lead"} & ${featureArtist.name} (Trading Bars 2x2)`;
         isTrading2x2 = true;
       } else if (s.name.toLowerCase().includes("feature") && featureArtist) {
         voice = featureArtist.name;
+        sectionArtistId = featureArtist.id;
       }
 
       let bars: string;
@@ -239,14 +286,18 @@ export function buildSystemPrompt(params: PromptParams): string {
         }
       }
 
-      lines.push(`[${s.name}: ${voice}${repTag}] — ${bars}${dynamicNote}${repInstruction}`);
+      // Performance hint inside bracket for Suno AI
+      const perfHint = getSunoSectionHint(s.type, sectionArtistId, params.moodId, params.bpmVibe, isDetailedSuno);
+      const perfTag = perfHint ? `, ${perfHint}` : "";
+
+      lines.push(`[${s.name}: ${voice}${perfTag}${repTag}] — ${bars}${dynamicNote}${repInstruction}`);
 
       if (useDynamicForm && songFormStyle === "beat_drop") {
         if (isIntro) {
-          lines.push(`[Beat Drop] — 🚫 NO LYRICS (Drop del beat con 808 pesado)`);
+          lines.push(`[Beat Drop: Heavy 808 drop, distorted bassline] — 🚫 NO LYRICS (Drop del beat con 808 pesado)`);
         }
         if (isChorus && i === totalSections - 2) {
-          lines.push(`[Beat Drop] — 🚫 NO LYRICS (Tensión antes del chorus final)`);
+          lines.push(`[Beat Drop: Heavy 808 drop, tension release] — 🚫 NO LYRICS (Tensión antes del chorus final)`);
         }
       }
 
@@ -350,7 +401,7 @@ Antes de redactar la letra definitiva, utiliza tus tokens de razonamiento intern
 1. **Fase 1 (Concepto & Punchlines):** Define el concepto central, el hook melódico y el remate (punchline/payoff) de cada estrofa primero.
 2. **Fase 2 (Backtracking & Arquitectura de Rimas):** Establece los fonemas de rima objetivo (asonante/consonante) y construye las barras 1, 2 y 3 hacia el remate, asegurando que cada compás tenga entre 8 y 11 sílabas naturales.
 3. **Fase 3 (Filtro Antiparodia & Anti-Clichés Blacklist):** Evalúa críticamente cada barra contra la **Lista Negra de Clichés**. ¿Suena a canción real de trap o parece una parodia/caricatura forzada? Si alguna frase suena a cliché genérico de IA (ej: "el asfalto no perdona", "fuego/juego", "stacking paper to the ceiling"), DESCÁRTALA y reescríbela con detalles visuales concretos, marcas, jerga contemporánea y peso de calle real.
-4. **Fase 4 (Emisión Suno-Native):** Emite únicamente la letra estructurada con etiquetas entre corchetes [Section: Artist], limpia y lista para Suno.
+4. **Fase 4 (Emisión Suno-Native):** Emite únicamente la letra estructurada con etiquetas entre corchetes [Section: Artist, Performance Hint], limpia y lista para Suno.
 
 # 🎤 IDENTIDAD & ESTILO
 ${spanglish.prompt}
@@ -400,7 +451,7 @@ Sigue esta estructura sin omitir ni añadir secciones:
 ${structurePlan}
 
 # 📋 FORMATO DE SALIDA ESTRICTO (SUNO AI NATIVE)
-1. Encabezados de sección EXCLUSIVAMENTE entre corchetes estándar: [Intro], [Verse 1: ${artist?.name ?? "Lead"}], [Chorus], [Pre-Chorus], [Beat Drop], [Outro].
+1. Encabezados de sección EXCLUSIVAMENTE entre corchetes estándar: [Intro: Detail], [Verse 1: Artist, Hint], [Chorus: Artist, Hint], [Pre-Chorus], [Beat Drop], [Outro].
 2. NUNCA uses encabezados markdown '###' ni escribas líneas separadas como '*Intérprete:*' porque Suno intentará cantarlas.
 3. Ad-libs secundarios SIEMPRE entre paréntesis: (Yeah!), (Brrr!).
 4. Una barra cantada por línea.
@@ -409,59 +460,133 @@ ${structurePlan}
   return prompt;
 }
 
-/**
- * Builds a Suno-style music prompt from the config.
- * Optimized to 120-180 characters for maximum fidelity in Suno AI.
- */
-export function buildSunoStylePrompt(params: {
+export interface SunoStyleLayers {
+  genre: string;
+  vocal: string;
+  instruments: string;
+  mix: string;
+}
+
+export interface SunoStyleResult {
+  prompt: string;
+  layers: SunoStyleLayers;
+  charCount: number;
+}
+
+export interface SunoStylePromptParams {
   beatType?: BeatType;
   bpmVibe: BpmVibe;
   moodId: string;
   artistId: string;
-  producerId: string;
-  structureLabel: string;
+  featureArtistId?: string;
+  producerId?: string;
+  structureLabel?: string;
   dirtyLevel?: number;
-}): string {
-  const tags: string[] = [];
+}
 
-  if (params.beatType) {
-    tags.push(...params.beatType.sunoTags.slice(0, 2));
-  }
-
+/**
+ * Builds a 4-layer Suno-style prompt optimized to 200-280 characters for Suno AI v4 / v4.5.
+ * Layer 1: Genre, BPM & Groove
+ * Layer 2: Vocal Timbre (Lead or Dual)
+ * Layer 3: Instrumentation & 808s
+ * Layer 4: Mix & Texture
+ */
+export function buildSunoStyleResult(params: SunoStylePromptParams): SunoStyleResult {
+  // Capa 1: Subgénero, BPM & Groove
   const bpmNum = parseInt(params.bpmVibe.range.split("-")[1] ?? "130");
-  tags.push(`${params.bpmVibe.range} BPM`);
-  if (bpmNum > 150) tags.push("fast rage drill");
-  else if (bpmNum < 105) tags.push("slow melodic trap");
-  else tags.push("bouncy trap beat");
+  const rawGenre = params.beatType?.label
+    ? params.beatType.label.toLowerCase().replace(/ \/ .*/, "").replace(/ standard/, "")
+    : "trap";
+  let groove = "half-time bounce";
+  if (bpmNum > 150) groove = "rapid syncopated rhythm";
+  else if (bpmNum < 110) groove = "slow melodic bounce";
+  else if (params.beatType?.id.includes("drill")) groove = "sliding 808 drill bounce";
+  else if (params.beatType?.id.includes("rage")) groove = "high-energy moshpit drive";
 
-  const moodTags: Record<string, string[]> = {
-    agresivo: ["dark aggressive", "heavy distorted 808"],
-    melancolico: ["melancholic emotional", "sad guitar loop"],
-    flex: ["luxurious triumphant", "clean 808 slide"],
-    fiesta: ["energetic party", "bouncy club synth"],
-    introspectivo: ["introspective deep", "lo-fi piano"],
-    oscuro: ["sinister dark", "menacing sub-bass"],
-    romantico: ["sensual smooth", "warm synth pad"],
-    calle: ["raw gritty street", "hard hitting drums"],
+  const layer1Genre = `${rawGenre}, ${params.bpmVibe.range} BPM, ${groove}`;
+
+  // Capa 2: Timbre Vocal (Lead o Dual)
+  const leadProfile = getFlowProfile(params.artistId);
+  const featProfile = params.featureArtistId && params.featureArtistId !== "none" ? getFlowProfile(params.featureArtistId) : null;
+  
+  let layer2Vocal = leadProfile?.sunoVocalTimbre ?? "deep male vocal, modern auto-tune";
+  if (featProfile) {
+    // Condensed dual vocal timbre
+    const leadCondensed = (leadProfile?.sunoVocalTimbre ?? "melodic male vocals").split(",")[0].trim();
+    const featCondensed = featProfile.sunoVocalTimbre.split(",")[0].trim();
+    layer2Vocal = `${leadCondensed} & ${featCondensed}, dual vocal contrast`;
+  }
+
+  // Capa 3: Instrumentación & 808s
+  const moodInstrumentMap: Record<string, string[]> = {
+    agresivo: ["distorted sliding 808", "rapid hi-hat rolls", "menacing synth"],
+    oscuro: ["dark heavy 808 sub-bass", "sinister bell melody", "sharp claps"],
+    melancolico: ["emotional sad guitar loop", "warm sliding 808", "ambient pad"],
+    introspectivo: ["lo-fi piano chords", "deep sub-bass", "crisp rimshots"],
+    flex: ["luxurious brass stabs", "clean punchy 808", "bright synth leads"],
+    fiesta: ["bouncy club synths", "energetic percussion", "punchy 808 drop"],
+    calle: ["gritty street 808 slides", "stuttering hi-hats", "dark piano riffs"],
+    romantico: ["sensual warm synth pads", "smooth 808", "subtle vocal chops"],
   };
-  const mTags = moodTags[params.moodId] ?? ["dark atmospheric"];
-  tags.push(...mTags);
 
-  const flowProfile = getFlowProfile(params.artistId);
-  if (flowProfile && flowProfile.vocalTags.length > 0) {
-    tags.push(flowProfile.vocalTags.slice(0, 2).join(" "));
+  // Merge with beatType tags if present
+  const moodKey = params.moodId.split(" ")[0].toLowerCase();
+  const baseInstruments = moodInstrumentMap[moodKey] ?? moodInstrumentMap["calle"] ?? ["punchy 808 bass", "fast hi-hat rolls", "atmospheric synth"];
+  const layer3Instruments = baseInstruments.join(", ");
+
+  // Capa 4: Mezcla & Textura
+  let layer4Mix = "crisp modern trap mix, wide stereo";
+  if (params.dirtyLevel === 3 || params.dirtyLevel === 4) {
+    layer4Mix = "raw aggressive master, overdriven 808";
+  } else if (moodKey.includes("melancolico") || moodKey.includes("introspectivo")) {
+    layer4Mix = "spacious reverb, warm master, clean transients";
+  } else if (moodKey.includes("oscuro") || moodKey.includes("agresivo")) {
+    layer4Mix = "punchy transients, distorted low-end, wide stereo";
   }
 
-  if (params.dirtyLevel === 3) {
-    tags.push("explicit delivery");
-  } else if (params.dirtyLevel === 4) {
-    tags.push("raw unfiltered vocals");
+  const layers: SunoStyleLayers = {
+    genre: layer1Genre,
+    vocal: layer2Vocal,
+    instruments: layer3Instruments,
+    mix: layer4Mix,
+  };
+
+  // Composite prompt
+  let composite = `${layers.genre}, ${layers.vocal}, ${layers.instruments}, ${layers.mix}`;
+
+  // Deduplicate tokens
+  const parts = composite.split(",").map(p => p.trim()).filter(Boolean);
+  const uniqueParts: string[] = [];
+  const seen = new Set<string>();
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      uniqueParts.push(part);
+    }
+  }
+  composite = uniqueParts.join(", ");
+
+  // Enforce 200-280 chars target
+  if (composite.length > 280) {
+    const withoutMix = uniqueParts.slice(0, -1).join(", ");
+    if (withoutMix.length <= 280 && withoutMix.length >= 180) {
+      composite = withoutMix;
+    } else if (composite.length > 280) {
+      composite = composite.substring(0, 277).replace(/,\s*[^,]*$/, "") + "...";
+    }
   }
 
-  const unique = [...new Set(tags)];
-  let result = unique.join(", ");
-  if (result.length > 200) {
-    result = result.substring(0, 197) + "...";
-  }
-  return result;
+  return {
+    prompt: composite,
+    layers,
+    charCount: composite.length,
+  };
+}
+
+/**
+ * Builds a Suno-style music prompt string from the config.
+ */
+export function buildSunoStylePrompt(params: SunoStylePromptParams): string {
+  return buildSunoStyleResult(params).prompt;
 }

@@ -46,6 +46,7 @@ Tu misión es componer EXACTAMENTE 3 VARIANTES DISTINTAS DE ESTRIBILLO (HOOK / C
 # PERFIL DEL INTÉRPRETE DEL ESTRIBILLO
 - Intérprete del Estribillo: ${singerName}
 - Estilo: ${artist?.style ?? "Trap contemporáneo"}
+- Timbre Vocal Suno: ${flowProfile?.sunoVocalTimbre ?? "melodic auto-tune delivery"}
 - Mood: ${body.moodId}
 - Spanglish objetivo: ${body.spanglishPercent}% inglés
 - Tempo: ${body.bpmRange} BPM
@@ -71,7 +72,7 @@ Devuelve EXCLUSIVAMENTE un JSON con este esquema (sin markdown, sin comentarios)
       "badge": "Repetitivo · Hypnotic",
       "icon": "🔁",
       "description": "Repetición hipnótica con cadencia pesada para reventar el club",
-      "hookText": "[Chorus: ${singerName}, Hypnotic repetitive mantra]\\nLínea 1 con ad-lib (Yeah!)\\nLínea 2...\\nLínea 3...\\nLínea 4"
+      "hookText": "[Chorus: ${singerName}, Hypnotic repetitive mantra, layered harmonies]\\nLínea 1 con ad-lib (Yeah!)\\nLínea 2...\\nLínea 3...\\nLínea 4"
     },
     {
       "id": "melodic",
@@ -79,7 +80,7 @@ Devuelve EXCLUSIVAMENTE un JSON con este esquema (sin markdown, sin comentarios)
       "badge": "Singable · Melodic",
       "icon": "🎵",
       "description": "Líneas cantables y pegadizas con notas abiertas",
-      "hookText": "[Chorus: ${singerName}, Melodic flow]\\nLínea 1...\\nLínea 2...\\nLínea 3...\\nLínea 4"
+      "hookText": "[Chorus: ${singerName}, Melodic auto-tune flow, soaring harmonics]\\nLínea 1...\\nLínea 2...\\nLínea 3...\\nLínea 4"
     },
     {
       "id": "punchy",
@@ -87,7 +88,7 @@ Devuelve EXCLUSIVAMENTE un JSON con este esquema (sin markdown, sin comentarios)
       "badge": "Street · Hard-hitting",
       "icon": "💥",
       "description": "Golpe seco, barras crudas y actitud dominante",
-      "hookText": "[Chorus: ${singerName}, Hard-hitting delivery]\\nLínea 1...\\nLínea 2...\\nLínea 3...\\nLínea 4"
+      "hookText": "[Chorus: ${singerName}, Hard-hitting punchline hook, anthemic energy]\\nLínea 1...\\nLínea 2...\\nLínea 3...\\nLínea 4"
     }
   ]
 }
@@ -129,10 +130,52 @@ REGLAS OBLIGATORIAS:
       rawText = completion.choices[0]?.message?.content ?? "";
     }
 
-    const cleaned = rawText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const parsed = JSON.parse(cleaned);
+    let variations: HookVariationOption[] = [];
+    try {
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      const jsonString = jsonMatch ? jsonMatch[0] : rawText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+      const parsed = JSON.parse(jsonString);
+      if (Array.isArray(parsed.variations) && parsed.variations.length > 0) {
+        variations = parsed.variations;
+      } else if (Array.isArray(parsed)) {
+        variations = parsed;
+      }
+    } catch (parseErr) {
+      console.warn("[hook-variations] JSON parse warning, rawText:", rawText, parseErr);
+    }
 
-    return NextResponse.json(parsed);
+    if (!variations || variations.length === 0) {
+      return NextResponse.json({
+        variations: [
+          {
+            id: "mantra",
+            title: "Mantra Hipnótico",
+            badge: "Repetitivo · Hypnotic",
+            icon: "🔁",
+            description: "Repetición hipnótica con cadencia pesada para reventar el club",
+            hookText: `[Chorus: ${singerName}, Hypnotic repetitive mantra]\nMoney en la mesa, contando de nuevo (Yeah!)\nMoney en la mesa, no paro, me muevo (Skrrt)\nTo' lo que toco lo vuelvo dinero\nMoney en la mesa, siempre de primero (Let's go!)`
+          },
+          {
+            id: "melodic",
+            title: "Melódico & Cantable",
+            badge: "Singable · Melodic",
+            icon: "🎵",
+            description: "Líneas cantables y pegadizas con notas abiertas",
+            hookText: `[Chorus: ${singerName}, Melodic auto-tune flow]\nVolando alto donde no me alcanzas tú (No, no...)\nBrillando en la noche como noche en South Beach (Yeah!)\nBaby tú sabes que me convertí en la movie\nAhora me llaman el rey de la ciudad (Oh yeah)`
+          },
+          {
+            id: "punchy",
+            title: "Punchlines Directas",
+            badge: "Street · Hard-hitting",
+            icon: "💥",
+            description: "Golpe seco, barras crudas y actitud dominante",
+            hookText: `[Chorus: ${singerName}, Hard-hitting punchline hook]\nNo llamo a nadie, yo cierro los tratos (Facts)\nDiamantes fríos, callando a los sapos (Brrr)\nNací pa' mandar, no sigo mandatos\nTodo en efectivo, directos al banco (Gang!)`
+          }
+        ]
+      });
+    }
+
+    return NextResponse.json({ variations });
   } catch (err) {
     console.error("[hook-variations] error:", err);
     return NextResponse.json(

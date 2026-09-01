@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildSystemPrompt, buildSpanglishInstruction, type LockedSection, type RegenerateSectionParams } from "@/lib/prompt-builder";
-import { MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, generateBeatPrompt, getArtistById } from "@/lib/trap-data";
+import { buildSystemPrompt, buildSpanglishInstruction, buildSunoStyleResult, type LockedSection, type RegenerateSectionParams } from "@/lib/prompt-builder";
+import { MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, BEAT_TYPES, generateBeatPrompt, getArtistById } from "@/lib/trap-data";
 import { buildCorrectionInstruction, analyzeLanguageRatio, type LanguageAnalysis } from "@/lib/language-detector";
 import { getArtistReference } from "@/lib/artist-references";
 import { generateArtistReference } from "@/lib/reference-generator";
@@ -44,6 +44,7 @@ interface GenerateBody {
   syllableSync?: boolean;
   phoneticAdlibs?: boolean;
   smartBarsMode?: boolean;
+  sunoTagsMode?: "detailed" | "minimal";
   sectionVoices?: { sectionName: string; voice: string; bars?: number; density?: "sparse" | "normal" | "dense" | "extra_dense"; repetitionPattern?: string; customKeyword?: string }[];
 }
 
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
     const narrativeArc = NARRATIVE_ARCS.find(a => a.id === body.narrativeArcId) ?? NARRATIVE_ARCS[0];
     const moodObj = MOODS.find(m => m.id === body.moodId);
     const moodId = moodObj ? `${moodObj.label} — ${moodObj.description}` : body.moodId;
+    const beatType = body.beatTypeId ? BEAT_TYPES.find(b => b.id === body.beatTypeId) : undefined;
 
     // If we have previous lyrics + autoCorrect, build the correction instruction
     let correctionInstruction: string | undefined;
@@ -125,6 +127,7 @@ export async function POST(req: NextRequest) {
       dynamicSongForm: body.dynamicSongForm,
       dirtyLevel: body.dirtyLevel,
       sectionVoices: body.sectionVoices,
+      sunoTagsMode: body.sunoTagsMode,
     });
 
     // Call the LLM via z-ai-web-dev-sdk (server-side only)
@@ -152,6 +155,18 @@ export async function POST(req: NextRequest) {
     // Generate a beat prompt (Suno/Udio-style) from the config
     const beatPrompt = generateBeatPrompt(body.artistId, body.moodId, body.bpmVibeId, body.producerId ?? "none");
 
+    // Generate Suno v4.5 4-layer style prompt
+    const sunoStyleResult = buildSunoStyleResult({
+      beatType,
+      bpmVibe,
+      moodId: body.moodId,
+      artistId: body.artistId,
+      featureArtistId: body.featureArtistId,
+      producerId: body.producerId ?? "none",
+      structureLabel: structure.label,
+      dirtyLevel: body.dirtyLevel,
+    });
+
     return NextResponse.json({
       lyrics,
       analysis,
@@ -159,6 +174,9 @@ export async function POST(req: NextRequest) {
       promptPreview: prompt.slice(0, 500) + "...",
       temperature,
       beatPrompt,
+      sunoStylePrompt: sunoStyleResult.prompt,
+      sunoLayers: sunoStyleResult.layers,
+      sunoCharCount: sunoStyleResult.charCount,
       refTrackSummary: refTrack?.summary ?? null,
     });
   } catch (err) {

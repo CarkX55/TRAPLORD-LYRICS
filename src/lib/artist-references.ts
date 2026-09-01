@@ -1071,6 +1071,38 @@ export const ARTIST_REFERENCES: Record<string, ArtistReference> = {
     verified: true,
     source: "real-knowledge",
   },
+
+  skippa_da_flippa: {
+    artistId: "skippa_da_flippa",
+    peakEra: "2015-2017 (I'm Havoc / Flippa McFadden)",
+    verseBars: [
+      "Flippin' the pack, I was trapped in the kitchen, I handle the pot with no mitten (Flippa!)",
+      "Run through the money, my diamonds they hit, look at my wrist how it glisten (Havoc!)",
+    ],
+    hookBars: [
+      "Look at the flick of the wrist, I be dabbing and flippin' the brick (Flippa!)",
+      "QC the label, we came from the bottom, now look at how heavy we lit (Skrrt!)",
+    ],
+    signatureBar: "Havoc! Skippa da Flippa, I'm jumpin' off stage with the wrist on freeze",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  pooh_shiesty: {
+    artistId: "pooh_shiesty",
+    peakEra: "2020-2021 (Shiesty Season / Back in Blood)",
+    verseBars: [
+      "In traffic with the Draco, tinted windows, keep the mask on tight (Blrrrd!)",
+      "Don't speak on what you didn't do, we really out here moving in the night (Big Shiesty)",
+    ],
+    hookBars: [
+      "Pooh Shiesty, that's my dawg, but, Pooh, you know I'm really shiesty (Blrrrd!)",
+      "Keep the glock tucked, brand new sneakers, icy chain, they cannot bite me (Blrrrd!)",
+    ],
+    signatureBar: "Blrrrd! Big Shiesty, you know how we coming, Choppa Gang in this bitch",
+    verified: true,
+    source: "real-knowledge",
+  },
 };
 
 export function getArtistReference(artistId: string): ArtistReference | null {

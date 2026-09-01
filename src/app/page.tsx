@@ -35,9 +35,9 @@ import {
   type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset, type DirtyLevel, type RepetitionPattern, type InstrumentalBreak
 } from "@/lib/trap-data";
 import type { HookVariationOption } from "@/app/api/hook-variations/route";
-import { buildSpanglishInstruction, buildSunoStylePrompt, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
+import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
 import { getFlowProfile, getCadenceLabel, type FlowProfile } from "@/lib/artist-flow-profiles";
-import { analyzeLanguageRatio, type LanguageAnalysis } from "@/lib/language-detector";
+import { analyzeLanguageRatio, analyzeSunoReadiness, type LanguageAnalysis, type SunoReadinessResult } from "@/lib/language-detector";
 import { analyzeRhymes, getRhymeGroupForLine, type RhymeAnalysis } from "@/lib/rhyme-detector";
 import { analyzeWordStats, type WordStats } from "@/lib/word-stats";
 import { diffLyrics, type DiffResult } from "@/lib/lyrics-diff";
@@ -74,15 +74,16 @@ interface Preset {
 interface HistoryEntry {
   id: string;
   timestamp: string;
+  artistId?: string;
   artistName: string;
-  moodLabel: string;
+  moodLabel?: string;
   spanglishPercent: number;
-  actualEnglishPercent: number;
-  deviation: number;
-  status: "perfect" | "close" | "off";
-  lyricsPreview: string;
+  actualEnglishPercent?: number;
+  deviation?: number;
+  status?: "perfect" | "close" | "off";
+  lyricsPreview?: string;
   fullLyrics: string;
-  analysis: LanguageAnalysis;
+  analysis?: LanguageAnalysis | null;
 }
 
 const MOOD_ICONS: Record<string, typeof Flame> = {
@@ -217,6 +218,9 @@ export default function TrapGhostPage() {
   const [dynamicSongForm, setDynamicSongForm] = useState<boolean>(true); // Phase 6 — default ON
   const [sectionVoices, setSectionVoices] = useState<SectionVoiceAssignment[]>([]);
   const [sunoStylePrompt, setSunoStylePrompt] = useState<string>("");
+  const [sunoLayers, setSunoLayers] = useState<SunoStyleLayers | null>(null);
+  const [sunoTagsMode, setSunoTagsMode] = useState<"detailed" | "minimal">("detailed");
+  const [sunoReadiness, setSunoReadiness] = useState<SunoReadinessResult | null>(null);
   // Round 12: API Key + model selector + producer name + flow profile
   const [geminiApiKey, setGeminiApiKey] = useState<string>("");
   const [geminiModel, setGeminiModel] = useState<string>("gemini-2.0-flash");
@@ -290,6 +294,7 @@ export default function TrapGhostPage() {
   }, []);
 
   const lyricsRef = useRef<HTMLDivElement>(null);
+  const hookVariationsRef = useRef<HTMLDivElement>(null);
 
   // ===== Load presets from localStorage on mount =====
   useEffect(() => {
@@ -463,6 +468,7 @@ export default function TrapGhostPage() {
       geminiModel,
       referenceTrackLyrics: refTrackOpen && refTrackLyrics.trim() ? refTrackLyrics : undefined,
       dynamicSongForm,
+      sunoTagsMode,
     };
 
     try {
@@ -473,7 +479,7 @@ export default function TrapGhostPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(configPayload),
         });
-        const promptData: { prompt?: string; spanglishLabel?: string; beatPrompt?: BeatPrompt; sunoStylePrompt?: string; temperature?: number; error?: string; refTrackSummary?: string } = await promptRes.json();
+        const promptData: { prompt?: string; spanglishLabel?: string; beatPrompt?: BeatPrompt; sunoStylePrompt?: string; sunoLayers?: SunoStyleLayers; temperature?: number; error?: string; refTrackSummary?: string } = await promptRes.json();
         if (!promptRes.ok || promptData.error) {
           throw new Error(promptData.error || "Error construyendo el prompt");
         }
@@ -508,11 +514,14 @@ export default function TrapGhostPage() {
         }
 
         const langAnalysis = analyzeLanguageRatio(newLyrics, spanglishPercent);
+        const readiness = analyzeSunoReadiness(newLyrics);
         setLyrics(newLyrics);
         setAnalysis(langAnalysis);
+        setSunoReadiness(readiness);
         setSpanglishLabel(promptData.spanglishLabel ?? "");
         if (promptData.beatPrompt) setBeatPrompt(promptData.beatPrompt);
         if (promptData.sunoStylePrompt) setSunoStylePrompt(promptData.sunoStylePrompt);
+        if (promptData.sunoLayers) setSunoLayers(promptData.sunoLayers);
         if (lockedSections.length > 0) setLockedSections([]);
 
         const moodLabel = MOODS.find(m => m.id === moodId)?.label ?? moodId;
@@ -541,7 +550,7 @@ export default function TrapGhostPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(configPayload),
       });
-      const data: GenerateResponse & { error?: string; refTrackSummary?: string } = await res.json();
+      const data: GenerateResponse & { error?: string; refTrackSummary?: string; sunoStylePrompt?: string; sunoLayers?: SunoStyleLayers } = await res.json();
       if (!res.ok || data.error) {
         throw new Error(data.error || "Error en la generación");
       }
@@ -549,11 +558,14 @@ export default function TrapGhostPage() {
       if (data.refTrackSummary) {
         setRefTrackAnalysis(data.refTrackSummary);
       }
+      const readiness = analyzeSunoReadiness(data.lyrics);
       setLyrics(data.lyrics);
       setAnalysis(data.analysis);
+      setSunoReadiness(readiness);
       setSpanglishLabel(data.spanglishLabel);
       if (data.beatPrompt) setBeatPrompt(data.beatPrompt);
-      if ((data as { sunoStylePrompt?: string }).sunoStylePrompt) setSunoStylePrompt((data as { sunoStylePrompt?: string }).sunoStylePrompt!);
+      if (data.sunoStylePrompt) setSunoStylePrompt(data.sunoStylePrompt);
+      if (data.sunoLayers) setSunoLayers(data.sunoLayers);
       if (lockedSections.length > 0) setLockedSections([]);
       const moodLabel = MOODS.find(m => m.id === moodId)?.label ?? moodId;
       const entry: HistoryEntry = {
@@ -582,7 +594,7 @@ export default function TrapGhostPage() {
       dynamicMarkers, autoCorrect, chorusLangOverride, versesLangOverride, barCountOverride,
       temperature, rhymeSchemeId, lockedSections, lyrics, regenCount, artist,
       beatTypeId, featureSimId, customIntro, collabInteraction, altVoiceAsterisks,
-      syllableSync, phoneticAdlibs, smartBarsMode, sectionVoices,
+      syllableSync, phoneticAdlibs, smartBarsMode, sectionVoices, sunoTagsMode,
       geminiApiKey, geminiModel, producerName, refTrackOpen, refTrackLyrics, dynamicSongForm]);
 
   // ===== Copy for Suno AI (Clean Bracketed Format) =====
@@ -591,11 +603,13 @@ export default function TrapGhostPage() {
     try {
       const clean = lyrics
         .replace(/^###\s*(\[[^\]]+\])/gm, "$1")
-        .replace(/^\*+Interpr[èe]te?:\s*([^*\n]+)\*+$/gim, "")
-        .replace(/^\s*[\r\n]/gm, "\n")
+        .replace(/^#{1,6}\s+/gm, "")
+        .replace(/^\*+(?:Int[ée]rprete?|Interpr[èe]te?):\s*([^*\n]+)\*+$/gim, "")
+        .replace(/^(?:Int[ée]rprete?|Interpr[èe]te?):\s*.+$/gim, "")
+        .replace(/^\s*[\r\n]{2,}/gm, "\n\n")
         .trim();
       await navigator.clipboard.writeText(clean);
-      toast.success("⚡ Letra copiada limpia (lista para Suno AI)");
+      toast.success("⚡ Letra copiada limpia con metatags (lista para Suno AI)");
     } catch {
       toast.error("No se pudo copiar");
     }
@@ -770,7 +784,7 @@ export default function TrapGhostPage() {
   // ===== Restore from history =====
   const restoreFromHistory = useCallback((entry: HistoryEntry) => {
     setLyrics(entry.fullLyrics);
-    setAnalysis(entry.analysis);
+    setAnalysis(entry.analysis ?? analyzeLanguageRatio(entry.fullLyrics, entry.spanglishPercent));
     setSpanglishLabel(buildSpanglishInstruction(entry.spanglishPercent).label);
     setHistoryOpen(false);
     toast.success(`Letra restaurada del historial (${entry.timestamp})`);
@@ -1249,18 +1263,23 @@ export default function TrapGhostPage() {
   }, [polishResult, lyrics, artist, artistId, analysis, spanglishPercent]);
 
   // ===== Hook Variations Generator (Priority 1) =====
-  const handleGenerateHookVariations = useCallback(async (targetArtist?: string) => {
+  const handleGenerateHookVariations = useCallback(async (targetArtist?: string | unknown) => {
     if (!artistId) {
       toast.error("Selecciona un artista primero");
       return;
     }
     setHookVariationsLoading(true);
     setHookVariationsOpen(true);
+
+    setTimeout(() => {
+      hookVariationsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 100);
+
     try {
       let resolvedArtistId = artistId;
       let resolvedArtistName = artist?.name ?? "Lead";
 
-      if (targetArtist && targetArtist.trim()) {
+      if (typeof targetArtist === "string" && targetArtist.trim()) {
         const cleanName = targetArtist.trim();
         const found = ARTISTS_DATA.flatMap(g => g.artists).find(
           a => a.name.toLowerCase() === cleanName.toLowerCase() || a.id === cleanName.toLowerCase()
@@ -1343,8 +1362,8 @@ export default function TrapGhostPage() {
 
   // ===== Producer Tag Generator =====
   // ===== Producer Tag Generator (Arquetipos + Contexto de Letra) =====
-  const handleProducerTag = useCallback(async (archetypeId?: string) => {
-    const archId = archetypeId ?? selectedProducerArchetype;
+  const handleProducerTag = useCallback(async (archetypeId?: string | unknown) => {
+    const archId = (typeof archetypeId === "string" ? archetypeId : undefined) ?? selectedProducerArchetype;
     setSelectedProducerArchetype(archId);
     setProducerTagLoading(true);
     setProducerTagOpen(true);
@@ -1929,8 +1948,7 @@ export default function TrapGhostPage() {
                               borderColor: dl.color,
                               backgroundColor: `${dl.color}15`,
                               color: dl.color,
-                              ringColor: `${dl.color}40`,
-                              boxShadow: `0 0 10px ${dl.color}25`
+                              boxShadow: `0 0 0 1px ${dl.color}40, 0 0 10px ${dl.color}25`
                             } : undefined}
                             title={dl.description}
                           >
@@ -2471,6 +2489,12 @@ export default function TrapGhostPage() {
                     <Switch checked={dynamicSongForm} onCheckedChange={setDynamicSongForm} />
                   </div>
 
+                  {/* Metatags Suno v4.5: Detallado vs Minimalista */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2"><Waves className="w-4 h-4 text-cyber" /><div><Label className="text-[13px] cursor-pointer">Metatags Suno-Native Detallados</Label><p className="text-[11px] text-muted-foreground">Inyecta descriptores sonoros en inglés en [Chorus], [Verse], etc.</p></div></div>
+                    <Switch checked={sunoTagsMode === "detailed"} onCheckedChange={(checked) => setSunoTagsMode(checked ? "detailed" : "minimal")} />
+                  </div>
+
                   {/* Reference Track Importer (Phase 4) — moved OUTSIDE Advanced for visibility */}
 
                   {/* Keyboard shortcuts hint */}
@@ -2827,7 +2851,7 @@ export default function TrapGhostPage() {
                     <Button variant="ghost" size="sm" onClick={() => { setPolishOpen(true); setPolishError(null); }} disabled={polishLoading} className="text-muted-foreground hover:text-cyber h-8" title="Agent Polish — 4 agentes IA revisan y mejoran la letra">
                       <Sparkles className="w-3.5 h-3.5 mr-1" />Polish
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={handleGenerateHookVariations} disabled={hookVariationsLoading} className={`h-8 ${hookVariationsOpen ? "text-amber-400 bg-amber-400/10" : "text-muted-foreground hover:text-amber-400"}`} title="⚡ Variantes de Hook — Genera 3 enfoques de estribillo (Mantra, Melódico, Punchlines)">
+                    <Button variant="ghost" size="sm" onClick={() => handleGenerateHookVariations()} disabled={hookVariationsLoading} className={`h-8 ${hookVariationsOpen ? "text-amber-400 bg-amber-400/10" : "text-muted-foreground hover:text-amber-400"}`} title="⚡ Variantes de Hook — Genera 3 enfoques de estribillo (Mantra, Melódico, Punchlines)">
                       <Sparkles className="w-3.5 h-3.5 mr-1 text-amber-400" />Hook Var
                     </Button>
                     <Button variant="ghost" size="sm" onClick={handleCritic} disabled={criticLoading} className="text-muted-foreground hover:text-yellow-400 h-8" title="Crítico de letra (feedback IA)">
@@ -2895,7 +2919,7 @@ export default function TrapGhostPage() {
                           <Video className="w-3.5 h-3.5 mr-2 text-foreground" />TikTok Script
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={handleProducerTag} disabled={producerTagLoading} className="text-xs cursor-pointer">
+                        <DropdownMenuItem onClick={() => handleProducerTag()} disabled={producerTagLoading} className="text-xs cursor-pointer">
                           <Disc3 className="w-3.5 h-3.5 mr-2 text-purple-400" />Generar Producer Tag
                         </DropdownMenuItem>
                         {history.length > 0 && (
@@ -2913,23 +2937,91 @@ export default function TrapGhostPage() {
                 )}
               </div>
 
-              {/* Suno Quick Style Prompt Banner */}
-              {lyrics && sunoStylePrompt && (
-                <div className="mb-4 px-3.5 py-2.5 rounded-lg bg-black/50 border border-cyber/30 flex items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
-                    <Sparkles className="w-3.5 h-3.5 text-cyber shrink-0" />
-                    <span className="text-muted-foreground text-[11px] shrink-0 font-medium">Suno Style:</span>
-                    <span className="text-cyber text-[11px] font-mono truncate">{sunoStylePrompt}</span>
+              {/* Suno Quick Style Prompt Banner v2 (4 Layers) */}
+              {lyrics && (
+                <div className="mb-4 p-3 rounded-lg bg-black/60 border border-cyber/40 space-y-2 text-xs animate-fade-slide">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Sparkles className="w-4 h-4 text-cyber shrink-0" />
+                      <span className="font-semibold text-foreground text-xs shrink-0">Style of Music (Suno v4.5)</span>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] font-mono shrink-0 ${
+                          sunoStylePrompt.length >= 200 && sunoStylePrompt.length <= 280
+                            ? "border-slime/50 text-slime bg-slime/10"
+                            : sunoStylePrompt.length > 280
+                            ? "border-yellow-400/50 text-yellow-400 bg-yellow-400/10"
+                            : "border-cyber/50 text-cyber bg-cyber/10"
+                        }`}
+                      >
+                        {sunoStylePrompt.length || 0}/280 chars
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const result = buildSunoStyleResult({
+                            beatType,
+                            bpmVibe,
+                            moodId,
+                            artistId,
+                            featureArtistId,
+                            producerId,
+                            structureLabel: structure.label,
+                            dirtyLevel,
+                          });
+                          setSunoStylePrompt(result.prompt);
+                          setSunoLayers(result.layers);
+                          toast.success("Style Prompt regenerado (4 capas)");
+                        }}
+                        className="border-cyber/30 hover:bg-cyber/10 hover:text-cyber h-7 px-2 text-[11px]"
+                        title="Regenerar 4 capas del Style Prompt"
+                      >
+                        <RefreshCw className="w-3 h-3 mr-1" /> Auto
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => {
+                          const textToCopy = sunoStylePrompt || buildSunoStylePrompt({ beatType, bpmVibe, moodId, artistId, featureArtistId, producerId, structureLabel: structure.label, dirtyLevel });
+                          navigator.clipboard.writeText(textToCopy);
+                          toast.success("⚡ Style of Music copiado para Suno");
+                        }}
+                        className="bg-cyber text-black hover:bg-cyber/90 h-7 px-2.5 text-[11px] font-semibold"
+                        title="Copiar prompt de estilo para el campo 'Style of Music' de Suno"
+                      >
+                        <Copy className="w-3 h-3 mr-1" /> Copiar Estilo
+                      </Button>
+                    </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => { navigator.clipboard.writeText(sunoStylePrompt); toast.success("Suno Style Prompt copiado"); }}
-                    className="border-cyber/40 text-cyber hover:bg-cyber/10 h-7 text-[11px] shrink-0 font-mono"
-                    title="Copiar prompt de estilo para Suno"
-                  >
-                    <Copy className="w-3 h-3 mr-1" /> Copiar Estilo
-                  </Button>
+
+                  {/* Live Style Prompt Text */}
+                  <div className="p-2 rounded bg-black/40 border border-white/10 font-mono text-[11px] text-cyber/90 break-words leading-relaxed select-all">
+                    {sunoStylePrompt || buildSunoStylePrompt({ beatType, bpmVibe, moodId, artistId, featureArtistId, producerId, structureLabel: structure.label, dirtyLevel })}
+                  </div>
+
+                  {/* 4-Layer Breakdown Badges */}
+                  {(() => {
+                    const activeLayers = sunoLayers ?? buildSunoStyleResult({ beatType, bpmVibe, moodId, artistId, featureArtistId, producerId, structureLabel: structure.label, dirtyLevel }).layers;
+                    return (
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        <Badge variant="outline" className="text-[10px] border-emerald-400/40 text-emerald-400 bg-emerald-400/5 flex items-center gap-1">
+                          <span>🎵 Género/BPM:</span> <span className="font-mono text-emerald-300">{activeLayers.genre}</span>
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px] border-cyan-400/40 text-cyan-400 bg-cyan-400/5 flex items-center gap-1">
+                          <span>🎤 Vocal:</span> <span className="font-mono text-cyan-300">{activeLayers.vocal}</span>
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px] border-amber-400/40 text-amber-400 bg-amber-400/5 flex items-center gap-1">
+                          <span>🎸 808/Instr:</span> <span className="font-mono text-amber-300">{activeLayers.instruments}</span>
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px] border-purple-400/40 text-purple-400 bg-purple-400/5 flex items-center gap-1">
+                          <span>🎛️ Mezcla:</span> <span className="font-mono text-purple-300">{activeLayers.mix}</span>
+                        </Badge>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -3208,7 +3300,7 @@ export default function TrapGhostPage() {
 
             {/* --- Hook Variations Panel (NEW — Priority 1) --- */}
             {hookVariationsOpen && (
-              <Card className="glass-card p-5 space-y-4 animate-fade-slide border-amber-400/40 bg-black/40">
+              <Card ref={hookVariationsRef} className="glass-card p-5 space-y-4 animate-fade-slide border-amber-400/40 bg-black/40">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-amber-400/10 border border-amber-400/30 text-amber-400">
                     <Sparkles className="w-4 h-4" />
@@ -3282,7 +3374,7 @@ export default function TrapGhostPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={handleGenerateHookVariations}
+                        onClick={() => handleGenerateHookVariations()}
                         disabled={hookVariationsLoading}
                         className="border-amber-400/40 text-amber-400 hover:bg-amber-400/10 h-8 text-xs shrink-0"
                       >
@@ -3294,7 +3386,8 @@ export default function TrapGhostPage() {
                   <div className="text-center py-6 space-y-2">
                     <p className="text-sm text-muted-foreground">Genera 3 opciones de estribillo con ganchos contrastados.</p>
                     <Button
-                      onClick={handleGenerateHookVariations}
+                      onClick={() => handleGenerateHookVariations()}
+                      disabled={hookVariationsLoading}
                       className="bg-amber-500 text-black font-semibold hover:bg-amber-400 h-9 cursor-pointer"
                     >
                       <Sparkles className="w-4 h-4 mr-2" /> Generar Variantes Ahora
@@ -3960,33 +4053,106 @@ export default function TrapGhostPage() {
               </Card>
             )}
 
-            {/* --- Suno Style Prompt Panel --- */}
+            {/* --- Suno Style Prompt Panel (v4.5 4-Layers Engine) --- */}
             {lyrics && (
               <Card className="glass-card p-5 space-y-3 animate-fade-slide">
                 <div className="flex items-center gap-2">
                   <Waves className="w-5 h-5 text-cyber" />
-                  <h2 className="font-display text-lg font-semibold">Suno Style Prompt</h2>
-                  <span className="ml-auto text-[10px] text-muted-foreground">{sunoStylePrompt.length}/1000</span>
+                  <h2 className="font-display text-lg font-semibold">Suno Style Prompt (v4.5)</h2>
+                  <Badge
+                    variant="outline"
+                    className={`ml-auto font-mono text-[10px] ${
+                      sunoStylePrompt.length >= 200 && sunoStylePrompt.length <= 280
+                        ? "border-slime/50 text-slime"
+                        : sunoStylePrompt.length > 280
+                        ? "border-yellow-400/50 text-yellow-400"
+                        : "border-cyber/50 text-cyber"
+                    }`}
+                  >
+                    {sunoStylePrompt.length}/280 chars
+                  </Badge>
                 </div>
                 <Textarea
                   value={sunoStylePrompt}
                   onChange={(e) => setSunoStylePrompt(e.target.value.slice(0, 1000))}
-                  placeholder="Style tags for Suno/Udio (auto-generated or write your own)..."
+                  placeholder="Style tags for Suno/Udio (auto-generated 4-layers or custom)..."
                   className="bg-black/40 resize-none font-mono text-[11px]"
                   rows={3}
                 />
+
+                {/* 4-Layer Breakdown Badges in Sidebar */}
+                {(() => {
+                  const activeLayers = sunoLayers ?? buildSunoStyleResult({ beatType, bpmVibe, moodId, artistId, featureArtistId, producerId, structureLabel: structure.label, dirtyLevel }).layers;
+                  return (
+                    <div className="grid grid-cols-1 gap-1.5 pt-1">
+                      <div className="flex items-center justify-between p-1.5 rounded bg-black/30 border border-emerald-400/20 text-[10px]">
+                        <span className="text-emerald-400 font-medium">1. Género & BPM</span>
+                        <span className="text-muted-foreground font-mono text-[9px] truncate max-w-[200px]">{activeLayers.genre}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-1.5 rounded bg-black/30 border border-cyan-400/20 text-[10px]">
+                        <span className="text-cyan-400 font-medium">2. Timbre Vocal</span>
+                        <span className="text-muted-foreground font-mono text-[9px] truncate max-w-[200px]">{activeLayers.vocal}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-1.5 rounded bg-black/30 border border-amber-400/20 text-[10px]">
+                        <span className="text-amber-400 font-medium">3. 808s & Producción</span>
+                        <span className="text-muted-foreground font-mono text-[9px] truncate max-w-[200px]">{activeLayers.instruments}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-1.5 rounded bg-black/30 border border-purple-400/20 text-[10px]">
+                        <span className="text-purple-400 font-medium">4. Mezcla & Textura</span>
+                        <span className="text-muted-foreground font-mono text-[9px] truncate max-w-[200px]">{activeLayers.mix}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => {
-                    const generated = buildSunoStylePrompt({ beatType, bpmVibe, moodId, artistId, producerId, structureLabel: structure.label, dirtyLevel });
-                    setSunoStylePrompt(generated);
-                    toast.success("Suno style prompt auto-generado");
+                    const result = buildSunoStyleResult({ beatType, bpmVibe, moodId, artistId, featureArtistId, producerId, structureLabel: structure.label, dirtyLevel });
+                    setSunoStylePrompt(result.prompt);
+                    setSunoLayers(result.layers);
+                    toast.success("Suno style prompt auto-generado (4 capas)");
                   }} className="border-cyber/30 hover:bg-cyber/10 hover:text-cyber h-8">
-                    <Sparkles className="w-3.5 h-3.5 mr-1" />Auto
+                    <Sparkles className="w-3.5 h-3.5 mr-1" />Auto (4 Capas)
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(sunoStylePrompt); toast.success("Suno prompt copiado"); }} className="border-cyber/30 hover:bg-cyber/10 hover:text-cyber h-8">
                     <Copy className="w-3.5 h-3.5 mr-1" />Copiar
                   </Button>
                 </div>
+              </Card>
+            )}
+
+            {/* --- Suno AI Readiness Card (0-100% Score & Checklist) --- */}
+            {lyrics && (
+              <Card className="glass-card p-5 space-y-3 animate-fade-slide">
+                {(() => {
+                  const readiness = sunoReadiness ?? analyzeSunoReadiness(lyrics);
+                  const gradeColor = readiness.score >= 90 ? "border-slime/50 text-slime bg-slime/10" : readiness.score >= 75 ? "border-cyber/50 text-cyber bg-cyber/10" : "border-yellow-400/50 text-yellow-400 bg-yellow-400/10";
+                  return (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Radio className="w-5 h-5 text-cyber animate-pulse" />
+                        <h2 className="font-display text-lg font-semibold">Suno AI Readiness</h2>
+                        <Badge variant="outline" className={`ml-auto font-mono font-bold text-xs ${gradeColor}`}>
+                          {readiness.score}% · {readiness.grade}
+                        </Badge>
+                      </div>
+                      <div className="space-y-2">
+                        {readiness.checks.map(check => (
+                          <div key={check.id} className="flex items-start gap-2.5 p-2 rounded bg-black/30 border border-white/5 text-xs">
+                            <span className="shrink-0 mt-0.5">{check.passed ? "✅" : "⚠️"}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-foreground/90">{check.name}</span>
+                                <span className="font-mono text-[10px] text-muted-foreground">{check.score}/100</span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{check.feedback}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
               </Card>
             )}
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildSystemPrompt, buildSpanglishInstruction, buildSunoStylePrompt, type LockedSection, type RegenerateSectionParams, type SectionVoiceAssignment } from "@/lib/prompt-builder";
+import { buildSystemPrompt, buildSpanglishInstruction, buildSunoStyleResult, type LockedSection, type RegenerateSectionParams, type SectionVoiceAssignment } from "@/lib/prompt-builder";
 import { MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, BEAT_TYPES, generateBeatPrompt, getArtistById } from "@/lib/trap-data";
 import { analyzeLanguageRatio, buildCorrectionInstruction } from "@/lib/language-detector";
 import { getArtistReference } from "@/lib/artist-references";
@@ -33,6 +33,7 @@ interface BuildPromptBody {
   syllableSync?: boolean;
   phoneticAdlibs?: boolean;
   smartBarsMode?: boolean;
+  sunoTagsMode?: "detailed" | "minimal";
   sectionVoices?: { sectionName: string; voice: string; bars?: number; density?: "sparse" | "normal" | "dense" | "extra_dense"; repetitionPattern?: string; customKeyword?: string }[];
   chorusLanguageOverride?: "es" | "en" | "auto";
   versesLanguageOverride?: "es" | "en" | "auto";
@@ -43,10 +44,10 @@ interface BuildPromptBody {
   regenerateSection?: RegenerateSectionParams;
   previousLyrics?: string;
   autoCorrect?: boolean;
-  geminiApiKey?: string;   // NEW — for reference generation on Vercel
-  geminiModel?: string;    // NEW
-  referenceTrackLyrics?: string;  // NEW Phase 4 — pasted reference track to extract DNA from
-  dynamicSongForm?: boolean;      // NEW Phase 6 — toggle dynamic structure
+  geminiApiKey?: string;
+  geminiModel?: string;
+  referenceTrackLyrics?: string;
+  dynamicSongForm?: boolean;
 }
 
 function resolveTopics(topicIds: string[]): string[] {
@@ -137,6 +138,7 @@ export async function POST(req: NextRequest) {
       syllableSync: body.syllableSync,
       phoneticAdlibs: body.phoneticAdlibs,
       smartBarsMode: body.smartBarsMode,
+      sunoTagsMode: body.sunoTagsMode,
       sectionVoices: body.sectionVoices,
       chorusLanguageOverride: body.chorusLanguageOverride,
       versesLanguageOverride: body.versesLanguageOverride,
@@ -154,11 +156,12 @@ export async function POST(req: NextRequest) {
 
     const spanglishInfo = buildSpanglishInstruction(body.spanglishPercent);
     const beatPrompt = generateBeatPrompt(body.artistId, body.moodId, body.bpmVibeId, body.producerId ?? "none");
-    const sunoStylePrompt = buildSunoStylePrompt({
+    const sunoStyleResult = buildSunoStyleResult({
       beatType,
       bpmVibe,
       moodId: body.moodId,
       artistId: body.artistId,
+      featureArtistId: body.featureArtistId,
       producerId: body.producerId ?? "none",
       structureLabel: structure.label,
       dirtyLevel: body.dirtyLevel,
@@ -168,7 +171,9 @@ export async function POST(req: NextRequest) {
       prompt,
       spanglishLabel: spanglishInfo.label,
       beatPrompt,
-      sunoStylePrompt,
+      sunoStylePrompt: sunoStyleResult.prompt,
+      sunoLayers: sunoStyleResult.layers,
+      sunoCharCount: sunoStyleResult.charCount,
       temperature: body.temperature ?? 0.72,
       mainRefSource: mainRef?.source ?? null,
       featRefSource: featRef?.source ?? null,

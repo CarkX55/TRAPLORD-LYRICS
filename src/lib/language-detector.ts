@@ -249,3 +249,139 @@ export function buildCorrectionInstruction(analysis: LanguageAnalysis): string {
       `termina las rimas en español, y mantén el chorus en español.`;
   }
 }
+
+export interface SunoReadinessCheck {
+  id: string;
+  name: string;
+  passed: boolean;
+  score: number; // 0 to 100
+  feedback: string;
+}
+
+export interface SunoReadinessResult {
+  score: number; // 0 to 100
+  grade: "S+" | "A" | "B" | "C" | "D";
+  checks: SunoReadinessCheck[];
+  hasMarkdownHeaders: boolean;
+  hasUnprotectedAdlibs: boolean;
+  hasLeakedMetaText: boolean;
+  bracketQuality: "perfect" | "good" | "needs_attention";
+}
+
+/**
+ * Evaluates lyrics for 100% Suno AI v4 / v4.5 audio rendering readiness.
+ */
+export function analyzeSunoReadiness(lyrics: string): SunoReadinessResult {
+  if (!lyrics || !lyrics.trim()) {
+    return {
+      score: 0,
+      grade: "D",
+      checks: [],
+      hasMarkdownHeaders: false,
+      hasUnprotectedAdlibs: false,
+      hasLeakedMetaText: false,
+      bracketQuality: "needs_attention",
+    };
+  }
+
+  const lines = lyrics.split("\n");
+  const checks: SunoReadinessCheck[] = [];
+
+  // Check 1: No Markdown Headers (### [Verse])
+  const markdownHeaderLines = lines.filter(l => /^\s*#{1,6}\s*\[?/.test(l));
+  const noMarkdownHeaders = markdownHeaderLines.length === 0;
+  checks.push({
+    id: "no_markdown",
+    name: "Sin cabeceras Markdown (###)",
+    passed: noMarkdownHeaders,
+    score: noMarkdownHeaders ? 100 : Math.max(0, 100 - markdownHeaderLines.length * 25),
+    feedback: noMarkdownHeaders
+      ? "Estructura limpia sin markdown '###' que Suno pueda cantar por error."
+      : `Se detectaron ${markdownHeaderLines.length} líneas con '###'. Suno intentará cantarlas si no se eliminan.`,
+  });
+
+  // Check 2: Brackets Structure Quality & Tags
+  const sectionBracketLines = lines.filter(l => /^\s*\[.+\]\s*$/.test(l));
+  const hasBrackets = sectionBracketLines.length >= 3;
+  const hasPerformanceHints = sectionBracketLines.some(l => l.includes(",") || l.includes(":"));
+  checks.push({
+    id: "bracket_structure",
+    name: "Estructura de Secciones [Brackets]",
+    passed: hasBrackets,
+    score: hasBrackets ? (hasPerformanceHints ? 100 : 85) : 40,
+    feedback: hasBrackets
+      ? (hasPerformanceHints
+          ? "Excelente: Secciones con etiquetas de interpretación y corchetes estándar."
+          : "Secciones delimitadas con corchetes estándar.")
+      : "Faltan etiquetas de sección entre corchetes [Intro], [Verse], [Chorus].",
+  });
+
+  // Check 3: Leaked Meta Text (e.g. "Intérprete:", "Producer Tag:", "Letra:")
+  const leakedMetaLines = lines.filter(l => 
+    /^\s*(?:Int[ée]rprete|Producer Tag|Verso \d+:|Estribillo:|Letra:|BPM:|Beat:)\s*/i.test(l) && !l.startsWith("[")
+  );
+  const noLeakedMeta = leakedMetaLines.length === 0;
+  checks.push({
+    id: "no_leaked_meta",
+    name: "Sin fugas de texto meta fuera de corchetes",
+    passed: noLeakedMeta,
+    score: noLeakedMeta ? 100 : Math.max(0, 100 - leakedMetaLines.length * 30),
+    feedback: noLeakedMeta
+      ? "Sin texto explicativo suelto que pueda ser vocalizado."
+      : `Atención: Hay ${leakedMetaLines.length} líneas con texto meta fuera de corchetes.`,
+  });
+
+  // Check 4: Ad-libs in Parentheses
+  const linesWithContent = lines.filter(l => l.trim().length > 0 && !l.startsWith("["));
+  const linesWithAdlibs = linesWithContent.filter(l => /\([A-Za-z0-9\s!'?]+\)/.test(l));
+  const hasStereoAdlibs = linesWithAdlibs.length > 0;
+  checks.push({
+    id: "stereo_adlibs",
+    name: "Ad-libs protegidos en estéreo ( )",
+    passed: hasStereoAdlibs,
+    score: hasStereoAdlibs ? 100 : 75,
+    feedback: hasStereoAdlibs
+      ? "Ad-libs entre paréntesis detectados, Suno los renderizará en los canales laterales."
+      : "No se detectaron ad-libs entre paréntesis. Añadir (Yeah!), (Brrr!) mejorará el sonido estéreo.",
+  });
+
+  // Check 5: Rhythmic Punctuation (Commas, Ellipsis)
+  const linesWithRhythmPunctuation = linesWithContent.filter(l => l.includes(",") || l.includes("...") || l.includes("—"));
+  const rhythmicRatio = linesWithContent.length > 0 ? linesWithRhythmPunctuation.length / linesWithContent.length : 0;
+  const goodRhythmPunctuation = rhythmicRatio >= 0.35;
+  checks.push({
+    id: "rhythmic_punctuation",
+    name: "Puntuación de Respiración (Comas / Pausas)",
+    passed: goodRhythmPunctuation,
+    score: Math.min(100, Math.round(rhythmicRatio * 200)),
+    feedback: goodRhythmPunctuation
+      ? "Buen uso de pausas y comas para guiar la respiración y el groove del cantante en Suno."
+      : "Añadir más comas y puntos suspensivos '...' ayudará a que Suno no atropelle las barras.",
+  });
+
+  // Calculate weighted overall score
+  const totalScore = Math.round(
+    checks[0].score * 0.25 +
+    checks[1].score * 0.25 +
+    checks[2].score * 0.20 +
+    checks[3].score * 0.15 +
+    checks[4].score * 0.15
+  );
+
+  let grade: "S+" | "A" | "B" | "C" | "D";
+  if (totalScore >= 95) grade = "S+";
+  else if (totalScore >= 85) grade = "A";
+  else if (totalScore >= 70) grade = "B";
+  else if (totalScore >= 50) grade = "C";
+  else grade = "D";
+
+  return {
+    score: totalScore,
+    grade,
+    checks,
+    hasMarkdownHeaders: !noMarkdownHeaders,
+    hasUnprotectedAdlibs: false,
+    hasLeakedMetaText: !noLeakedMeta,
+    bracketQuality: hasBrackets && hasPerformanceHints ? "perfect" : hasBrackets ? "good" : "needs_attention",
+  };
+}
