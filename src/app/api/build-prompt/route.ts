@@ -48,6 +48,9 @@ interface BuildPromptBody {
   geminiModel?: string;
   referenceTrackLyrics?: string;
   dynamicSongForm?: boolean;
+  dynamismMode?: "classic" | "vanguard";
+  adlibStyle?: "textured" | "classic" | "minimal";
+  situationalPresetId?: string;
 }
 
 function resolveTopics(topicIds: string[]): string[] {
@@ -152,6 +155,9 @@ export async function POST(req: NextRequest) {
       referenceTrack: refTrack,
       dynamicSongForm: body.dynamicSongForm,
       dirtyLevel: body.dirtyLevel,
+      dynamismMode: body.dynamismMode,
+      adlibStyle: body.adlibStyle,
+      situationalPresetId: body.situationalPresetId,
     });
 
     const spanglishInfo = buildSpanglishInstruction(body.spanglishPercent);

@@ -31,8 +31,9 @@ import {
   INSTANT_MOOD_PRESETS, getInstantMoodPresetById,
   DIRTY_LEVELS, getDirtyLevel, REPETITION_PATTERNS, getRepetitionPatternById,
   INSTRUMENTAL_BREAKS, getInstrumentalBreakById,
+  SITUATIONAL_PRESETS, getSituationalPresetById,
   getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, generateBeatPrompt,
-  type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset, type DirtyLevel, type RepetitionPattern, type InstrumentalBreak
+  type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset, type DirtyLevel, type RepetitionPattern, type InstrumentalBreak, type SituationalPreset
 } from "@/lib/trap-data";
 import type { HookVariationOption } from "@/app/api/hook-variations/route";
 import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
@@ -220,6 +221,9 @@ export default function TrapGhostPage() {
   const [sunoStylePrompt, setSunoStylePrompt] = useState<string>("");
   const [sunoLayers, setSunoLayers] = useState<SunoStyleLayers | null>(null);
   const [sunoTagsMode, setSunoTagsMode] = useState<"detailed" | "minimal">("detailed");
+  const [dynamismMode, setDynamismMode] = useState<"classic" | "vanguard">("vanguard");
+  const [adlibStyle, setAdlibStyle] = useState<"textured" | "classic" | "minimal">("textured");
+  const [situationalPresetId, setSituationalPresetId] = useState<string>("none");
   const [sunoReadiness, setSunoReadiness] = useState<SunoReadinessResult | null>(null);
   // Round 12: API Key + model selector + producer name + flow profile
   const [geminiApiKey, setGeminiApiKey] = useState<string>("");
@@ -469,6 +473,9 @@ export default function TrapGhostPage() {
       referenceTrackLyrics: refTrackOpen && refTrackLyrics.trim() ? refTrackLyrics : undefined,
       dynamicSongForm,
       sunoTagsMode,
+      dynamismMode,
+      adlibStyle,
+      situationalPresetId: situationalPresetId !== "none" ? situationalPresetId : undefined,
     };
 
     try {
@@ -595,7 +602,8 @@ export default function TrapGhostPage() {
       temperature, rhymeSchemeId, lockedSections, lyrics, regenCount, artist,
       beatTypeId, featureSimId, customIntro, collabInteraction, altVoiceAsterisks,
       syllableSync, phoneticAdlibs, smartBarsMode, sectionVoices, sunoTagsMode,
-      geminiApiKey, geminiModel, producerName, refTrackOpen, refTrackLyrics, dynamicSongForm]);
+      geminiApiKey, geminiModel, producerName, refTrackOpen, refTrackLyrics, dynamicSongForm,
+      dynamismMode, adlibStyle, situationalPresetId]);
 
   // ===== Copy for Suno AI (Clean Bracketed Format) =====
   const handleCopySuno = useCallback(async () => {
@@ -1963,6 +1971,46 @@ export default function TrapGhostPage() {
                       {getDirtyLevel(dirtyLevel).description}
                     </p>
                   </div>
+
+                  {/* Detonante Situacional / Subtexto (Show, Don't Tell) */}
+                  <div className="space-y-2 pt-3 border-t border-border/40">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <Flame className="w-3.5 h-3.5 text-amber-400" /> Detonante Situacional & Subtexto
+                      </Label>
+                      <Badge variant="outline" className={`text-[10px] gap-1 font-medium ${situationalPresetId !== "none" ? "border-amber-400/60 text-amber-400" : "text-muted-foreground border-border/40"}`}>
+                        {situationalPresetId !== "none" ? "🎬 Escena Activa" : "Libre"}
+                      </Badge>
+                    </div>
+                    <Select value={situationalPresetId} onValueChange={setSituationalPresetId}>
+                      <SelectTrigger className="bg-black/40 text-xs h-9">
+                        <SelectValue placeholder="Selecciona un conflicto situacional (opcional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">
+                          <span className="text-muted-foreground">Ninguno — Temática libre estándar</span>
+                        </SelectItem>
+                        <SelectSeparator className="bg-border/40" />
+                        {SITUATIONAL_PRESETS.map(preset => (
+                          <SelectItem key={preset.id} value={preset.id}>
+                            <span className="flex items-center gap-2">
+                              <span>{preset.badge.split(" ")[0]}</span>
+                              <span className="font-medium">{preset.title}</span>
+                              <span className="text-muted-foreground text-[10px]">· {preset.tagline}</span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {situationalPresetId !== "none" && (() => {
+                      const sp = getSituationalPresetById(situationalPresetId);
+                      return sp ? (
+                        <div className="p-2.5 rounded-md border border-amber-400/30 bg-amber-400/5 text-[11px] text-amber-200/90 leading-relaxed">
+                          <span className="font-semibold text-amber-400">{sp.badge}:</span> {sp.tagline}
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
                 </CollapsibleContent>
               </Card>
             </Collapsible>
@@ -2493,6 +2541,69 @@ export default function TrapGhostPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2"><Waves className="w-4 h-4 text-cyber" /><div><Label className="text-[13px] cursor-pointer">Metatags Suno-Native Detallados</Label><p className="text-[11px] text-muted-foreground">Inyecta descriptores sonoros en inglés en [Chorus], [Verse], etc.</p></div></div>
                     <Switch checked={sunoTagsMode === "detailed"} onCheckedChange={(checked) => setSunoTagsMode(checked ? "detailed" : "minimal")} />
+                  </div>
+
+                  {/* --- Dinamismo Profundo & Vanguardia Lírica --- */}
+                  <div className="rounded-xl border border-slime/30 bg-slime/5 p-4 space-y-3.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-slime" />
+                        <div>
+                          <Label className="text-[13px] font-semibold text-slime cursor-pointer">Modo Vanguardia (Anti-Encasillamiento)</Label>
+                          <p className="text-[11px] text-muted-foreground">Flow Switching dinámico (setting → aceleración → remate) y prohibición de checklists de palabras firma.</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={dynamismMode === "vanguard"}
+                        onCheckedChange={(checked) => setDynamismMode(checked ? "vanguard" : "classic")}
+                      />
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t border-slime/20">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <Mic className="w-3.5 h-3.5 text-slime" /> Estilo de Ad-libs (Tridimensional)
+                      </Label>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setAdlibStyle("textured")}
+                          className={`py-1.5 px-2 rounded-lg border text-center transition-all text-xs cursor-pointer ${
+                            adlibStyle === "textured"
+                              ? "border-slime bg-slime/15 text-slime font-semibold shadow-sm"
+                              : "border-border/40 bg-black/20 text-muted-foreground hover:border-border hover:text-foreground"
+                          }`}
+                        >
+                          ✨ Texturizado
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAdlibStyle("classic")}
+                          className={`py-1.5 px-2 rounded-lg border text-center transition-all text-xs cursor-pointer ${
+                            adlibStyle === "classic"
+                              ? "border-slime bg-slime/15 text-slime font-semibold shadow-sm"
+                              : "border-border/40 bg-black/20 text-muted-foreground hover:border-border hover:text-foreground"
+                          }`}
+                        >
+                          🎤 Clásico
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAdlibStyle("minimal")}
+                          className={`py-1.5 px-2 rounded-lg border text-center transition-all text-xs cursor-pointer ${
+                            adlibStyle === "minimal"
+                              ? "border-slime bg-slime/15 text-slime font-semibold shadow-sm"
+                              : "border-border/40 bg-black/20 text-muted-foreground hover:border-border hover:text-foreground"
+                          }`}
+                        >
+                          🔇 Minimal Dry
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {adlibStyle === "textured" && "Armonías secundarias cantadas, réplicas conversacionales entre dientes y silencios hiperrealistas [Pause]."}
+                        {adlibStyle === "classic" && "Ad-libs icónicos característicos del artista entre paréntesis al final de la barra."}
+                        {adlibStyle === "minimal" && "Voz principal al frente, cruda y sin pistas secundarias saturadas."}
+                      </p>
+                    </div>
                   </div>
 
                   {/* Reference Track Importer (Phase 4) — moved OUTSIDE Advanced for visibility */}

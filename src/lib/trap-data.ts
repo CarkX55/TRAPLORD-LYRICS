@@ -353,6 +353,28 @@ export const STRUCTURES: SongStructure[] = [
     { name: "Chorus", type: "chorus" },
     { name: "Outro", type: "outro" },
   ]},
+  { id: "std_beat_switch", label: "⚡ Beat Switch / 2-Part (Travis / Kendrick)", sections: [
+    { name: "Intro (Part 1 - Dark Atmosphere)", type: "intro" },
+    { name: "Verse 1 (Part 1)", type: "verse" },
+    { name: "Beat Switch / Tempo Shift", type: "instrumental" },
+    { name: "Chorus (Part 2 - Aggressive Drop)", type: "chorus" },
+    { name: "Verse 2 (Part 2 - Fast Pace)", type: "verse" },
+    { name: "Chorus (Part 2)", type: "chorus" },
+    { name: "Outro (Part 2)", type: "outro" },
+  ]},
+  { id: "std_one_take", label: "🌊 One-Take / Flujo Continuo 24 Bars (Drake / Cole)", sections: [
+    { name: "Intro", type: "intro" },
+    { name: "Continuous Verse (24 Bars Flow-Switching)", type: "verse" },
+    { name: "Outro", type: "outro" },
+  ]},
+  { id: "std_hook_drop", label: "🎯 Hook Drop / In-Medias-Res (Rage / Viral)", sections: [
+    { name: "Chorus (Instant 808 Beat Drop)", type: "chorus" },
+    { name: "Verse 1", type: "verse" },
+    { name: "Chorus", type: "chorus" },
+    { name: "Verse 2", type: "verse" },
+    { name: "Chorus", type: "chorus" },
+    { name: "Outro", type: "outro" },
+  ]},
 ];
 
 export interface InstrumentalBreak {
@@ -945,5 +967,64 @@ export const REPETITION_PATTERNS: RepetitionPattern[] = [
 export function getRepetitionPatternById(id: string): RepetitionPattern | undefined {
   return REPETITION_PATTERNS.find(p => p.id === id);
 }
+
+// ===== SITUATIONAL SUBTEXT PRESETS (CINEMATIC REALISM) =====
+export interface SituationalPreset {
+  id: string;
+  title: string;
+  badge: string;
+  tagline: string;
+  subtextPrompt: string;
+}
+
+export const SITUATIONAL_PRESETS: SituationalPreset[] = [
+  {
+    id: "paranoia_nocturna",
+    title: "Paranoia a las 4 AM",
+    badge: "👁️ Psicosis & Calle",
+    tagline: "Mirilla de la puerta, sombras en el portal y teléfonos pinchados.",
+    subtextPrompt: "SUBTEXTO CINEMATOGRÁFICO: Son las 4:00 AM. Luces apagadas, la pantalla del teléfono quemando los ojos. Sospechas constantes de teléfonos intervenidos y pasos en la escalera. La asfixia de no poder relajarte jamás a pesar del dinero acumulado.",
+  },
+  {
+    id: "hotel_vs_origen",
+    title: "Suite de Lujo vs. Vacío",
+    badge: "🏨 Contraste & Soledad",
+    tagline: "Cama king size en el hotel 5 estrellas pero la cabeza en el bloque.",
+    subtextPrompt: "SUBTEXTO CINEMATOGRÁFICO: Habitación de hotel de lujo pagada al contado, servicio de habitaciones frío sin tocar, botellas caras vacías y un silencio sepulcral. El abismo entre la abundancia material externa y el desierto emocional interior.",
+  },
+  {
+    id: "traicion_circulo",
+    title: "Traición del Círculo Íntimo",
+    badge: "🐍 Serpientes Cercanas",
+    tagline: "El que comía en tu mesa ahora murmura a tus espaldas.",
+    subtextPrompt: "SUBTEXTO CINEMATOGRÁFICO: Descubrir que alguien de tu misma sangre o infancia te vendió o envidia tu progreso en secreto. Mirar fotos viejas con rencor helado. Mantener la compostura sin gritar, calculando la distancia definitiva.",
+  },
+  {
+    id: "estudio_desgaste",
+    title: "Sesión Obsesiva de Estudio",
+    badge: "🎙️ Humo & Encierro",
+    tagline: "Café frío, ceniceros llenos y 72 horas buscando el corte perfecto.",
+    subtextPrompt: "SUBTEXTO CINEMATOGRÁFICO: Encerrados en el estudio desde hace 3 días, persianas bajadas para ignorar el sol, humo espeso, garganta seca y ojos rojos. La neurosis del perfeccionismo, la presión asfixiante de la industria y el aislamiento voluntario.",
+  },
+  {
+    id: "control_policial",
+    title: "Control Policial en la Ronda",
+    badge: "🚔 Tensión en el Asfalto",
+    tagline: "Luces rotativas detrás, el pulso a mil y nada limpio en la guantera.",
+    subtextPrompt: "SUBTEXTO CINEMATOGRÁFICO: Rodar de noche y ver los destellos azules en el retrovisor. Pulso desbocado, miradas cómplices con el copiloto, calcular cada segundo y forzar una voz serena al bajar la ventanilla con el olor delator en el coche.",
+  },
+  {
+    id: "culpa_superviviente",
+    title: "Culpa del Superviviente",
+    badge: "🕊️ Recuerdos & Deuda",
+    tagline: "Tú saliste del barrio y firmaste contratos, pero tus panas siguen dentro.",
+    subtextPrompt: "SUBTEXTO CINEMATOGRÁFICO: Estar viviendo en urbanizaciones privadas mientras recuerdas a los que quedaron presos o bajo tierra. Enviar giros a prisión sabiendo que nada borra el pasado. La pregunta que no te deja dormir: ¿por qué yo sí y ellos no?",
+  }
+];
+
+export function getSituationalPresetById(id: string): SituationalPreset | undefined {
+  return SITUATIONAL_PRESETS.find(p => p.id === id);
+}
+
 
 

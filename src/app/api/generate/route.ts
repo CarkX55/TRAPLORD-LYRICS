@@ -45,6 +45,9 @@ interface GenerateBody {
   phoneticAdlibs?: boolean;
   smartBarsMode?: boolean;
   sunoTagsMode?: "detailed" | "minimal";
+  dynamismMode?: "classic" | "vanguard";
+  adlibStyle?: "textured" | "classic" | "minimal";
+  situationalPresetId?: string;
   sectionVoices?: { sectionName: string; voice: string; bars?: number; density?: "sparse" | "normal" | "dense" | "extra_dense"; repetitionPattern?: string; customKeyword?: string }[];
 }
 
@@ -128,6 +131,9 @@ export async function POST(req: NextRequest) {
       dirtyLevel: body.dirtyLevel,
       sectionVoices: body.sectionVoices,
       sunoTagsMode: body.sunoTagsMode,
+      dynamismMode: body.dynamismMode,
+      adlibStyle: body.adlibStyle,
+      situationalPresetId: body.situationalPresetId,
     });
 
     // Call the LLM via z-ai-web-dev-sdk (server-side only)

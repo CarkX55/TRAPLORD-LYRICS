@@ -1,4 +1,4 @@
-import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, getDirtyLevel, getRepetitionPatternById, type SongStructure, type BpmVibe, type BeatType } from "./trap-data";
+import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, getDirtyLevel, getRepetitionPatternById, getSituationalPresetById, type SongStructure, type BpmVibe, type BeatType } from "./trap-data";
 import { getFlowProfile, getBreathInstruction, getCadenceLabel, type FlowProfile } from "./artist-flow-profiles";
 import { getArtistReference, type ArtistReference } from "./artist-references";
 import type { TrackAnalysis } from "./track-analyzer";
@@ -75,6 +75,9 @@ export interface PromptParams {
   referenceTrack?: TrackAnalysis | null;
   dynamicSongForm?: boolean;
   sunoTagsMode?: "detailed" | "minimal";
+  dynamismMode?: "classic" | "vanguard";
+  adlibStyle?: "textured" | "classic" | "minimal";
+  situationalPresetId?: string;
 }
 
 export function getSunoSectionHint(
@@ -203,7 +206,11 @@ export function buildSystemPrompt(params: PromptParams): string {
       }
 
       if (s.type === "instrumental") {
-        lines.push(`[${s.name}] — 🚫 NO LYRICS (Solo de producción instrumental para Suno AI)`);
+        if (s.name.toLowerCase().includes("beat switch")) {
+          lines.push(`[${s.name}: Dramatic tempo & key shift, pitch-shifted sliding 808s, half-time rhythm breakdown] — 🚫 NO LYRICS (Cambio radical de producción y tempo para Suno AI)`);
+        } else {
+          lines.push(`[${s.name}] — 🚫 NO LYRICS (Solo de producción instrumental para Suno AI)`);
+        }
         return lines;
       }
 
@@ -238,7 +245,9 @@ export function buildSystemPrompt(params: PromptParams): string {
       }
 
       let bars: string;
-      if (voiceAssign?.bars && voiceAssign.bars > 0) {
+      if (s.name.toLowerCase().includes("continuous verse")) {
+        bars = "24-32 barras (Flujo continuo de estudio con Flow Switching dinámico cada 8 compases, sin estribillos)";
+      } else if (voiceAssign?.bars && voiceAssign.bars > 0) {
         bars = `${voiceAssign.bars} barras`;
       } else if (params.barCountOverride && isVerse) {
         bars = `${params.barCountOverride} barras`;
@@ -252,13 +261,16 @@ export function buildSystemPrompt(params: PromptParams): string {
       }
 
       let dynamicNote = "";
+      if (s.name.toLowerCase().includes("instant 808 beat drop") || s.name.toLowerCase().includes("instant beat drop")) {
+        dynamicNote += " (Entrada inmediata con el drop de bajo 808 sin intro previa)";
+      }
       if (useDynamicForm) {
         if ((songFormStyle === "expanding_chorus" || songFormStyle === "hybrid") && isChorus && chorusIdx > 1) {
-          dynamicNote = ` (Chorus expansivo: añade variaciones nuevas y ad-libs)`;
+          dynamicNote += ` (Chorus expansivo: añade variaciones nuevas y ad-libs)`;
         }
         if (songFormStyle === "variable_verse" && isVerse) {
-          if (verseIdx === 1) dynamicNote = " (Verso 1 narrativo y descriptivo)";
-          else if (verseIdx === 2) dynamicNote = " (Verso 2 rápido y agresivo)";
+          if (verseIdx === 1) dynamicNote += " (Verso 1 narrativo y descriptivo)";
+          else if (verseIdx === 2) dynamicNote += " (Verso 2 rápido y agresivo)";
         }
       }
 
@@ -322,6 +334,15 @@ export function buildSystemPrompt(params: PromptParams): string {
     narrativeBlock = `\n# 📖 ARCO NARRATIVO\n${params.narrativeArcDesc}`;
   }
 
+  // Situational subtext block (Cinematic realism)
+  let situationalBlock = "";
+  if (params.situationalPresetId && params.situationalPresetId !== "none") {
+    const sitPreset = getSituationalPresetById(params.situationalPresetId);
+    if (sitPreset) {
+      situationalBlock = `\n# 🎬 CONFLICTO SITUACIONAL & SUBTEXTO (SHOW, DON'T TELL)\n**Escenario**: ${sitPreset.title} (${sitPreset.badge})\n${sitPreset.subtextPrompt}\n*REGLA CINEMATOGRÁFICA:* No expliques el conflicto de forma genérica. Desarróllalo mediante acciones físicas, micro-detalles en la habitación, llamadas sin contestar y tensión psicológica real.`;
+    }
+  }
+
   // Dictionary
   let dictionaryBlock = "";
   if (params.customDictionary.trim()) {
@@ -338,6 +359,17 @@ export function buildSystemPrompt(params: PromptParams): string {
     if (featureFlowProfile && featureArtist) {
       cadenceBlock += `\n- **Cadencia del Feature (${featureArtist.name})**: ${getCadenceLabel(featureFlowProfile.cadence)} — ${featureFlowProfile.cadenceInstruction}`;
     }
+  }
+
+  // Flow Switching Dynamics
+  const isVanguard = params.dynamismMode !== "classic";
+  let flowSwitchingBlock = "";
+  if (isVanguard) {
+    flowSwitchingBlock = `\n# 🔄 FLOW SWITCHING DINÁMICO DENTRO DEL VERSO (MICROMOVIMIENTOS DE ESTUDIO)
+Los versos NO deben tener un ritmo monótono ni la misma cadencia estática de principio a fin. En cada verso de 8 a 16 barras, ejecuta una progresión dinámica en 3 movimientos:
+1. **Barras 1 a 4 (Pacing & Atmósfera):** Cadencia pausada, frases con espacio y aire, silencios, establece la escena y el tono con calma amenazante o reflexiva.
+2. **Barras 5 a 8 (Shift Rítmico & Aceleración):** CAMBIA DE MARCHA. Introduce síncopa rápida, triplets (tresillos) o rimas internas continuas. Sube la densidad de sílabas por compás para inyectar adrenalina y tensión.
+3. **Barras 9 a 12/16 (Tensión, Espacio & Punchline Payoff):** Vuelve a abrir espacio, reduce la velocidad con golpes secos y pausas marcadas '[Pause]', rematando con el punchline más pesado que catapulte directamente hacia el Chorus.`;
   }
 
   // Reference bars (Few-Shot Peak Era)
@@ -378,7 +410,7 @@ export function buildSystemPrompt(params: PromptParams): string {
     producerBlock = `\n# 🎛️ PRODUCER TAG\nInserta este producer tag al inicio del [Intro]: "${params.producerTag.trim()}"`;
   }
 
-  // Ad-libs rules
+  // Ad-libs rules & Textured Ad-libs
   let adlibsBlock = "";
   const adlibsStyle: string[] = [];
   if (artist?.adlibs && artist.adlibs.length > 0) {
@@ -387,8 +419,24 @@ export function buildSystemPrompt(params: PromptParams): string {
   if (featureArtist?.adlibs && featureArtist.adlibs.length > 0) {
     adlibsStyle.push(`${featureArtist.name}: ${featureArtist.adlibs.map(a => `(${a})`).join(" ")}`);
   }
-  if (adlibsStyle.length > 0) {
-    adlibsBlock = `\n# 🗣️ AD-LIBS NATIVOS PARA SUNO\nEjemplos icónicos:\n${adlibsStyle.join("\n")}\nREGLAS DE AD-LIBS:\n1. Ad-libs SIEMPRE entre paréntesis: (Yeah!), (Brrr!), (Let's go!). Suno los ubicará automáticamente como pistas de fondo en estéreo.\n2. ESPACIO Y AIRE: Máximo 1 ad-lib cada 2 o 3 barras. Deja que la voz principal respire, no satures cada línea.\n3. CONTEXTO: El ad-lib debe responder al remate de la barra previa.`;
+
+  const adlibMode = params.adlibStyle ?? "textured";
+  if (adlibMode === "minimal") {
+    adlibsBlock = `\n# 🗣️ AD-LIBS: MODO VOCAL LIMPIA (MINIMAL NATIVE)
+- Mínimos ad-libs en toda la canción (máximo 1 o 2 en todo el verso, solo en los remates más fuertes).
+- Deja la voz principal completamente al frente, cruda, íntima y sin distracciones.`;
+  } else if (adlibMode === "textured") {
+    adlibsBlock = `\n# 🗣️ AD-LIBS TRIDIMENSIONALES & TEXTURIZADOS (SUNO NATIVE)
+Los ad-libs NO son solo muletillas aisladas al final de la barra. Distribuye ad-libs con estas 3 funciones dinámicas:
+1. **Armonías y Colas Melódicas de Fondo:** Palabras en eco o frases secundarias cantadas que completan el final de la barra: *(no me busques...)*, *(uh-uh)*, *(sola)*, *(dime dónde)*.
+2. **Puntuación Conversacional & Cínica:** Comentarios entre dientes, susurros o réplicas en voz baja: *(¿quién si no?)*, *(nah)*, *(olvídalo)*, *(dime)*, *(por qué)*.
+3. **Pausas y Textura Vocal:** Inserta silencios rítmicos '[Pause]' antes de una entrada contundente y '[Breath]' para que Suno genere pausas y respiraciones hiperrealistas.
+*REGLA DE ORO:* Los ad-libs firma icónicos (${adlibsStyle.join(", ") || "(Yeah)"}) úsalos de forma selectiva y estratégica (máximo 1 o 2 veces en toda la canción) para que golpeen con verdadero peso y sorpresa, NUNCA en cada compás.`;
+  } else {
+    // classic
+    if (adlibsStyle.length > 0) {
+      adlibsBlock = `\n# 🗣️ AD-LIBS NATIVOS PARA SUNO\nEjemplos icónicos:\n${adlibsStyle.join("\n")}\nREGLAS DE AD-LIBS:\n1. Ad-libs SIEMPRE entre paréntesis: (Yeah!), (Brrr!), (Let's go!). Suno los ubicará automáticamente como pistas de fondo en estéreo.\n2. ESPACIO Y AIRE: Máximo 1 ad-lib cada 2 o 3 barras. Deja que la voz principal respire, no satures cada línea.\n3. CONTEXTO: El ad-lib debe responder al remate de la barra previa.`;
+    }
   }
 
   const dirty = getDirtyLevel(params.dirtyLevel ?? 2);
@@ -398,9 +446,9 @@ export function buildSystemPrompt(params: PromptParams): string {
 
 # 🧠 PROTOCOLO DE RAZONAMIENTO INTERNO (THINKING PROTOCOL)
 Antes de redactar la letra definitiva, utiliza tus tokens de razonamiento interno para completar estas 4 fases:
-1. **Fase 1 (Concepto & Punchlines):** Define el concepto central, el hook melódico y el remate (punchline/payoff) de cada estrofa primero.
-2. **Fase 2 (Backtracking & Arquitectura de Rimas):** Establece los fonemas de rima objetivo (asonante/consonante) y construye las barras 1, 2 y 3 hacia el remate, asegurando que cada compás tenga entre 8 y 11 sílabas naturales.
-3. **Fase 3 (Filtro Antiparodia & Anti-Clichés Blacklist):** Evalúa críticamente cada barra contra la **Lista Negra de Clichés**. ¿Suena a canción real de trap o parece una parodia/caricatura forzada? Si alguna frase suena a cliché genérico de IA (ej: "el asfalto no perdona", "fuego/juego", "stacking paper to the ceiling"), DESCÁRTALA y reescríbela con detalles visuales concretos, marcas, jerga contemporánea y peso de calle real.
+1. **Fase 1 (Concepto, Subtexto & Punchlines):** Define el concepto central, el hook melódico y el remate (punchline/payoff) de cada estrofa primero. Conecta con el subtexto psicológico y el conflicto de la escena.
+2. **Fase 2 (Backtracking, Flow Switching & Rimas):** Establece los fonemas de rima objetivo (asonante/consonante) y construye las barras hacia el remate, asegurando la progresión rítmica del verso (pacing inicial → aceleración/shift → remate).
+3. **Fase 3 (Filtro Antiparodia, Anti-Checklist & Anti-Clichés):** Evalúa críticamente cada barra contra la **Lista Negra de Clichés** y el **Filtro Anti-Encasillamiento**. ¿Suena a canción real de trap de estudio o parece una caricatura forzada que abusa de palabras firma repetidas? Si alguna frase suena a cliché genérico de IA o sobreutiliza muletillas del artista, DESCÁRTALA y reescríbela con detalles visuales concretos, marcas, jerga contemporánea y peso de calle real.
 4. **Fase 4 (Emisión Suno-Native):** Emite únicamente la letra estructurada con etiquetas entre corchetes [Section: Artist, Performance Hint], limpia y lista para Suno.
 
 # 🎤 IDENTIDAD & ESTILO
@@ -410,10 +458,12 @@ ${featureArtist ? `- **Feature**: ${featureArtist.name} (${featureArtist.origin}
 - **BPM & Vibra**: ${params.bpmVibe.range} BPM (${params.bpmVibe.label}).
 - **Temática**: ${topicBlock}
 ${dirtyBlock}
+${situationalBlock}
 ${narrativeBlock}
 ${dictionaryBlock}
 ${producerBlock}
 ${cadenceBlock}
+${flowSwitchingBlock}
 ${referenceBlock}
 ${featureReferenceBlock}
 ${adlibsBlock}
@@ -424,6 +474,12 @@ ${rhymeLevelInstruction}
 - **Puntuación Rítmica**: Utiliza comas ',' y puntos suspensivos '...' para marcar los silencios y respiraciones del cantante.
 - **Rimas Orgánicas**: Rimas AABB o ABAB fluidas.
 - **Prohibido**: JAMÁS menciones el nombre real o apodo de ningún artista en la letra cantada a menos que sea un ad-lib propio.
+
+# 🚫 FILTRO ANTI-ENCASILLAMIENTO & DIVERSIFICACIÓN LÉXICA (ANTI-CHECKLIST)
+1. **PROHIBIDO EL CHECKLISTING:** No trates los ad-libs, jerga o temas del artista como una lista de tareas obligatorias. Queda terminantemente prohibido inundar la letra con palabras cliché asociadas al artista (ej: abusar de "codeína", "percs", "sauce", "vamp", "slatt", "real hasta la muerte", "glock").
+2. **LÍMITE DE PALABRAS FIRMA:** Cada término firma o ad-lib icónico solo puede aparecer como MÁXIMO 1 o 2 veces en TODA la canción como golpe de efecto sorpresa, NUNCA como muletilla constante en cada compás.
+3. **PRIORIDAD AL FLOW Y LA ACTITUD:** Imita la psicología, la tensión vocal, la forma de arrastrar las vocales o golpear las consonantes y la sintaxis callejera real del artista, NO sus 4 accesorios de atrezo más gastados.
+4. **NO REPETICIÓN ENTRE ESTROFAS:** Si usas una metáfora, marca de coche o prenda en el Verso 1, queda prohibido repetirla en el Verso 2. Varía el vocabulario, las acciones y las imágenes en cada sección.
 
 # 🚫 LISTA NEGRA DE CLICHÉS & FRASES PROHIBIDAS (ANTI-TROPES FILTER)
 Queda ESTRICTAMENTE PROHIBIDO usar las siguientes frases hechas, rimas baratas y fórmulas artificiales que delatan texto generado por IA. Sustitúyelas por imágenes callejeras concretas, marcas, acciones reales y jerga contemporánea:
