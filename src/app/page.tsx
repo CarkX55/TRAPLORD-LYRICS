@@ -1684,13 +1684,29 @@ export default function TrapGhostPage() {
                           localStorage.setItem("gemini_api_key", geminiApiKey.trim());
                           localStorage.setItem("gemini_model", geminiModel);
                           localStorage.setItem("producer_name", producerName);
-                          toast.success("API Key guardada");
+                          toast.success("API Key guardada en este navegador");
                           if (geminiApiKey.trim()) fetchGeminiModels(geminiApiKey);
                         } catch { toast.error("No se pudo guardar"); }
-                      }} className="border-slime/30 hover:bg-slime/10 hover:text-slime shrink-0">
+                      }} className="border-slime/30 hover:bg-slime/10 hover:text-slime shrink-0" title="Guardar en localStorage">
                         <Save className="w-3.5 h-3.5" />
                       </Button>
+                      {geminiApiKey && (
+                        <Button variant="outline" size="sm" onClick={() => {
+                          try {
+                            localStorage.removeItem("gemini_api_key");
+                            setGeminiApiKey("");
+                            setAvailableModels([]);
+                            toast.success("API Key eliminada de tu navegador local");
+                          } catch { toast.error("No se pudo eliminar"); }
+                        }} className="border-red-500/30 hover:bg-red-500/10 hover:text-red-400 shrink-0" title="Borrar de localStorage">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                     </div>
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1.5 pt-1">
+                      <Lock className="w-3 h-3 text-slime shrink-0" />
+                      <span>Almacenamiento 100% privado: Se guarda únicamente en el <strong>localStorage</strong> de tu navegador local. Jamás se sube a GitHub ni queda en el código fuente.</span>
+                    </p>
                   </div>
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
