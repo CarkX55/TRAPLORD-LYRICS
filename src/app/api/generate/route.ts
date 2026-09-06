@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildSystemPrompt, buildSpanglishInstruction, buildSunoStyleResult, type LockedSection, type RegenerateSectionParams } from "@/lib/prompt-builder";
-import { MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, BEAT_TYPES, generateBeatPrompt, getArtistById } from "@/lib/trap-data";
+import { MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, BEAT_TYPES, generateBeatPrompt, getArtistById, type SongSection, type SongStructure } from "@/lib/trap-data";
 import { buildCorrectionInstruction, analyzeLanguageRatio, type LanguageAnalysis } from "@/lib/language-detector";
 import { getArtistReference } from "@/lib/artist-references";
 import { generateArtistReference } from "@/lib/reference-generator";
@@ -19,6 +19,7 @@ interface GenerateBody {
   spanglishPercent: number;
   bpmVibeId: string;
   structureId: string;
+  customSections?: SongSection[];
   narrativeArcId: string;
   producerId?: string;
   producerTag: string;
@@ -77,7 +78,9 @@ export async function POST(req: NextRequest) {
 
     // Resolve referenced entities
     const bpmVibe = BPM_VIBES.find(b => b.id === body.bpmVibeId) ?? BPM_VIBES[5];
-    const structure = STRUCTURES.find(s => s.id === body.structureId) ?? STRUCTURES[0];
+    const structure: SongStructure = body.customSections && body.customSections.length > 0
+      ? { id: "custom", label: "Estructura Personalizada", sections: body.customSections }
+      : (STRUCTURES.find(s => s.id === body.structureId) ?? STRUCTURES[0]);
     const narrativeArc = NARRATIVE_ARCS.find(a => a.id === body.narrativeArcId) ?? NARRATIVE_ARCS[0];
     const moodObj = MOODS.find(m => m.id === body.moodId);
     const moodId = moodObj ? `${moodObj.label} — ${moodObj.description}` : body.moodId;
@@ -109,6 +112,7 @@ export async function POST(req: NextRequest) {
       customTopic: body.customTopic,
       spanglishPercent: body.spanglishPercent,
       bpmVibe,
+      beatType,
       structure,
       narrativeArcId: body.narrativeArcId,
       narrativeArcDesc: narrativeArc.description,
@@ -117,6 +121,13 @@ export async function POST(req: NextRequest) {
       producerName: body.producerName,
       customDictionary: body.customDictionary,
       dynamicMarkers: body.dynamicMarkers,
+      featureSimId: body.featureSimId,
+      customIntro: body.customIntro,
+      collabInteraction: body.collabInteraction,
+      altVoiceAsterisks: body.altVoiceAsterisks,
+      syllableSync: body.syllableSync,
+      phoneticAdlibs: body.phoneticAdlibs,
+      smartBarsMode: body.smartBarsMode,
       chorusLanguageOverride: body.chorusLanguageOverride,
       versesLanguageOverride: body.versesLanguageOverride,
       barCountOverride: body.barCountOverride,

@@ -23,7 +23,8 @@ import {
   Lock, Unlock, GitCompare, Waves, Mic, Type,
   RefreshCw, Share2, Link2, Shuffle, BarChart3, Clock, TrendingUp,
   MessageSquare, Award, AlertCircle, Lightbulb, AudioLines, Music2,
-  Image, Star, Quote, Instagram, Twitter, Video, ListMusic, Radio, Key
+  Image, Star, Quote, Instagram, Twitter, Video, ListMusic, Radio, Key,
+  Plus, ArrowUp, ArrowDown, X, Layers
 } from "lucide-react";
 import {
   ARTISTS_DATA, MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, PRODUCERS, RHYME_SCHEMES,
@@ -32,8 +33,10 @@ import {
   DIRTY_LEVELS, getDirtyLevel, REPETITION_PATTERNS, getRepetitionPatternById,
   INSTRUMENTAL_BREAKS, getInstrumentalBreakById,
   SITUATIONAL_PRESETS, getSituationalPresetById,
+  SECTION_TEMPLATES,
   getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, generateBeatPrompt,
-  type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset, type DirtyLevel, type RepetitionPattern, type InstrumentalBreak, type SituationalPreset
+  type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset, type DirtyLevel, type RepetitionPattern, type InstrumentalBreak, type SituationalPreset,
+  type SongSection, type SongStructure, type SectionTemplate
 } from "@/lib/trap-data";
 import type { HookVariationOption } from "@/app/api/hook-variations/route";
 import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
@@ -67,6 +70,7 @@ interface Preset {
   mood: string;
   bpm: string;
   structure: string;
+  customSections?: SongSection[];
   spanglish: number;
   topics: string[];
   label: string;
@@ -163,6 +167,8 @@ export default function TrapGhostPage() {
   const [spanglishPercent, setSpanglishPercent] = useState<number>(50);
   const [bpmVibeId, setBpmVibeId] = useState<string>("bpm_trap_standard");
   const [structureId, setStructureId] = useState<string>("std_basic");
+  const [customSections, setCustomSections] = useState<SongSection[]>(STRUCTURES[0].sections);
+  const [isCustomStructure, setIsCustomStructure] = useState<boolean>(false);
   const [narrativeArcId, setNarrativeArcId] = useState<string>("none");
   const [producerTag, setProducerTag] = useState<string>("");
   const [producerId, setProducerId] = useState<string>("none");
@@ -374,7 +380,80 @@ export default function TrapGhostPage() {
   const artist = useMemo(() => getArtistById(artistId), [artistId]);
   const featureArtist = useMemo(() => featureArtistId && featureArtistId !== "none" ? getArtistById(featureArtistId) : null, [featureArtistId]);
   const bpmVibe = useMemo(() => BPM_VIBES.find(b => b.id === bpmVibeId) ?? BPM_VIBES[5], [bpmVibeId]);
-  const structure = useMemo(() => STRUCTURES.find(s => s.id === structureId) ?? STRUCTURES[0], [structureId]);
+  const structure = useMemo<SongStructure>(() => {
+    if (isCustomStructure) {
+      return { id: "custom", label: "✨ Personalizada", sections: customSections };
+    }
+    const found = STRUCTURES.find(s => s.id === structureId) ?? STRUCTURES[0];
+    return { ...found, sections: customSections };
+  }, [isCustomStructure, structureId, customSections]);
+
+  // Structure Customization Handlers
+  const handleSelectPresetStructure = useCallback((id: string) => {
+    setStructureId(id);
+    const found = STRUCTURES.find(s => s.id === id);
+    if (found) {
+      setCustomSections([...found.sections]);
+      setIsCustomStructure(false);
+    }
+  }, []);
+
+  const handleAddSection = useCallback((template: SectionTemplate) => {
+    setCustomSections(prev => {
+      const countOfType = prev.filter(s => s.type === template.type).length;
+      let name = template.defaultName;
+      if (template.type === "verse") {
+        name = `Verse ${countOfType + 1}`;
+      } else if (countOfType > 0) {
+        name = `${template.defaultName} ${countOfType + 1}`;
+      }
+      const newSection: SongSection = { name, type: template.type };
+
+      if (template.defaultBars > 0) {
+        setSectionVoices(vPrev => {
+          if (vPrev.some(p => p.sectionName === name)) return vPrev;
+          return [...vPrev, { sectionName: name, voice: "auto", bars: template.defaultBars }];
+        });
+      }
+      toast.success(`Sección "${name}" añadida`);
+      return [...prev, newSection];
+    });
+    setIsCustomStructure(true);
+  }, []);
+
+  const handleRemoveSection = useCallback((index: number) => {
+    setCustomSections(prev => {
+      if (prev.length <= 1) {
+        toast.error("La canción debe tener al menos una sección");
+        return prev;
+      }
+      const removed = prev[index];
+      setSectionVoices(vPrev => vPrev.filter(p => p.sectionName !== removed.name));
+      toast.success(`Sección "${removed.name}" eliminada`);
+      return prev.filter((_, i) => i !== index);
+    });
+    setIsCustomStructure(true);
+  }, []);
+
+  const handleMoveSection = useCallback((index: number, direction: "up" | "down") => {
+    setCustomSections(prev => {
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+      const copy = [...prev];
+      const temp = copy[index];
+      copy[index] = copy[targetIndex];
+      copy[targetIndex] = temp;
+      return copy;
+    });
+    setIsCustomStructure(true);
+  }, []);
+
+  const handleResetStructure = useCallback(() => {
+    const found = STRUCTURES.find(s => s.id === structureId) ?? STRUCTURES[0];
+    setCustomSections([...found.sections]);
+    setIsCustomStructure(false);
+    toast.success(`Estructura restablecida a "${found.label}"`);
+  }, [structureId]);
   const beatType = useMemo(() => beatTypeId ? getBeatTypeById(beatTypeId) : undefined, [beatTypeId]);
   const featureSim = useMemo(() => getFeatureSimById(featureSimId) ?? FEATURE_SIMS[0], [featureSimId]);
   const flowProfile = useMemo(() => artistId ? getFlowProfile(artistId) : null, [artistId]);
@@ -446,6 +525,7 @@ export default function TrapGhostPage() {
       bpmVibeId,
       beatTypeId: beatTypeId || undefined,
       structureId,
+      customSections: isCustomStructure || customSections.length > 0 ? customSections : undefined,
       narrativeArcId,
       producerId,
       producerTag,
@@ -603,7 +683,7 @@ export default function TrapGhostPage() {
       beatTypeId, featureSimId, customIntro, collabInteraction, altVoiceAsterisks,
       syllableSync, phoneticAdlibs, smartBarsMode, sectionVoices, sunoTagsMode,
       geminiApiKey, geminiModel, producerName, refTrackOpen, refTrackLyrics, dynamicSongForm,
-      dynamismMode, adlibStyle, situationalPresetId]);
+      dynamismMode, adlibStyle, situationalPresetId, customSections, isCustomStructure]);
 
   // ===== Copy for Suno AI (Clean Bracketed Format) =====
   const handleCopySuno = useCallback(async () => {
@@ -959,6 +1039,8 @@ export default function TrapGhostPage() {
     setMoodId(randomMood.id);
     setBpmVibeId(randomBpm.id);
     setStructureId(randomStructure.id);
+    setCustomSections([...randomStructure.sections]);
+    setIsCustomStructure(false);
     setNarrativeArcId(randomArc.id);
     setProducerId(randomProducer.id);
     setProducerTag(randomProducer.tag || "");
@@ -996,6 +1078,7 @@ export default function TrapGhostPage() {
           spanglishPercent,
           bpmVibeId,
           structureId,
+          customSections: isCustomStructure || customSections.length > 0 ? customSections : undefined,
           narrativeArcId,
           producerId,
           producerTag,
@@ -1033,13 +1116,14 @@ export default function TrapGhostPage() {
   }, [artistId, featureArtistId, moodId, selectedTopics, customTopic, spanglishPercent,
       bpmVibeId, structureId, narrativeArcId, producerId, producerTag, customDictionary,
       dynamicMarkers, chorusLangOverride, versesLangOverride, barCountOverride,
-      rhymeSchemeId, temperature, lyrics]);
+      rhymeSchemeId, temperature, lyrics, customSections, isCustomStructure]);
 
   // ===== Share URL (encode config into URL hash) =====
   const handleShareUrl = useCallback(() => {
     const config = {
       a: artistId, f: featureArtistId, m: moodId, t: selectedTopics,
       ct: customTopic, sp: spanglishPercent, bpm: bpmVibeId, st: structureId,
+      csec: isCustomStructure ? customSections : undefined,
       na: narrativeArcId, p: producerId, pt: producerTag, cd: customDictionary,
       dm: dynamicMarkers, cl: chorusLangOverride, vl: versesLangOverride,
       bc: barCountOverride, rs: rhymeSchemeId, tp: temperature,
@@ -1055,7 +1139,7 @@ export default function TrapGhostPage() {
   }, [artistId, featureArtistId, moodId, selectedTopics, customTopic, spanglishPercent,
       bpmVibeId, structureId, narrativeArcId, producerId, producerTag, customDictionary,
       dynamicMarkers, chorusLangOverride, versesLangOverride, barCountOverride,
-      rhymeSchemeId, temperature]);
+      rhymeSchemeId, temperature, customSections, isCustomStructure]);
 
   // ===== Load config from URL hash on mount =====
   useEffect(() => {
@@ -1073,6 +1157,10 @@ export default function TrapGhostPage() {
       if (config.sp !== undefined) setSpanglishPercent(config.sp);
       if (config.bpm) setBpmVibeId(config.bpm);
       if (config.st) setStructureId(config.st);
+      if (config.csec && Array.isArray(config.csec)) {
+        setCustomSections(config.csec);
+        setIsCustomStructure(true);
+      }
       if (config.na) setNarrativeArcId(config.na);
       if (config.p) setProducerId(config.p);
       if (config.pt !== undefined) setProducerTag(config.pt);
@@ -1566,6 +1654,7 @@ export default function TrapGhostPage() {
       mood: moodId,
       bpm: bpmVibeId,
       structure: structureId,
+      customSections: isCustomStructure ? customSections : undefined,
       spanglish: spanglishPercent,
       topics: selectedTopics,
       label: `${artist?.name ?? "Libre"} · ${structure.label.split(" ")[0]} · ${spanglishPercent}%EN`,
@@ -1574,13 +1663,23 @@ export default function TrapGhostPage() {
     setPresets(updated);
     try { localStorage.setItem("trapghost_presets", JSON.stringify(updated)); } catch {}
     toast.success("Preset guardado");
-  }, [artistId, moodId, bpmVibeId, structureId, spanglishPercent, selectedTopics, presets, artist, structure]);
+  }, [artistId, moodId, bpmVibeId, structureId, spanglishPercent, selectedTopics, presets, artist, structure, customSections, isCustomStructure]);
 
   const loadPreset = useCallback((p: Preset) => {
     setArtistId(p.artist);
     setMoodId(p.mood);
     setBpmVibeId(p.bpm);
     setStructureId(p.structure);
+    if (p.customSections && Array.isArray(p.customSections)) {
+      setCustomSections(p.customSections);
+      setIsCustomStructure(true);
+    } else {
+      const found = STRUCTURES.find(s => s.id === p.structure);
+      if (found) {
+        setCustomSections([...found.sections]);
+        setIsCustomStructure(false);
+      }
+    }
     setSpanglishPercent(p.spanglish);
     setSelectedTopics(p.topics);
     toast.success(`Preset "${p.label}" cargado`);
@@ -2127,22 +2226,139 @@ export default function TrapGhostPage() {
                     </Select>
                     <p className="text-[12px] text-muted-foreground">{bpmVibe.description} · Densidad: {bpmVibe.density}</p>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Estructura</Label>
-                    <Select value={structureId} onValueChange={setStructureId}>
-                      <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {STRUCTURES.map(s => (
-                          <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {structure.sections.map((s, i) => (
-                        <Badge key={i} variant="outline" className="text-[10px] py-0.5 px-2 border-border/50">
-                          {s.name}
-                        </Badge>
-                      ))}
+                  <div className="space-y-3">
+                    {/* Header con Preset, Badges y Acciones */}
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="space-y-1 flex-1 min-w-[200px]">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                            <Layers className="w-3.5 h-3.5 text-slime" /> Estructura de la Canción
+                          </Label>
+                          {isCustomStructure ? (
+                            <Badge variant="outline" className="text-[9px] border-cyber/50 text-cyber bg-cyber/10 py-0 px-1.5 gap-1">
+                              ✨ Personalizada ({customSections.length} secciones)
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[9px] border-border/50 text-muted-foreground py-0 px-1.5">
+                              {customSections.length} secciones
+                            </Badge>
+                          )}
+                        </div>
+                        <Select value={isCustomStructure ? "custom" : structureId} onValueChange={handleSelectPresetStructure}>
+                          <SelectTrigger className="bg-black/40 h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {isCustomStructure && (
+                              <SelectItem value="custom" disabled>
+                                ✨ Estructura Personalizada (Modificada)
+                              </SelectItem>
+                            )}
+                            {STRUCTURES.map(s => (
+                              <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Botones de acción: + Añadir sección y Restablecer */}
+                      <div className="flex items-end gap-1.5 pt-4">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="outline" className="h-8 text-xs border-slime/40 text-slime bg-slime/5 hover:bg-slime/15 gap-1">
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Añadir Sección</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56 bg-black/95 border-border/60">
+                            <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                              Insertar bloque
+                            </div>
+                            <DropdownMenuSeparator className="bg-border/40" />
+                            {SECTION_TEMPLATES.map(tmpl => (
+                              <DropdownMenuItem
+                                key={tmpl.type}
+                                onClick={() => handleAddSection(tmpl)}
+                                className="flex items-center justify-between text-xs py-1.5 cursor-pointer focus:bg-slime/10 focus:text-slime"
+                              >
+                                <span className="flex items-center gap-2">
+                                  <span>{tmpl.icon}</span>
+                                  <span>{tmpl.label}</span>
+                                </span>
+                                <span className="text-[10px] text-muted-foreground font-mono">
+                                  {tmpl.defaultBars > 0 ? `${tmpl.defaultBars}b` : "—"}
+                                </span>
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        {isCustomStructure && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={handleResetStructure}
+                            className="h-8 px-2 text-[11px] text-muted-foreground hover:text-white"
+                            title="Restablecer al preset original"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Timeline visual interactivo de secciones */}
+                    <div className="space-y-1.5">
+                      <div className="text-[10px] text-muted-foreground/70 flex items-center justify-between">
+                        <span>Timeline de bloques (reordena con ↑ ↓ o elimina con ✕):</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 p-2 rounded-lg border border-border/30 bg-black/25 min-h-[44px] items-center">
+                        {customSections.map((s, i) => {
+                          let badgeColor = "border-border/60 text-foreground bg-white/5";
+                          if (s.type === "chorus" || s.type === "hook") badgeColor = "border-purple-500/50 text-purple-300 bg-purple-500/10";
+                          else if (s.type === "verse") badgeColor = "border-slime/50 text-slime bg-slime/10";
+                          else if (s.type === "pre-chorus") badgeColor = "border-amber-500/50 text-amber-300 bg-amber-500/10";
+                          else if (s.type === "post-chorus") badgeColor = "border-cyan-500/50 text-cyan-300 bg-cyan-500/10";
+                          else if (s.type === "bridge") badgeColor = "border-pink-500/50 text-pink-300 bg-pink-500/10";
+                          else if (s.type === "beat_drop" || s.type === "instrumental") badgeColor = "border-red-500/50 text-red-400 bg-red-500/10";
+                          else if (s.type === "interlude") badgeColor = "border-blue-500/50 text-blue-300 bg-blue-500/10";
+
+                          return (
+                            <div
+                              key={`${s.name}-${i}`}
+                              className={`flex items-center gap-1 py-1 px-2 rounded-md border text-[11px] font-medium transition-all ${badgeColor}`}
+                            >
+                              <span className="truncate max-w-[120px]">{s.name}</span>
+                              <div className="flex items-center gap-0.5 ml-1 opacity-70 hover:opacity-100">
+                                <button
+                                  type="button"
+                                  disabled={i === 0}
+                                  onClick={() => handleMoveSection(i, "up")}
+                                  className="p-0.5 rounded hover:bg-white/10 disabled:opacity-20 disabled:hover:bg-transparent"
+                                  title="Mover antes"
+                                >
+                                  <ArrowUp className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={i === customSections.length - 1}
+                                  onClick={() => handleMoveSection(i, "down")}
+                                  className="p-0.5 rounded hover:bg-white/10 disabled:opacity-20 disabled:hover:bg-transparent"
+                                  title="Mover después"
+                                >
+                                  <ArrowDown className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSection(i)}
+                                  className="p-0.5 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-400"
+                                  title="Eliminar sección"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                   {/* Beat Type selector */}
@@ -2180,7 +2396,8 @@ export default function TrapGhostPage() {
                     <div className="space-y-1.5 max-h-72 overflow-y-auto custom-scroll pr-1">
                       {structure.sections.map((sec, secIdx) => {
                         const assign = sectionVoices.find(v => v.sectionName === sec.name);
-                        const isVerseOrChorus = sec.type === "verse" || sec.type === "chorus";
+                        const isInstrumental = sec.type === "instrumental" || sec.type === "beat_drop";
+                        const canHaveBars = !isInstrumental;
                         const repPatternId = assign?.repetitionPattern ?? "none";
                         const repPattern = getRepetitionPatternById(repPatternId);
                         const showCustomKeywordInput = repPatternId === "mantra" || repPatternId === "staccato";
@@ -2189,7 +2406,7 @@ export default function TrapGhostPage() {
                           <div key={`${sec.name}-${secIdx}`} className="p-2 rounded-md border border-border/40 bg-black/30 space-y-1.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-[11px] font-medium min-w-[65px] flex-1 truncate text-slime">{sec.name}</span>
-                              {sec.type === "instrumental" ? (
+                              {isInstrumental ? (
                                 <Badge variant="outline" className="text-[10px] border-purple-400/50 text-purple-400 bg-purple-400/10 gap-1 ml-auto">
                                   🎸 Solo Instrumental (Suno)
                                 </Badge>
@@ -2226,7 +2443,7 @@ export default function TrapGhostPage() {
                                   </SelectContent>
                                 </Select>
                               )}
-                              {isVerseOrChorus && (
+                              {canHaveBars && (
                                 <Select
                                   value={assign?.bars ? String(assign.bars) : "0"}
                                   onValueChange={(v) => {
@@ -2241,6 +2458,7 @@ export default function TrapGhostPage() {
                                   <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[50px]"><SelectValue /></SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="0">Auto</SelectItem>
+                                    <SelectItem value="2">2b</SelectItem>
                                     <SelectItem value="4">4b</SelectItem>
                                     <SelectItem value="8">8b</SelectItem>
                                     <SelectItem value="12">12b</SelectItem>
@@ -2250,7 +2468,7 @@ export default function TrapGhostPage() {
                                   </SelectContent>
                                 </Select>
                               )}
-                              {isVerseOrChorus && (
+                              {canHaveBars && (
                                 <Select
                                   value={assign?.density ?? "auto"}
                                   onValueChange={(v) => {

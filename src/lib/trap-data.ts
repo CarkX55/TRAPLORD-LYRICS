@@ -253,11 +253,50 @@ export const BPM_VIBES: BpmVibe[] = [
   { id: "bpm_afro", label: "Afro Trap", range: "95-110", description: "Afrobeats influence. Ritmos africanos con trap. Flow bailable y melódico.", density: "Media" },
 ];
 
+export type SongSectionType =
+  | "verse"
+  | "chorus"
+  | "intro"
+  | "outro"
+  | "bridge"
+  | "hook"
+  | "instrumental"
+  | "pre-chorus"
+  | "post-chorus"
+  | "interlude"
+  | "beat_drop";
+
+export interface SongSection {
+  name: string;
+  type: SongSectionType;
+}
+
 export interface SongStructure {
   id: string;
   label: string;
-  sections: { name: string; type: "verse" | "chorus" | "intro" | "outro" | "bridge" | "hook" | "instrumental" }[];
+  sections: SongSection[];
 }
+
+export interface SectionTemplate {
+  type: SongSectionType;
+  label: string;
+  icon: string;
+  defaultName: string;
+  defaultBars: number;
+  description: string;
+}
+
+export const SECTION_TEMPLATES: SectionTemplate[] = [
+  { type: "verse", label: "Verso (Verse)", icon: "🎤", defaultName: "Verse", defaultBars: 16, description: "Estrofa principal con narrativa y rimas" },
+  { type: "chorus", label: "Estribillo (Chorus)", icon: "🔁", defaultName: "Chorus", defaultBars: 8, description: "Hook melódico o rítmico central" },
+  { type: "pre-chorus", label: "Pre-Chorus", icon: "⚡", defaultName: "Pre-Chorus", defaultBars: 4, description: "Rampa melódica que sube la energía hacia el chorus" },
+  { type: "post-chorus", label: "Post-Chorus", icon: "🌊", defaultName: "Post-Chorus", defaultBars: 4, description: "Remate o eco pegadizo después del estribillo" },
+  { type: "bridge", label: "Puente (Bridge)", icon: "🌉", defaultName: "Bridge", defaultBars: 4, description: "Cambio melódico o rítmico de contraste" },
+  { type: "beat_drop", label: "Beat Drop / Switch", icon: "🎹", defaultName: "Beat Switch", defaultBars: 0, description: "Solo de producción o cambio de beat para Suno" },
+  { type: "interlude", label: "Interludio (Skit)", icon: "🎙️", defaultName: "Interlude", defaultBars: 4, description: "Palabras habladas o mensaje de voz" },
+  { type: "intro", label: "Intro", icon: "🎬", defaultName: "Intro", defaultBars: 4, description: "Entrada ambiental y producer tag" },
+  { type: "outro", label: "Outro", icon: "🚪", defaultName: "Outro", defaultBars: 4, description: "Cierre de tema, fade-out o breakdown de 808" },
+];
 
 export const STRUCTURES: SongStructure[] = [
   { id: "std_basic", label: "Estándar (V1-C-V2-C-B-C)", sections: [
@@ -440,6 +479,15 @@ export const PRODUCERS: Producer[] = [
   { id: "cash_cobain", name: "Cash Cobain", tag: "Cash Cobain", style: "NY drill/sample drill, flip de R&B." },
   { id: "sonny_digital", name: "Sonny Digital", tag: "Sonny!", style: "Atlanta trap melódico, sintetizadores brillosos." },
   { id: "london_track", name: "London On Da Track", tag: "London on da track", style: "Atlanta trap con melodía, piano + 808." },
+  { id: "murda_beatz", name: "Murda Beatz", tag: "Murda on the beat, so it's not nice", style: "Bouncy trap anthems, campanas brillantes, clean punchy 808s, flautas rítmicas." },
+  { id: "taz_taylor", name: "Internet Money (Taz & Nick Mira)", tag: "I love Taz!", style: "Melodic guitar loops, bouncy 808s, pluggnb, hi-hats acrobáticos y melodías ultra-pegadizas." },
+  { id: "cardo", name: "Cardo Got Wings", tag: "Cardo got wings!", style: "Spacey trap bounce, sintetizadores analógicos vintage, hi-hats elásticos y 808s profundos." },
+  { id: "sky_rompiendo", name: "Sky Rompiendo", tag: "Sky Rompiendo el Bajo!", style: "Trap latino oscuro y elegante, 808s profundos, texturas espaciales y sintetizadores envolventes." },
+  { id: "enry_k", name: "Enry-K", tag: "Enry-K on the track", style: "Trap español crudo y experimental, 808s saturados, texturas lo-fi y synths vaporosos." },
+  { id: "da_got_that_dope", name: "D.A. Got That Dope", tag: "D.A. got that dope!", style: "Ultra-bouncy club trap, ritmo saltarín frenético, percusiones contagiosas y 808s de muelle." },
+  { id: "wondagurl", name: "WondaGurl", tag: "WondaGurl", style: "Dark industrial trap, bajos 808 monstruosos, texturas sonoras distorsionadas y cajas secas de impacto." },
+  { id: "helluva", name: "Helluva", tag: "Helluva made this beat baby!", style: "Detroit bounce frenético, pianos agresivos a contratiempo, claps afilados y 808s percutidos." },
+  { id: "foreign_teck", name: "Foreign Teck", tag: "Foreign Teck", style: "Hard Latin trap con producción imponente de Atlanta, 808s pesados y arreglos orquestales oscuros." },
 ];
 
 export interface NarrativeArc {

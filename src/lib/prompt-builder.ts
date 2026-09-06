@@ -99,6 +99,9 @@ export function getSunoSectionHint(
   if (lowerType.includes("pre-chorus") || lowerType.includes("pre chorus") || lowerType.includes("prechorus")) {
     return "Rising melodic tension, vocal crescendo";
   }
+  if (lowerType.includes("post-chorus") || lowerType.includes("post chorus") || lowerType.includes("postchorus")) {
+    return "Catchy melodic bounce, stripped 808 groove, repeating hook echo";
+  }
   if (lowerType.includes("chorus") || lowerType.includes("hook") || lowerType.includes("estribillo")) {
     if (hookStyle === "repetitive") return "Hypnotic repetitive mantra, layered harmonies";
     if (hookStyle === "simple_punchy") return "Hard-hitting punchline hook, anthemic energy";
@@ -106,6 +109,12 @@ export function getSunoSectionHint(
   }
   if (lowerType.includes("bridge") || lowerType.includes("puente")) {
     return "Half-time beat switch, stripped vocal texture";
+  }
+  if (lowerType.includes("interlude") || lowerType.includes("skit") || lowerType.includes("interludio")) {
+    return "Spoken word, ambient filtered pad, telephone vocal effect";
+  }
+  if (lowerType.includes("beat drop") || lowerType.includes("beat switch") || lowerType.includes("beat_drop")) {
+    return "Dramatic tempo & key shift, pitch-shifted sliding 808s, half-time rhythm breakdown";
   }
   if (lowerType.includes("outro") || lowerType.includes("final")) {
     return "Heavy 808 breakdown, echoing vocal fade, sudden cutoff";
@@ -188,25 +197,31 @@ export function buildSystemPrompt(params: PromptParams): string {
   let chorusIdx = 0;
   let verseIdx = 0;
   const totalSections = params.structure.sections.length;
+  const hasManualPreChorus = params.structure.sections.some(sec => sec.type === "pre-chorus");
   const structurePlan = params.structure.sections
     .flatMap((s, i) => {
       const isVerse = s.type === "verse";
-      const isChorus = s.type === "chorus";
+      const isChorus = s.type === "chorus" || s.type === "hook";
       const isIntro = s.type === "intro";
+      const isPreChorus = s.type === "pre-chorus";
+      const isPostChorus = s.type === "post-chorus";
+      const isBridge = s.type === "bridge";
+      const isInterlude = s.type === "interlude";
+      const isBeatDrop = s.type === "beat_drop";
       if (isChorus) chorusIdx++;
       if (isVerse) verseIdx++;
 
       const lines: string[] = [];
 
-      // Pre-Chorus build
-      if (useDynamicForm && (songFormStyle === "pre_chorus_build" || songFormStyle === "hybrid") && isChorus) {
+      // Pre-Chorus build (auto dynamic form only if no manual pre-chorus was added)
+      if (useDynamicForm && (songFormStyle === "pre_chorus_build" || songFormStyle === "hybrid") && isChorus && !hasManualPreChorus) {
         const preHint = getSunoSectionHint("pre-chorus", params.artistId, params.moodId, params.bpmVibe, isDetailedSuno);
         const preTag = preHint ? `, ${preHint}` : "";
-        lines.push(`[Pre-Chorus: ${artist?.name ?? "Lead"}${preTag}] — 2-4 barras (Rampa melódica que sube la energía hacia el chorus)`);
+        lines.push(`[Pre-Chorus: ${artist?.name ?? "Lead"}${preTag}] — 4 barras (Rampa melódica que sube la energía hacia el chorus)`);
       }
 
-      if (s.type === "instrumental") {
-        if (s.name.toLowerCase().includes("beat switch")) {
+      if (s.type === "instrumental" || isBeatDrop) {
+        if (s.name.toLowerCase().includes("beat switch") || s.name.toLowerCase().includes("switch")) {
           lines.push(`[${s.name}: Dramatic tempo & key shift, pitch-shifted sliding 808s, half-time rhythm breakdown] — 🚫 NO LYRICS (Cambio radical de producción y tempo para Suno AI)`);
         } else {
           lines.push(`[${s.name}] — 🚫 NO LYRICS (Solo de producción instrumental para Suno AI)`);
@@ -255,9 +270,11 @@ export function buildSystemPrompt(params: PromptParams): string {
         const bpmNum = parseInt(params.bpmVibe.range.split("-")[1] ?? "130");
         if (isVerse) bars = bpmNum > 150 ? "8 barras" : bpmNum > 120 ? "12 barras" : "16 barras";
         else if (isChorus) bars = "8 barras";
+        else if (isPreChorus || isPostChorus) bars = "4 barras";
+        else if (isInterlude) bars = "2-4 barras habladas";
         else bars = "4 barras";
       } else {
-        bars = isVerse ? "8-12 barras" : isChorus ? "4-8 barras" : "2-4 barras";
+        bars = isVerse ? "8-12 barras" : isChorus ? "4-8 barras" : (isPreChorus || isPostChorus) ? "4 barras" : (isInterlude ? "2-4 barras habladas" : "2-4 barras");
       }
 
       let dynamicNote = "";
@@ -272,6 +289,26 @@ export function buildSystemPrompt(params: PromptParams): string {
           if (verseIdx === 1) dynamicNote += " (Verso 1 narrativo y descriptivo)";
           else if (verseIdx === 2) dynamicNote += " (Verso 2 rápido y agresivo)";
         }
+      }
+
+      // Density note
+      let densityInstruction = "";
+      if (voiceAssign?.density && voiceAssign.density !== "normal") {
+        if (voiceAssign.density === "sparse") {
+          densityInstruction = " → [DENSIDAD SPARSE: Métrica abierta y pausada, espacios de aire y respiración, pocas sílabas por compás]";
+        } else if (voiceAssign.density === "dense") {
+          densityInstruction = " → [DENSIDAD DENSE: Flujo continuo y acelerado, alta concentración de sílabas y rimas internas por compás]";
+        } else if (voiceAssign.density === "extra_dense") {
+          densityInstruction = " → [DENSIDAD EXTRA DENSE: Ametralladora lírica imparable, métrica ultra apretada sin respiros]";
+        }
+      }
+
+      // Language Override note
+      let langOverrideInstruction = "";
+      if (isChorus && params.chorusLanguageOverride && params.chorusLanguageOverride !== "auto") {
+        langOverrideInstruction = ` → [IDIOMA ESTRIBILLO: Letra estrictamente 100% en ${params.chorusLanguageOverride === "en" ? "Inglés" : "Español"}]`;
+      } else if (isVerse && params.versesLanguageOverride && params.versesLanguageOverride !== "auto") {
+        langOverrideInstruction = ` → [IDIOMA VERSO: Letra estrictamente 100% en ${params.versesLanguageOverride === "en" ? "Inglés" : "Español"}]`;
       }
 
       // Repetition Pattern Rule per section
@@ -302,7 +339,7 @@ export function buildSystemPrompt(params: PromptParams): string {
       const perfHint = getSunoSectionHint(s.type, sectionArtistId, params.moodId, params.bpmVibe, isDetailedSuno);
       const perfTag = perfHint ? `, ${perfHint}` : "";
 
-      lines.push(`[${s.name}: ${voice}${perfTag}${repTag}] — ${bars}${dynamicNote}${repInstruction}`);
+      lines.push(`[${s.name}: ${voice}${perfTag}${repTag}] — ${bars}${dynamicNote}${densityInstruction}${langOverrideInstruction}${repInstruction}`);
 
       if (useDynamicForm && songFormStyle === "beat_drop") {
         if (isIntro) {
@@ -317,10 +354,13 @@ export function buildSystemPrompt(params: PromptParams): string {
     })
     .join("\n");
 
-  // Rhyme tier instruction
+  // Rhyme tier instruction & custom rhyme scheme
+  const customScheme = params.rhymeSchemeId && params.rhymeSchemeId !== "rs_free" ? getRhymeSchemeById(params.rhymeSchemeId) : null;
   const rhymeTier = getRhymeTier(params.artistId);
   let rhymeLevelInstruction = "";
-  if (rhymeTier === 1) {
+  if (customScheme) {
+    rhymeLevelInstruction = `MÉTRICA / ESQUEMA DE RIMA OBLIGATORIO (${customScheme.pattern} - ${customScheme.label}): ${customScheme.description}. Cada estrofa debe respetar rigurosamente esta estructura de rima.`;
+  } else if (rhymeTier === 1) {
     rhymeLevelInstruction = `MÉTRICA TÉCNICA: Rimas multisilábicas obligatorias (2+ sílabas coincidentes) y rimas internas dentro del compás. Precisión quirúrgica estilo Eminem/Kendrick/Recycled J.`;
   } else if (rhymeTier === 2) {
     rhymeLevelInstruction = `MÉTRICA EQUILIBRADA: Combina multisilábicas con rimas de 1 sílaba contundentes. Rimas internas naturales y cadencia pegadiza estilo Travis Scott/Gunna/Drake.`;
@@ -472,7 +512,7 @@ ${adlibsBlock}
 ${rhymeLevelInstruction}
 - **Pocket Silábico**: Entre 8 y 11 sílabas por compás (evita versos gigantescos que aceleren la voz en Suno).
 - **Puntuación Rítmica**: Utiliza comas ',' y puntos suspensivos '...' para marcar los silencios y respiraciones del cantante.
-- **Rimas Orgánicas**: Rimas AABB o ABAB fluidas.
+- **Rimas Orgánicas**: ${customScheme ? `Sigue rigurosamente el esquema ${customScheme.pattern} (${customScheme.label}).` : "Rimas AABB o ABAB fluidas."}
 - **Prohibido**: JAMÁS menciones el nombre real o apodo de ningún artista en la letra cantada a menos que sea un ad-lib propio.
 
 # 🚫 FILTRO ANTI-ENCASILLAMIENTO & DIVERSIFICACIÓN LÉXICA (ANTI-CHECKLIST)
@@ -507,10 +547,10 @@ Sigue esta estructura sin omitir ni añadir secciones:
 ${structurePlan}
 
 # 📋 FORMATO DE SALIDA ESTRICTO (SUNO AI NATIVE)
-1. Encabezados de sección EXCLUSIVAMENTE entre corchetes estándar: [Intro: Detail], [Verse 1: Artist, Hint], [Chorus: Artist, Hint], [Pre-Chorus], [Beat Drop], [Outro].
+1. Encabezados de sección EXCLUSIVAMENTE entre corchetes estándar: [Intro: Detail], [Verse 1: Artist, Hint], [Chorus: Artist, Hint], [Pre-Chorus], [Post-Chorus], [Bridge], [Interlude], [Beat Drop], [Outro].
 2. NUNCA uses encabezados markdown '###' ni escribas líneas separadas como '*Intérprete:*' porque Suno intentará cantarlas.
 3. Ad-libs secundarios SIEMPRE entre paréntesis: (Yeah!), (Brrr!).
-4. Una barra cantada por línea.
+4. ⚡ REGLA ESTRICTA DE BARRAS / COMPASES: Una barra cantada equivale EXACTAMENTE a una línea de texto. Si la sección especifica 'N barras' (ej: 8 barras, 16 barras, 4 barras), DEBES generar EXACTAMENTE ese número de líneas cantadas para esa sección. No omitas compases ni agregues líneas de más.
 5. Tu respuesta debe contener ÚNICAMENTE la letra de la canción. Sin introducciones, notas de producción ni texto extra fuera de los corchetes.`;
 
   return prompt;
@@ -585,10 +625,27 @@ export function buildSunoStyleResult(params: SunoStylePromptParams): SunoStyleRe
     romantico: ["sensual warm synth pads", "smooth 808", "subtle vocal chops"],
   };
 
+  // Producer sonic flavor injection
+  let producerFlavor = "";
+  if (params.producerId && params.producerId !== "none") {
+    if (params.producerId === "pierre_bourne") producerFlavor = "trippy synth flute, bouncy 808 bounce";
+    else if (params.producerId === "murda_beatz") producerFlavor = "bright bell melody, punchy clean 808 bounce";
+    else if (params.producerId === "mustard") producerFlavor = "hyphy west coast bounce, crisp claps, bouncy sub";
+    else if (params.producerId === "da_got_that_dope") producerFlavor = "ultra-bouncy club bounce, spring 808, syncopated rhythm";
+    else if (params.producerId === "cardo") producerFlavor = "spacey vintage synth, elastic bounce, deep 808";
+    else if (params.producerId === "cash_cobain") producerFlavor = "sexy sample drill, filtered vocal chop, warm 808 slides";
+    else if (params.producerId === "taz_taylor") producerFlavor = "melodic guitar loop, bouncy roll hi-hats, clean 808";
+    else if (params.producerId === "helluva") producerFlavor = "detroit piano bounce, off-beat clap, aggressive 808";
+    else if (params.producerId === "wondagurl") producerFlavor = "dark distorted industrial 808, cinematic low-end";
+    else if (params.producerId === "bnyx" || params.producerId === "f1lthy") producerFlavor = "distorted rage lead, chaotic heavy 808";
+    else if (params.producerId === "zaytovan") producerFlavor = "zaytoven piano riff, bouncy atlanta 808";
+    else if (params.producerId === "metro_boomin") producerFlavor = "metro dark bells, cinematic 808 sub, crisp hi-hats";
+  }
+
   // Merge with beatType tags if present
   const moodKey = params.moodId.split(" ")[0].toLowerCase();
   const baseInstruments = moodInstrumentMap[moodKey] ?? moodInstrumentMap["calle"] ?? ["punchy 808 bass", "fast hi-hat rolls", "atmospheric synth"];
-  const layer3Instruments = baseInstruments.join(", ");
+  const layer3Instruments = producerFlavor ? `${producerFlavor}, ${baseInstruments.slice(0, 2).join(", ")}` : baseInstruments.join(", ");
 
   // Capa 4: Mezcla & Textura
   let layer4Mix = "crisp modern trap mix, wide stereo";
