@@ -1,4 +1,4 @@
-import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, getDirtyLevel, getRepetitionPatternById, getSituationalPresetById, type SongStructure, type BpmVibe, type BeatType } from "./trap-data";
+import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, getDirtyLevel, getRepetitionPatternById, getHookStyleOptionById, MOODS, getSituationalPresetById, type SongStructure, type BpmVibe, type BeatType } from "./trap-data";
 import { getFlowProfile, getBreathInstruction, getCadenceLabel, type FlowProfile } from "./artist-flow-profiles";
 import { getArtistReference, type ArtistReference } from "./artist-references";
 import type { TrackAnalysis } from "./track-analyzer";
@@ -35,7 +35,10 @@ export interface SectionVoiceAssignment {
   density?: "sparse" | "normal" | "dense" | "extra_dense";
   repetitionPattern?: string; // "none" | "mantra" | "staccato" | "call_response" | "stutter" | "echo"
   customKeyword?: string; // optional custom word or phrase to repeat
+  hookStyle?: string; // "auto" | "melodic" | "mantra" | "punchy" | "call_response" | "anthemic"
+  hookMood?: string; // "auto" | moodId from MOODS
 }
+
 
 export interface PromptParams {
   artistId: string;
@@ -311,11 +314,36 @@ export function buildSystemPrompt(params: PromptParams): string {
         langOverrideInstruction = ` → [IDIOMA VERSO: Letra estrictamente 100% en ${params.versesLanguageOverride === "en" ? "Inglés" : "Español"}]`;
       }
 
-      // Repetition Pattern Rule per section
+      // Repetition Pattern Rule / Hook Archetype Rule per section
       let repTag = "";
       let repInstruction = "";
+      let chorusOverrideHint = "";
+
       if (isTrading2x2) {
         repInstruction = ` → [REGLA TRADING BARS 2x2: Alterna exactamente 2 barras de ${artist?.name ?? "Lead"} y 2 barras de ${featureArtist?.name ?? "Feature"} consecutivamente. Cada artista responde y se pica con el anterior, creando química y tensión colaborativa estilo Drip Harder / Rich Flex]`;
+      } else if (isChorus && (voiceAssign?.hookStyle || voiceAssign?.hookMood)) {
+        const chosenHookStyle = voiceAssign.hookStyle && voiceAssign.hookStyle !== "auto" ? getHookStyleOptionById(voiceAssign.hookStyle) : undefined;
+        const chosenHookMood = voiceAssign.hookMood && voiceAssign.hookMood !== "auto" ? MOODS.find(m => m.id === voiceAssign.hookMood) : undefined;
+
+        if (chosenHookStyle || chosenHookMood) {
+          const defaultHookStyle = getFlowProfile(sectionArtistId)?.hookStyle ?? "melodic";
+          const styleTag = chosenHookStyle?.sunoTag || (defaultHookStyle === "repetitive" ? "Hypnotic repetitive mantra, layered harmonies" : defaultHookStyle === "simple_punchy" ? "Hard-hitting punchline hook, anthemic energy" : "Layered melodic harmonies, wide anthemic auto-tune");
+          const moodTag = chosenHookMood ? `${chosenHookMood.id} emotional mood` : "";
+          chorusOverrideHint = [styleTag, moodTag].filter(Boolean).join(", ");
+
+          if (chosenHookStyle) {
+            const kw = voiceAssign.customKeyword?.trim();
+            if (chosenHookStyle.id === "mantra" && kw) {
+              repInstruction += ` → [REGLA HOOK MANTRA: Repite la palabra/frase "${kw}" 3 o 4 veces por compás con cadencia pesada e hipnótica e inserta comas y puntos suspensivos]`;
+            } else if (chosenHookStyle.instruction) {
+              repInstruction += ` → [${chosenHookStyle.instruction}]`;
+            }
+          }
+
+          if (chosenHookMood) {
+            repInstruction += ` → [MOOD ESPECÍFICO DEL HOOK: Estribillo con emoción de "${chosenHookMood.label}" (${chosenHookMood.description}), marcando un contraste dinámico con el resto del tema]`;
+          }
+        }
       } else if (voiceAssign?.repetitionPattern && voiceAssign.repetitionPattern !== "none") {
         const repPattern = getRepetitionPatternById(voiceAssign.repetitionPattern);
         if (repPattern) {
@@ -336,10 +364,13 @@ export function buildSystemPrompt(params: PromptParams): string {
       }
 
       // Performance hint inside bracket for Suno AI
-      const perfHint = getSunoSectionHint(s.type, sectionArtistId, params.moodId, params.bpmVibe, isDetailedSuno);
-      const perfTag = perfHint ? `, ${perfHint}` : "";
+      const basePerfHint = (isChorus && chorusOverrideHint)
+        ? chorusOverrideHint
+        : getSunoSectionHint(s.type, sectionArtistId, params.moodId, params.bpmVibe, isDetailedSuno);
+      const perfTag = basePerfHint ? `, ${basePerfHint}` : "";
 
       lines.push(`[${s.name}: ${voice}${perfTag}${repTag}] — ${bars}${dynamicNote}${densityInstruction}${langOverrideInstruction}${repInstruction}`);
+
 
       if (useDynamicForm && songFormStyle === "beat_drop") {
         if (isIntro) {
@@ -385,9 +416,10 @@ export function buildSystemPrompt(params: PromptParams): string {
 
   // Dictionary
   let dictionaryBlock = "";
-  if (params.customDictionary.trim()) {
+  if (params.customDictionary?.trim()) {
     dictionaryBlock = `\n# 🌍 DICCIONARIO / WORLD-BUILDING\nIncorpora estos términos y nombres reales de forma orgánica en las barras:\n{ ${params.customDictionary.trim()} }`;
   }
+
 
   // Flow profiles
   const flowProfile = getFlowProfile(params.artistId);
@@ -446,9 +478,10 @@ Los versos NO deben tener un ritmo monótono ni la misma cadencia estática de p
         .replace(/\{NAME\}/gi, params.producerName.trim());
     }
     producerBlock = `\n# 🎛️ PRODUCER TAG\nInserta este producer tag al inicio del [Intro]: "${personalizedTag}"`;
-  } else if (params.producerTag.trim()) {
+  } else if (params.producerTag?.trim()) {
     producerBlock = `\n# 🎛️ PRODUCER TAG\nInserta este producer tag al inicio del [Intro]: "${params.producerTag.trim()}"`;
   }
+
 
   // Ad-libs rules & Textured Ad-libs
   let adlibsBlock = "";

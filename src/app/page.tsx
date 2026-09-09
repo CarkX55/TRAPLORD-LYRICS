@@ -31,6 +31,7 @@ import {
   BEAT_TYPES, FEATURE_SIMS, PRODUCER_TAG_ARCHETYPES, getProducerTagArchetypeById,
   INSTANT_MOOD_PRESETS, getInstantMoodPresetById,
   DIRTY_LEVELS, getDirtyLevel, REPETITION_PATTERNS, getRepetitionPatternById,
+  HOOK_STYLE_OPTIONS, getHookStyleOptionById,
   INSTRUMENTAL_BREAKS, getInstrumentalBreakById,
   SITUATIONAL_PRESETS, getSituationalPresetById,
   SECTION_TEMPLATES,
@@ -2398,9 +2399,14 @@ export default function TrapGhostPage() {
                         const assign = sectionVoices.find(v => v.sectionName === sec.name);
                         const isInstrumental = sec.type === "instrumental" || sec.type === "beat_drop";
                         const canHaveBars = !isInstrumental;
+                        const isChorus = sec.type === "chorus" || sec.name.toLowerCase().includes("chorus") || sec.name.toLowerCase().includes("hook") || sec.name.toLowerCase().includes("estribillo");
                         const repPatternId = assign?.repetitionPattern ?? "none";
                         const repPattern = getRepetitionPatternById(repPatternId);
-                        const showCustomKeywordInput = repPatternId === "mantra" || repPatternId === "staccato";
+                        const hookStyleId = assign?.hookStyle ?? "auto";
+                        const hookStyle = getHookStyleOptionById(hookStyleId);
+                        const hookMoodId = assign?.hookMood ?? "auto";
+                        const hookMoodObj = MOODS.find(m => m.id === hookMoodId);
+                        const showCustomKeywordInput = (isChorus && hookStyleId === "mantra") || (!isChorus && (repPatternId === "mantra" || repPatternId === "staccato"));
 
                         return (
                           <div key={`${sec.name}-${secIdx}`} className="p-2 rounded-md border border-border/40 bg-black/30 space-y-1.5">
@@ -2416,7 +2422,7 @@ export default function TrapGhostPage() {
                                   onValueChange={(v) => {
                                     setSectionVoices(prev => {
                                       const others = prev.filter(p => p.sectionName !== sec.name);
-                                      if (v === "auto" && !assign?.bars && !assign?.density && (!assign?.repetitionPattern || assign.repetitionPattern === "none")) return others;
+                                      if (v === "auto" && !assign?.bars && !assign?.density && (!assign?.repetitionPattern || assign.repetitionPattern === "none") && (!assign?.hookStyle || assign.hookStyle === "auto") && (!assign?.hookMood || assign.hookMood === "auto") && !assign?.customKeyword) return others;
                                       return [...others, { ...assign, sectionName: sec.name, voice: v }];
                                     });
                                   }}
@@ -2491,53 +2497,147 @@ export default function TrapGhostPage() {
                                 </Select>
                               )}
 
-                              {/* Repetition Pattern Selector */}
-                              <Select
-                                value={repPatternId}
-                                onValueChange={(v) => {
-                                  setSectionVoices(prev => {
-                                    const others = prev.filter(p => p.sectionName !== sec.name);
-                                    const currentVoice = assign?.voice ?? "auto";
-                                    return [...others, { ...assign, sectionName: sec.name, voice: currentVoice, repetitionPattern: v === "none" ? undefined : v }];
-                                  });
-                                }}
-                              >
-                                <SelectTrigger className={`bg-black/40 h-7 text-[10px] w-[130px] sm:w-[145px] ${repPatternId !== "none" ? "border-cyber/60 text-cyber font-medium" : "text-muted-foreground"}`}>
-                                  <SelectValue placeholder="Patrón Flow" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {REPETITION_PATTERNS.map(p => (
-                                    <SelectItem key={p.id} value={p.id}>
-                                      <span className="flex items-center gap-1.5">
-                                        <span>{p.icon}</span> {p.label}
-                                      </span>
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            {/* Optional Keyword & Description for active repetition pattern */}
-                            {repPattern && repPattern.id !== "none" && (
-                              <div className="flex items-center gap-2 pl-2.5 pr-2 py-1 rounded border border-cyber/30 bg-cyber/5 text-[10px]">
-                                <span className="text-cyber shrink-0 font-medium">{repPattern.icon} {repPattern.label}:</span>
-                                <span className="text-muted-foreground flex-1 truncate">{repPattern.description}</span>
-                                {showCustomKeywordInput && (
-                                  <Input
-                                    value={assign?.customKeyword ?? ""}
-                                    onChange={(e) => {
-                                      const kw = e.target.value;
+                              {/* Chorus specialized selectors vs Verses repetition pattern */}
+                              {isChorus ? (
+                                <>
+                                  {/* Tipo de Hook (Técnica Vocal) */}
+                                  <Select
+                                    value={hookStyleId}
+                                    onValueChange={(v) => {
                                       setSectionVoices(prev => {
                                         const others = prev.filter(p => p.sectionName !== sec.name);
                                         const currentVoice = assign?.voice ?? "auto";
-                                        return [...others, { ...assign, sectionName: sec.name, voice: currentVoice, customKeyword: kw || undefined }];
+                                        return [...others, { ...assign, sectionName: sec.name, voice: currentVoice, hookStyle: v === "auto" ? undefined : v }];
                                       });
                                     }}
-                                    placeholder="Palabra/Frase a repetir..."
-                                    className="h-6 text-[10px] bg-black/60 border-cyber/40 w-36 sm:w-44 font-mono px-2"
-                                  />
-                                )}
-                              </div>
+                                  >
+                                    <SelectTrigger className={`bg-black/40 h-7 text-[10px] w-[135px] sm:w-[150px] ${hookStyleId !== "auto" ? "border-amber-400/60 text-amber-400 font-medium" : "text-muted-foreground"}`}>
+                                      <SelectValue placeholder="Tipo Hook" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {HOOK_STYLE_OPTIONS.map(h => (
+                                        <SelectItem key={h.id} value={h.id}>
+                                          <span className="flex items-center gap-1.5">
+                                            <span>{h.icon}</span> {h.label}
+                                          </span>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+
+                                  {/* Mood del Hook (Contraste Emocional) */}
+                                  <Select
+                                    value={hookMoodId}
+                                    onValueChange={(v) => {
+                                      setSectionVoices(prev => {
+                                        const others = prev.filter(p => p.sectionName !== sec.name);
+                                        const currentVoice = assign?.voice ?? "auto";
+                                        return [...others, { ...assign, sectionName: sec.name, voice: currentVoice, hookMood: v === "auto" ? undefined : v }];
+                                      });
+                                    }}
+                                  >
+                                    <SelectTrigger className={`bg-black/40 h-7 text-[10px] w-[125px] sm:w-[140px] ${hookMoodId !== "auto" ? "border-purple-400/60 text-purple-300 font-medium" : "text-muted-foreground"}`}>
+                                      <SelectValue placeholder="Mood Hook" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="auto">
+                                        <span className="flex items-center gap-1.5">
+                                          <span>⚡</span> Mood: Auto (Canción)
+                                        </span>
+                                      </SelectItem>
+                                      <SelectSeparator className="bg-border/40" />
+                                      {MOODS.map(m => (
+                                        <SelectItem key={m.id} value={m.id}>
+                                          <span className="flex items-center gap-1.5 truncate">
+                                            {m.label}
+                                          </span>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </>
+                              ) : (
+                                /* Repetition Pattern Selector for non-chorus sections */
+                                <Select
+                                  value={repPatternId}
+                                  onValueChange={(v) => {
+                                    setSectionVoices(prev => {
+                                      const others = prev.filter(p => p.sectionName !== sec.name);
+                                      const currentVoice = assign?.voice ?? "auto";
+                                      return [...others, { ...assign, sectionName: sec.name, voice: currentVoice, repetitionPattern: v === "none" ? undefined : v }];
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className={`bg-black/40 h-7 text-[10px] w-[130px] sm:w-[145px] ${repPatternId !== "none" ? "border-cyber/60 text-cyber font-medium" : "text-muted-foreground"}`}>
+                                    <SelectValue placeholder="Patrón Flow" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {REPETITION_PATTERNS.map(p => (
+                                      <SelectItem key={p.id} value={p.id}>
+                                        <span className="flex items-center gap-1.5">
+                                          <span>{p.icon}</span> {p.label}
+                                        </span>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            </div>
+
+                            {/* Optional Details Row: Chorus Hook description/mood vs Verse Repetition pattern */}
+                            {isChorus ? (
+                              ((hookStyle && hookStyle.id !== "auto") || hookMoodObj) && (
+                                <div className="flex items-center gap-2 pl-2.5 pr-2 py-1 rounded border border-amber-400/30 bg-amber-400/5 text-[10px] flex-wrap">
+                                  {hookStyle && hookStyle.id !== "auto" && (
+                                    <span className="text-amber-400 shrink-0 font-medium flex items-center gap-1">
+                                      <span>{hookStyle.icon}</span> {hookStyle.label}:
+                                      <span className="text-muted-foreground font-normal ml-1 truncate max-w-[200px] sm:max-w-xs">{hookStyle.description}</span>
+                                    </span>
+                                  )}
+                                  {hookMoodObj && (
+                                    <Badge variant="outline" className="text-[9px] border-purple-400/40 text-purple-300 bg-purple-400/10 ml-auto">
+                                      {hookMoodObj.label}
+                                    </Badge>
+                                  )}
+                                  {showCustomKeywordInput && (
+                                    <Input
+                                      value={assign?.customKeyword ?? ""}
+                                      onChange={(e) => {
+                                        const kw = e.target.value;
+                                        setSectionVoices(prev => {
+                                          const others = prev.filter(p => p.sectionName !== sec.name);
+                                          const currentVoice = assign?.voice ?? "auto";
+                                          return [...others, { ...assign, sectionName: sec.name, voice: currentVoice, customKeyword: kw || undefined }];
+                                        });
+                                      }}
+                                      placeholder="Palabra o frase repetitiva..."
+                                      className="h-6 text-[10px] bg-black/60 border-amber-400/40 w-36 sm:w-44 font-mono px-2"
+                                    />
+                                  )}
+                                </div>
+                              )
+                            ) : (
+                              repPattern && repPattern.id !== "none" && (
+                                <div className="flex items-center gap-2 pl-2.5 pr-2 py-1 rounded border border-cyber/30 bg-cyber/5 text-[10px]">
+                                  <span className="text-cyber shrink-0 font-medium">{repPattern.icon} {repPattern.label}:</span>
+                                  <span className="text-muted-foreground flex-1 truncate">{repPattern.description}</span>
+                                  {showCustomKeywordInput && (
+                                    <Input
+                                      value={assign?.customKeyword ?? ""}
+                                      onChange={(e) => {
+                                        const kw = e.target.value;
+                                        setSectionVoices(prev => {
+                                          const others = prev.filter(p => p.sectionName !== sec.name);
+                                          const currentVoice = assign?.voice ?? "auto";
+                                          return [...others, { ...assign, sectionName: sec.name, voice: currentVoice, customKeyword: kw || undefined }];
+                                        });
+                                      }}
+                                      placeholder="Palabra/Frase a repetir..."
+                                      className="h-6 text-[10px] bg-black/60 border-cyber/40 w-36 sm:w-44 font-mono px-2"
+                                    />
+                                  )}
+                                </div>
+                              )
                             )}
                           </div>
                         );

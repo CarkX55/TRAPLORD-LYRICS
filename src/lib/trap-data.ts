@@ -1016,6 +1016,79 @@ export function getRepetitionPatternById(id: string): RepetitionPattern | undefi
   return REPETITION_PATTERNS.find(p => p.id === id);
 }
 
+// ===== HOOK / CHORUS STYLE ARCHETYPES =====
+export interface HookStyleOption {
+  id: string;
+  label: string;
+  badge: string;
+  icon: string;
+  sunoTag: string;
+  description: string;
+  instruction: string;
+}
+
+export const HOOK_STYLE_OPTIONS: HookStyleOption[] = [
+  {
+    id: "auto",
+    label: "Auto (Perfil Artista)",
+    badge: "Artista",
+    icon: "🎯",
+    sunoTag: "",
+    description: "Usa el estilo y cadencia natural de estribillo del artista asignado.",
+    instruction: ""
+  },
+  {
+    id: "melodic",
+    label: "Melódico & Cantable",
+    badge: "Singable",
+    icon: "🎵",
+    sunoTag: "Melodic auto-tune flow, soaring harmonics, wide vocal harmonies",
+    description: "Notas alargadas, melodía vocal abierta y ganchos armónicos ideales para autotune.",
+    instruction: "REGLA HOOK MELÓDICO: Estribillo altamente cantable, notas vocales sostenidas, ganchos armónicos pegadizos y líneas fluidas abiertas para autotune y capas vocales envolventes."
+  },
+  {
+    id: "mantra",
+    label: "Mantra Hipnótico",
+    badge: "Repetitivo",
+    icon: "🔁",
+    sunoTag: "Hypnotic repetitive mantra, heavy 808 bounce",
+    description: "Repetición hipnótica de una palabra/frase clave (3-4 veces por compás con cadencia pesada).",
+    instruction: "REGLA HOOK MANTRA: Repetición hipnótica y obsesiva de un concepto o frase clave (3 o 4 veces por compás con comas de pausa rítmica para Suno), ultra bailable y adictivo para clubs."
+  },
+  {
+    id: "punchy",
+    label: "Punchlines / Calle",
+    badge: "Street",
+    icon: "💥",
+    sunoTag: "Hard-hitting punchline hook, raw street delivery, anthemic energy",
+    description: "Golpe seco, barras crudas y actitud dominante sin adornos.",
+    instruction: "REGLA HOOK PUNCHLINES: Barras directas, frases cortantes y contundentes, actitud cruda sin adornos innecesarios, remates secos que impactan al inicio del compás."
+  },
+  {
+    id: "call_response",
+    label: "Call & Response",
+    badge: "Dinámico",
+    icon: "💬",
+    sunoTag: "Anthemic call and response, layered hype ad-libs",
+    description: "Voz principal con respuestas inmediatas de ad-libs o coros en capas.",
+    instruction: "REGLA HOOK CALL & RESPONSE: Alternancia dinámica donde la línea líder recibe una respuesta o réplica inmediata entre paréntesis con ad-libs explosivos o coros en capas."
+  },
+  {
+    id: "anthemic",
+    label: "Himno de Estadio",
+    badge: "Anthemic",
+    icon: "🏟️",
+    sunoTag: "Massive anthemic chorus, crowd gang vocals, epic stadium energy",
+    description: "Coros masivos, energía gigante y melodía coreable para conciertos.",
+    instruction: "REGLA HOOK HIMNO: Energía masiva de festival, coros de multitud (gang vocals), melodía épica y coreable diseñada para que el público la grite al unísono."
+  }
+];
+
+export function getHookStyleOptionById(id: string): HookStyleOption | undefined {
+  return HOOK_STYLE_OPTIONS.find(h => h.id === id);
+}
+
+
 // ===== SITUATIONAL SUBTEXT PRESETS (CINEMATIC REALISM) =====
 export interface SituationalPreset {
   id: string;

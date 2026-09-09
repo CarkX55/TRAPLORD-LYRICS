@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildSystemPrompt, buildSpanglishInstruction, buildSunoStyleResult, type LockedSection, type RegenerateSectionParams } from "@/lib/prompt-builder";
+import { buildSystemPrompt, buildSpanglishInstruction, buildSunoStyleResult, type LockedSection, type RegenerateSectionParams, type SectionVoiceAssignment } from "@/lib/prompt-builder";
+
 import { MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, BEAT_TYPES, generateBeatPrompt, getArtistById, type SongSection, type SongStructure } from "@/lib/trap-data";
 import { buildCorrectionInstruction, analyzeLanguageRatio, type LanguageAnalysis } from "@/lib/language-detector";
 import { getArtistReference } from "@/lib/artist-references";
@@ -49,7 +50,7 @@ interface GenerateBody {
   dynamismMode?: "classic" | "vanguard";
   adlibStyle?: "textured" | "classic" | "minimal";
   situationalPresetId?: string;
-  sectionVoices?: { sectionName: string; voice: string; bars?: number; density?: "sparse" | "normal" | "dense" | "extra_dense"; repetitionPattern?: string; customKeyword?: string }[];
+  sectionVoices?: SectionVoiceAssignment[];
 }
 
 // Get a reference for an artist: curated DB first, then generate on-the-fly (sandbox uses z-ai SDK)
