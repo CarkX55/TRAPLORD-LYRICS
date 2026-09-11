@@ -24,19 +24,19 @@ export function computeQualityScore(
   expectedSections: number,
   actualSections: number,
 ): QualityScore {
-  // 1. Rhyme density — more generous: assume 70% of lines rhyme if detector found any
-  // The phonetic detector misses many rhymes, so we boost the score
-  const detectorRhymeRatio = nonEmptyLines > 0 ? (rhymeAnalysis.totalRhymes / nonEmptyLines) : 0;
+  // 1. Rhyme density (consonant + assonant + internal rhyme bonus)
+  const baseRhymes = rhymeAnalysis.totalRhymes;
+  const internalBonus = Math.min(15, (rhymeAnalysis.internalRhymesCount ?? 0) * 3);
+  const effectiveRhymes = baseRhymes + (internalBonus > 0 ? 2 : 0);
+  const detectorRhymeRatio = nonEmptyLines > 0 ? (effectiveRhymes / nonEmptyLines) : 0;
   // If detector found 30%+, assume real rhyme density is much higher
   let rhymeDensity: number;
   if (detectorRhymeRatio >= 0.5) {
-    rhymeDensity = Math.min(95, Math.round(detectorRhymeRatio * 100 + 20));
+    rhymeDensity = Math.min(98, Math.round(detectorRhymeRatio * 100 + 20 + internalBonus));
   } else if (detectorRhymeRatio >= 0.2) {
-    // Detector found some rhymes — real density is probably 60-80%
-    rhymeDensity = Math.min(80, Math.round(detectorRhymeRatio * 100 + 35));
+    rhymeDensity = Math.min(85, Math.round(detectorRhymeRatio * 100 + 35 + internalBonus));
   } else if (nonEmptyLines > 4) {
-    // Detector found few rhymes but there are enough lines — assume some rhymes exist
-    rhymeDensity = 45;
+    rhymeDensity = Math.min(75, 45 + internalBonus);
   } else {
     rhymeDensity = 30;
   }

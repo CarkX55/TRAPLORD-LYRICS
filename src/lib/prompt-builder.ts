@@ -106,9 +106,9 @@ export function getSunoSectionHint(
     return "Catchy melodic bounce, stripped 808 groove, repeating hook echo";
   }
   if (lowerType.includes("chorus") || lowerType.includes("hook") || lowerType.includes("estribillo")) {
-    if (hookStyle === "repetitive") return "Hypnotic repetitive mantra, layered harmonies";
-    if (hookStyle === "simple_punchy") return "Hard-hitting punchline hook, anthemic energy";
-    return "Layered melodic harmonies, wide anthemic auto-tune";
+    if (hookStyle === "repetitive") return "Hypnotic repetitive mantra, layered stereo autotune harmonies, wide stereo mix";
+    if (hookStyle === "simple_punchy") return "Hard-hitting punchline hook, anthemic energy, stacked group vocals";
+    return "Layered stereo autotune harmonies, wide anthemic vocal stack";
   }
   if (lowerType.includes("bridge") || lowerType.includes("puente")) {
     return "Half-time beat switch, stripped vocal texture";
@@ -515,6 +515,21 @@ Los ad-libs NO son solo muletillas aisladas al final de la barra. Distribuye ad-
   const dirty = getDirtyLevel(params.dirtyLevel ?? 2);
   const dirtyBlock = `\n# 🔞 NIVEL DE ACTITUD / DIRTY LEVEL: ${dirty.label.toUpperCase()} (${dirty.badge})\n${dirty.instruction}`;
 
+  // Dynamic BPM Syllabic Pocket calculation
+  const bpmParts = params.bpmVibe.range.split("-").map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n));
+  const avgBpm = bpmParts.length === 2 ? Math.round((bpmParts[0] + bpmParts[1]) / 2) : (bpmParts[0] ?? 130);
+
+  let pocketGuideline: string;
+  if (avgBpm < 118) {
+    pocketGuideline = `- **Pocket Silábico Estricto (${params.bpmVibe.range} BPM - Tempo Lento/Heavy)**: Entre 6 y 8 sílabas por compás. Flow pesado, arrastrado, con mucho aire entre frases. Deja respirar al bajo 808. Prohibido meter más de 9 sílabas en una barra para evitar que la voz se tropiece.`;
+  } else if (avgBpm <= 136) {
+    pocketGuideline = `- **Pocket Silábico Estricto (${params.bpmVibe.range} BPM - Tempo Estándar Atlanta)**: Entre 8 y 10 sílabas por compás. El bolsillo clásico de trap; la frase debe cerrar antes del golpe de la caja en el tiempo 3. Evita rebasar las 11 sílabas para no acelerar artificialmente la voz en Suno.`;
+  } else if (avgBpm <= 152) {
+    pocketGuideline = `- **Pocket Silábico Estricto (${params.bpmVibe.range} BPM - Tempo Rápido/Drill/Rage)**: Entre 10 y 12 sílabas por compás. Cadencia en tresillos (triplets) o staccato muy articulado y seco. Cada palabra debe encajar con precisión quirúrgica en el patrón rítmico.`;
+  } else {
+    pocketGuideline = `- **Pocket Silábico Estricto (${params.bpmVibe.range} BPM - Tempo Hiperactivo/Rage)**: Entre 11 y 14 sílabas por compás en métrica rápida, o barras cortas de 5-6 sílabas con repetición agresiva. Evita párrafos largos que Suno aceleraría en modo ardilla.`;
+  }
+
   const prompt = `Eres un Ghostwriter de élite del Trap y Rap contemporáneo. Escribes letras auténticas, con groove callejero y perfectamente estructuradas para ser producidas y cantadas en SUNO AI.
 
 # 🧠 PROTOCOLO DE RAZONAMIENTO INTERNO (THINKING PROTOCOL)
@@ -543,9 +558,10 @@ ${adlibsBlock}
 
 # 📐 REGLAS MUSICALES & MÉTRICA SUNO
 ${rhymeLevelInstruction}
-- **Pocket Silábico**: Entre 8 y 11 sílabas por compás (evita versos gigantescos que aceleren la voz en Suno).
+${pocketGuideline}
 - **Puntuación Rítmica**: Utiliza comas ',' y puntos suspensivos '...' para marcar los silencios y respiraciones del cantante.
 - **Rimas Orgánicas**: ${customScheme ? `Sigue rigurosamente el esquema ${customScheme.pattern} (${customScheme.label}).` : "Rimas AABB o ABAB fluidas."}
+- **Dinámica Acústica Suno v4.5**: Puedes intercalar etiquetas acústicas como '[Vocal Cut]' en la barra de remate antes del estribillo, '[Beat Drop: Sub bass drop]' o '[Layered Chorus: stereo autotune harmonies]' para abrir coros en estéreo.
 - **Prohibido**: JAMÁS menciones el nombre real o apodo de ningún artista en la letra cantada a menos que sea un ad-lib propio.
 
 # 🚫 FILTRO ANTI-ENCASILLAMIENTO & DIVERSIFICACIÓN LÉXICA (ANTI-CHECKLIST)

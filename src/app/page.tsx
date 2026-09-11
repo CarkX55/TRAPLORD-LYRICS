@@ -24,7 +24,7 @@ import {
   RefreshCw, Share2, Link2, Shuffle, BarChart3, Clock, TrendingUp,
   MessageSquare, Award, AlertCircle, Lightbulb, AudioLines, Music2,
   Image, Star, Quote, Instagram, Twitter, Video, ListMusic, Radio, Key,
-  Plus, ArrowUp, ArrowDown, X, Layers
+  Plus, ArrowUp, ArrowDown, X, Layers, Volume2, VolumeX, FileSpreadsheet
 } from "lucide-react";
 import {
   ARTISTS_DATA, MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, PRODUCERS, RHYME_SCHEMES,
@@ -41,9 +41,11 @@ import {
 } from "@/lib/trap-data";
 import type { HookVariationOption } from "@/app/api/hook-variations/route";
 import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
+import { ArtistSearchCombobox } from "@/components/artist-search-combobox";
+import { generateLrcContent, generateStudioRecordingSheet, downloadClientFile } from "@/lib/export-helpers";
 import { getFlowProfile, getCadenceLabel, type FlowProfile } from "@/lib/artist-flow-profiles";
 import { analyzeLanguageRatio, analyzeSunoReadiness, type LanguageAnalysis, type SunoReadinessResult } from "@/lib/language-detector";
-import { analyzeRhymes, getRhymeGroupForLine, type RhymeAnalysis } from "@/lib/rhyme-detector";
+import { analyzeRhymes, getRhymeGroupForLine, getInternalRhymeForLine, type RhymeAnalysis } from "@/lib/rhyme-detector";
 import { analyzeWordStats, type WordStats } from "@/lib/word-stats";
 import { diffLyrics, type DiffResult } from "@/lib/lyrics-diff";
 import { computeQualityScore, type QualityScore } from "@/lib/quality-score";
@@ -272,6 +274,7 @@ export default function TrapGhostPage() {
   const [hookVariationsOpen, setHookVariationsOpen] = useState<boolean>(false);
   const [hookVariationsLoading, setHookVariationsLoading] = useState<boolean>(false);
   const [hookVariations, setHookVariations] = useState<HookVariationOption[]>([]);
+  const [isPlayingFlow, setIsPlayingFlow] = useState<boolean>(false);
 
   // Output state
   const [lyrics, setLyrics] = useState<string>("");
@@ -869,6 +872,160 @@ export default function TrapGhostPage() {
     printWindow.document.close();
     toast.success("PDF abierto en nueva ventana (usa Imprimir → Guardar como PDF)");
   }, [lyrics, artist, moodId, bpmVibe, structure, producerId, analysis, spanglishPercent]);
+
+  // Cleanup speech synthesis on unmount
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // Cancel speech synthesis if lyrics change
+  useEffect(() => {
+    if (isPlayingFlow && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setIsPlayingFlow(false);
+    }
+  }, [lyrics, isPlayingFlow]);
+
+  // ===== Cadence Flow Audio Preview (Web Speech API) =====
+  const handleToggleFlowAudio = useCallback(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      toast.error("Tu navegador no soporta la síntesis de voz (Web Speech API)");
+      return;
+    }
+
+    if (isPlayingFlow) {
+      window.speechSynthesis.cancel();
+      setIsPlayingFlow(false);
+      toast.info("Prueba de cadencia detenida");
+      return;
+    }
+
+    if (!lyrics.trim()) {
+      toast.error("No hay letra generada para previsualizar");
+      return;
+    }
+
+    const cleanLines = lyrics
+      .split("\n")
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith("[") && !l.startsWith("---") && !l.startsWith("#"));
+
+    if (cleanLines.length === 0) {
+      toast.error("No hay versos cantables detectados");
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const bpmParts = bpmVibe.range.split("-").map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n));
+    const avgBpm = bpmParts.length === 2 ? Math.round((bpmParts[0] + bpmParts[1]) / 2) : (bpmParts[0] ?? 130);
+    const calculatedRate = Math.min(1.4, Math.max(0.9, avgBpm / 120));
+
+    const textToSpeak = cleanLines.join(". ");
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+
+    const voices = window.speechSynthesis.getVoices();
+    const spanishVoice = voices.find(v => v.lang.startsWith("es")) || null;
+    if (spanishVoice) {
+      utterance.voice = spanishVoice;
+    }
+
+    utterance.rate = calculatedRate;
+    utterance.pitch = 0.95;
+
+    utterance.onend = () => {
+      setIsPlayingFlow(false);
+    };
+
+    utterance.onerror = () => {
+      setIsPlayingFlow(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+    setIsPlayingFlow(true);
+    toast.success(`▶️ Reproduciendo cadencia a ${avgBpm} BPM (Velocidad: ${calculatedRate.toFixed(2)}x)`);
+  }, [isPlayingFlow, lyrics, bpmVibe.range]);
+
+  // ===== Download as .lrc (Sync Lyrics for DAWs/Players) =====
+  const handleDownloadLrc = useCallback(() => {
+    if (!lyrics) return;
+    const lrcContent = generateLrcContent(
+      lyrics,
+      bpmVibe.range,
+      artist?.name ?? "TRAPLORD Artist",
+      "Single Track"
+    );
+    downloadClientFile(`trapghost-${artist?.id ?? "track"}-${Date.now()}.lrc`, lrcContent, "text/plain;charset=utf-8");
+    toast.success("Archivo de sincronización .lrc descargado");
+  }, [lyrics, bpmVibe.range, artist]);
+
+  // ===== Download Studio Recording Sheet (.txt) =====
+  const handleDownloadStudioSheet = useCallback(() => {
+    if (!lyrics) return;
+    const moodLabel = MOODS.find(m => m.id === moodId)?.label ?? moodId;
+    const activeProducer = producerId && producerId !== "none" ? getProducerById(producerId) : null;
+    const activeSuno = sunoStylePrompt || buildSunoStylePrompt({
+      beatType,
+      bpmVibe,
+      moodId,
+      artistId,
+      featureArtistId,
+      producerId,
+      structureLabel: structure.label,
+      dirtyLevel,
+    });
+
+    const content = generateStudioRecordingSheet({
+      artistName: artist?.name ?? "Artista Libre",
+      featureName: featureArtist?.name,
+      bpmRange: bpmVibe.range,
+      bpmVibeLabel: bpmVibe.label,
+      moodLabel,
+      producerName: activeProducer?.name,
+      sunoStylePrompt: activeSuno,
+      lyrics,
+    });
+    downloadClientFile(`studio-session-${artist?.id ?? "track"}-${Date.now()}.txt`, content, "text/plain;charset=utf-8");
+    toast.success("Ficha de grabación de estudio descargada");
+  }, [lyrics, artist, featureArtist, moodId, producerId, sunoStylePrompt, beatType, bpmVibe, artistId, featureArtistId, structure.label, dirtyLevel]);
+
+  // ===== Copy Studio Recording Sheet =====
+  const handleCopyStudioSheet = useCallback(async () => {
+    if (!lyrics) return;
+    const moodLabel = MOODS.find(m => m.id === moodId)?.label ?? moodId;
+    const activeProducer = producerId && producerId !== "none" ? getProducerById(producerId) : null;
+    const activeSuno = sunoStylePrompt || buildSunoStylePrompt({
+      beatType,
+      bpmVibe,
+      moodId,
+      artistId,
+      featureArtistId,
+      producerId,
+      structureLabel: structure.label,
+      dirtyLevel,
+    });
+
+    const content = generateStudioRecordingSheet({
+      artistName: artist?.name ?? "Artista Libre",
+      featureName: featureArtist?.name,
+      bpmRange: bpmVibe.range,
+      bpmVibeLabel: bpmVibe.label,
+      moodLabel,
+      producerName: activeProducer?.name,
+      sunoStylePrompt: activeSuno,
+      lyrics,
+    });
+    try {
+      await navigator.clipboard.writeText(content);
+      toast.success("Ficha de grabación copiada al portapapeles");
+    } catch {
+      toast.error("No se pudo copiar la ficha");
+    }
+  }, [lyrics, artist, featureArtist, moodId, producerId, sunoStylePrompt, beatType, bpmVibe, artistId, featureArtistId, structure.label, dirtyLevel]);
 
   // ===== Restore from history =====
   const restoreFromHistory = useCallback((entry: HistoryEntry) => {
@@ -1909,36 +2066,25 @@ export default function TrapGhostPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Artista Principal</Label>
-                      <Select value={artistId} onValueChange={(v) => { artistDefaultApplied.current = true; setArtistId(v); }}>
-                        <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {ARTISTS_DATA.map(group => (
-                            <SelectGroup key={group.label}>
-                              <SelectLabel className="text-slime">{group.label}</SelectLabel>
-                              {group.artists.map(a => (
-                                <SelectItem key={a.id} value={a.id}>
-                                  <span className="flex items-center gap-2">
-                                    <span>👤</span>{a.name}
-                                    <span className="text-muted-foreground text-xs">· {a.origin}</span>
-                                  </span>
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <ArtistSearchCombobox
+                        value={artistId}
+                        onValueChange={(v) => {
+                          artistDefaultApplied.current = true;
+                          setArtistId(v);
+                        }}
+                        placeholder="Buscar artista principal..."
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Feature (opcional)</Label>
-                      <Select value={featureArtistId} onValueChange={setFeatureArtistId}>
-                        <SelectTrigger className="bg-black/40"><SelectValue placeholder="Sin invitado" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">— Sin feature —</SelectItem>
-                          {ARTISTS_DATA.flatMap(g => g.artists).filter(a => a.id !== artistId).map(a => (
-                            <SelectItem key={a.id} value={a.id}>👤 {a.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <ArtistSearchCombobox
+                        value={featureArtistId}
+                        onValueChange={setFeatureArtistId}
+                        allowNone
+                        noneLabel="— Sin feature (Solo) —"
+                        excludeArtistId={artistId}
+                        placeholder="Buscar invitado / feature..."
+                      />
                     </div>
                   </div>
                   {/* Feature Sim selector */}
@@ -3272,7 +3418,7 @@ export default function TrapGhostPage() {
                 <Music className="w-5 h-5 text-slime" />
                 <h2 className="font-display text-lg font-semibold">Letra Generada</h2>
                 {rhymeAnalysis && rhymeAnalysis.groups.length > 0 && (
-                  <div className="flex items-center gap-1 ml-2">
+                  <div className="flex items-center gap-1 ml-2 flex-wrap">
                     <span className="text-[10px] text-muted-foreground">Rimas:</span>
                     {rhymeAnalysis.groups.slice(0, 6).map(g => (
                       <span
@@ -3283,6 +3429,16 @@ export default function TrapGhostPage() {
                       />
                     ))}
                     <span className="text-[10px] text-muted-foreground ml-1">({rhymeAnalysis.totalRhymes} líneas)</span>
+                    {rhymeAnalysis.assonantRhymeCount !== undefined && rhymeAnalysis.assonantRhymeCount > 0 && (
+                      <span className="text-[10px] text-amber-400 bg-amber-400/10 border border-amber-400/30 px-1.5 py-0.5 rounded ml-1" title="Rimas asonantes detectadas">
+                        {rhymeAnalysis.assonantRhymeCount} asonantes
+                      </span>
+                    )}
+                    {rhymeAnalysis.internalRhymesCount !== undefined && rhymeAnalysis.internalRhymesCount > 0 && (
+                      <span className="text-[10px] text-purple-400 bg-purple-400/10 border border-purple-400/30 px-1.5 py-0.5 rounded ml-1" title="Rimas internas / multisilábicas detectadas en el compás">
+                        {rhymeAnalysis.internalRhymesCount} internas
+                      </span>
+                    )}
                   </div>
                 )}
                 {lyrics && (
@@ -3308,6 +3464,16 @@ export default function TrapGhostPage() {
                     <Button variant="ghost" size="sm" onClick={() => { setProducerTagOpen(!producerTagOpen); if (!producerTags.length && lyrics) handleProducerTag("smart"); }} className={`h-8 ${producerTagOpen ? "text-purple-400 bg-purple-400/10" : "text-muted-foreground hover:text-purple-400"}`} title="Markoff Producer Tag Studio">
                       <Disc3 className="w-3.5 h-3.5 mr-1 text-purple-400" />Tag Studio
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleToggleFlowAudio}
+                      className={`h-8 ${isPlayingFlow ? "text-red-400 bg-red-400/10 border border-red-500/30 animate-pulse" : "text-muted-foreground hover:text-slime"}`}
+                      title={isPlayingFlow ? "Detener reproducción de cadencia" : "Previsualizar flow y cadencia rítmica con Web Speech"}
+                    >
+                      {isPlayingFlow ? <VolumeX className="w-3.5 h-3.5 mr-1 text-red-400" /> : <Volume2 className="w-3.5 h-3.5 mr-1 text-slime" />}
+                      {isPlayingFlow ? "Parar Flow" : "Flow Audio"}
+                    </Button>
 
                     {/* Export Dropdown */}
                     <DropdownMenu>
@@ -3325,6 +3491,16 @@ export default function TrapGhostPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={handleExportPDF} className="text-xs cursor-pointer">
                           <FileText className="w-3.5 h-3.5 mr-2 text-purple-400" />Exportar a PDF
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={handleDownloadLrc} className="text-xs cursor-pointer">
+                          <Music className="w-3.5 h-3.5 mr-2 text-amber-400" />Descargar Sync Lyrics (.lrc)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleDownloadStudioSheet} className="text-xs cursor-pointer">
+                          <FileSpreadsheet className="w-3.5 h-3.5 mr-2 text-emerald-400" />Ficha de Estudio (.txt)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleCopyStudioSheet} className="text-xs cursor-pointer">
+                          <Copy className="w-3.5 h-3.5 mr-2 text-muted-foreground" />Copiar Ficha de Estudio
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -3524,16 +3700,26 @@ export default function TrapGhostPage() {
                               {nonEmptyLines.map((line, j) => {
                                 const thisLineIdx = globalLineIdx++;
                                 const rhymeGroup = rhymeAnalysis ? getRhymeGroupForLine(rhymeAnalysis, thisLineIdx) : null;
+                                const internalMatch = rhymeAnalysis ? getInternalRhymeForLine(rhymeAnalysis, thisLineIdx) : null;
                                 return (
                                   <div
                                     key={`${i}-${j}`}
+                                    className="flex items-center gap-1.5"
                                     style={rhymeGroup ? {
                                       borderLeft: `3px solid ${rhymeGroup.color}`,
                                       paddingLeft: "8px",
                                       marginLeft: "-3px",
                                     } : undefined}
                                   >
-                                    {renderLyricLine(line, `${i}-${j}`)}
+                                    <div className="flex-1">{renderLyricLine(line, `${i}-${j}`)}</div>
+                                    {internalMatch && (
+                                      <span
+                                        className="text-[9px] font-mono text-purple-400 bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 rounded shrink-0"
+                                        title={`Rima interna / multisilábica: "${internalMatch.word1}" ~ "${internalMatch.word2}" (-${internalMatch.ending})`}
+                                      >
+                                        ⚡ {internalMatch.word1} ~ {internalMatch.word2}
+                                      </span>
+                                    )}
                                   </div>
                                 );
                               })}
