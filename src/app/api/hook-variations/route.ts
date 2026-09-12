@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getArtistById, getDirtyLevel } from "@/lib/trap-data";
+import { getArtistById, getDirtyLevel, ARTISTS_DATA } from "@/lib/trap-data";
 import { getFlowProfile } from "@/lib/artist-flow-profiles";
 
 export const runtime = "nodejs";
@@ -35,10 +35,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Falta artistId" }, { status: 400 });
     }
 
-    const artist = getArtistById(body.artistId);
-    const flowProfile = getFlowProfile(body.artistId);
+    // Clean targetArtistName in case it contains Suno hints or tags like "Morad, Melodic flow..."
+    let rawSinger = body.targetArtistName?.trim() || "";
+    if (rawSinger.includes(",")) rawSinger = rawSinger.split(",")[0].trim();
+    if (rawSinger.includes(":")) rawSinger = rawSinger.split(":").pop()?.trim() || rawSinger;
+
+    // Check if rawSinger resolves to an artist in trap-data
+    let effectiveArtistId = body.artistId;
+    if (rawSinger) {
+      const foundArtist = ARTISTS_DATA.flatMap(g => g.artists).find(
+        a => a.name.toLowerCase() === rawSinger.toLowerCase() || a.id === rawSinger.toLowerCase()
+      );
+      if (foundArtist) {
+        effectiveArtistId = foundArtist.id;
+      }
+    }
+
+    const artist = getArtistById(effectiveArtistId);
+    const flowProfile = getFlowProfile(effectiveArtistId);
     const dirty = getDirtyLevel(body.dirtyLevel ?? 2);
-    const singerName = body.targetArtistName?.trim() || artist?.name || "Lead";
+    const singerName = rawSinger || artist?.name || "Lead";
 
     const systemPrompt = `Eres un Ghostwriter y Topliner de élite en Trap y Música Urbana.
 Tu misión es componer EXACTAMENTE 3 VARIANTES DISTINTAS DE ESTRIBILLO (HOOK / CHORUS) de 4 a 8 compases optimizadas para SUNO AI.
@@ -57,10 +73,16 @@ ${body.conceptOrLyrics ? `- Contexto de la Canción:\n${body.conceptOrLyrics.sli
 - Estás escribiendo EXCLUSIVAMENTE el [Chorus / Hook / Estribillo] para ${singerName}.
 - NO escribas un Pre-Chorus, ni una Intro, ni un Verso. La salida debe ser 100% un Estribillo pegadizo y bailable.
 
+# 🏀 REGLAS MÉTRICAS DE REBOTE (AMERICAN BOUNCE & SPACE):
+- Cada compás debe tener MÁXIMO entre 3 y 5 palabras (4 a 6 sílabas).
+- Usa comas ',' y puntos suspensivos '...' para notas sostenidas, swing y pausas elásticas.
+- Incluye ad-libs rítmicos de contrarrespuesta entre paréntesis en cada compás: (Yeah!), (Skrrt!), (Facts!).
+- Prohibido redactar oraciones continuas largas o párrafos narrativos.
+
 # ESTILOS DE LAS 3 VARIANTES REQUERIDAS:
 1. "mantra": [MANTRA HIPNÓTICO] — Repetición pesada de una palabra/frase clave (3-4 veces con cadencia y comas para Suno), ultra pegadizo y bailable.
-2. "melodic": [MELÓDICO & CANTABLE] — Líneas fluidas con melodía vocal alargada, notas altas y ganchos armónicos ideales para autotune.
-3. "punchy": [PUNCHLINES DE CALLE] — Frases secas, ego dominante, barras contundentes y actitud sin adornos.
+2. "melodic": [MELÓDICO & CANTABLE] — Líneas fluidas con melodía vocal alargada con '...', notas abiertas y ganchos armónicos ideales para autotune.
+3. "punchy": [PUNCHLINES DE CALLE] — Frases secas, ego dominante, barras contundentes de pocas palabras y actitud sin adornos.
 
 # FORMATO DE SALIDA ESTRICTO (SOLO JSON VÁLIDO):
 Devuelve EXCLUSIVAMENTE un JSON con este esquema (sin markdown, sin comentarios):

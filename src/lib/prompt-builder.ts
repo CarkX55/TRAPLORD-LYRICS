@@ -1,4 +1,4 @@
-import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, getDirtyLevel, getRepetitionPatternById, getHookStyleOptionById, MOODS, getSituationalPresetById, type SongStructure, type BpmVibe, type BeatType } from "./trap-data";
+import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, getDirtyLevel, getRepetitionPatternById, getHookStyleOptionById, MOODS, getSituationalPresetById, getFlowPocketOptionById, type SongStructure, type BpmVibe, type BeatType, type FlowPocketOption } from "./trap-data";
 import { getFlowProfile, getBreathInstruction, getCadenceLabel, type FlowProfile } from "./artist-flow-profiles";
 import { getArtistReference, type ArtistReference } from "./artist-references";
 import type { TrackAnalysis } from "./track-analyzer";
@@ -81,6 +81,7 @@ export interface PromptParams {
   dynamismMode?: "classic" | "vanguard";
   adlibStyle?: "textured" | "classic" | "minimal";
   situationalPresetId?: string;
+  flowPocketMode?: "auto" | "bouncy" | "triplets" | "heavy";
 }
 
 export function getSunoSectionHint(
@@ -298,12 +299,14 @@ export function buildSystemPrompt(params: PromptParams): string {
       let densityInstruction = "";
       if (voiceAssign?.density && voiceAssign.density !== "normal") {
         if (voiceAssign.density === "sparse") {
-          densityInstruction = " → [DENSIDAD SPARSE: Métrica abierta y pausada, espacios de aire y respiración, pocas sílabas por compás]";
+          densityInstruction = " → [DENSIDAD SPARSE / BOUNCE: Métrica abierta y pausada. LÍMITE ESTRICTO: 3 a 5 palabras por compás (4 a 6 sílabas). Vocales sostenidas '...', pausas [Pause] y ad-libs de eco. ANULA el pocket general para esta sección]";
         } else if (voiceAssign.density === "dense") {
-          densityInstruction = " → [DENSIDAD DENSE: Flujo continuo y acelerado, alta concentración de sílabas y rimas internas por compás]";
+          densityInstruction = " → [DENSIDAD DENSE: Flujo continuo y acelerado (8 a 11 palabras / 12 a 14 sílabas por compás), rimas internas frecuentes]";
         } else if (voiceAssign.density === "extra_dense") {
-          densityInstruction = " → [DENSIDAD EXTRA DENSE: Ametralladora lírica imparable, métrica ultra apretada sin respiros]";
+          densityInstruction = " → [DENSIDAD EXTRA DENSE: Ametralladora lírica imparable (11 a 15 palabras / 14 a 18 sílabas por compás), métrica ultra apretada sin respiros]";
         }
+      } else if (params.flowPocketMode === "bouncy") {
+        densityInstruction = " → [CADENCIA BOUNCY: Métrica elástica de 3 a 5 palabras por compás, swing en contratiempo, ad-libs rítmicos]";
       }
 
       // Language Override note
@@ -368,8 +371,9 @@ export function buildSystemPrompt(params: PromptParams): string {
         ? chorusOverrideHint
         : getSunoSectionHint(s.type, sectionArtistId, params.moodId, params.bpmVibe, isDetailedSuno);
       const perfTag = basePerfHint ? `, ${basePerfHint}` : "";
+      const bouncyTag = (params.flowPocketMode === "bouncy" && !perfTag.includes("bouncy")) ? ", swung bouncy off-beat pocket, elastic 808 bounce" : "";
 
-      lines.push(`[${s.name}: ${voice}${perfTag}${repTag}] — ${bars}${dynamicNote}${densityInstruction}${langOverrideInstruction}${repInstruction}`);
+      lines.push(`[${s.name}: ${voice}${perfTag}${repTag}${bouncyTag}] — ${bars}${dynamicNote}${densityInstruction}${langOverrideInstruction}${repInstruction}`);
 
 
       if (useDynamicForm && songFormStyle === "beat_drop") {
@@ -530,7 +534,64 @@ Los ad-libs NO son solo muletillas aisladas al final de la barra. Distribuye ad-
     pocketGuideline = `- **Pocket Silábico Estricto (${params.bpmVibe.range} BPM - Tempo Hiperactivo/Rage)**: Entre 11 y 14 sílabas por compás en métrica rápida, o barras cortas de 5-6 sílabas con repetición agresiva. Evita párrafos largos que Suno aceleraría en modo ardilla.`;
   }
 
-  const prompt = `Eres un Ghostwriter de élite del Trap y Rap contemporáneo. Escribes letras auténticas, con groove callejero y perfectamente estructuradas para ser producidas y cantadas en SUNO AI.
+  // American Trap Bounce block
+  const isBouncyMode = params.flowPocketMode === "bouncy" || params.structure.sections.some(s => {
+    const va = params.sectionVoices?.find(v => v.sectionName === s.name);
+    return va?.density === "sparse";
+  });
+
+  let bouncyBlock = "";
+  if (isBouncyMode) {
+    bouncyBlock = `\n# 🏀 MOTOR RÍTMICO AMERICAN TRAP BOUNCE (OFF-BEAT POCKET & AD-LIB PING-PONG)
+Esta canción o secciones marcadas con [DENSIDAD SPARSE / BOUNCE] deben ejecutarse con la arquitectura rítmica del trap americano con rebote (Gunna, Turbo, Wheezy, Lil Baby, Pierre Bourne).
+Aplica rigurosamente estas 5 reglas de rebote a cada barra:
+1. **Silencio en el Tiempo 1 (Espacio para el 808):** La voz NO debe entrar en el primer golpe del compás. Deja caer el bombo 808 limpio y entra justo en el contratiempo (el 'off-beat').
+2. **Economía de Palabras Estricta:** Entre **3 y 5 palabras por compás (4 a 6 sílabas)** como MÁXIMO absoluto. Queda TERMINANTEMENTE PROHIBIDO redactar oraciones continuas o discursivas de más de 6 palabras. Menos palabras = más rebote.
+3. **Puntuación Elástica para Suno AI:** Usa comas ',' y puntos suspensivos '...' para forzar al motor de Suno a retrasar la voz con swing (*swung delay*): ej: *"Drop top... (skrrt), dentro del BM (yeah)"*, *"Cash flow... (racks), saben quién viene (facts)"*.
+4. **Ad-libs de Contrarritmo (Ping-Pong 3D):** Cada compás debe cerrarse con un ad-lib entre paréntesis en el tiempo 4 que responde a la voz líder. El ad-lib funciona como un instrumento de percusión extra.
+5. **Fonética Cortada en Español:** Evita palabras polisilábicas pesadas (3+ sílabas). Emplea vocabulario seco, monosílabos, anglicismos y jerga percusiva.
+*ADAPTACIÓN AL ARTISTA:* Conserva el 100% de la identidad, jerga y actitud de ${artist?.name ?? "Lead"}, pero empaca sus barras dentro de este rebote de Atlanta.`;
+  }
+
+  // Specialized Chorus Architecture block
+  const chorusBlock = `\n# 🔁 ARQUITECTURA DEL ESTRIBILLO / HOOK (SUNO NATIVE)
+Los estribillos [Chorus / Hook] NO son versos ni deben contener oraciones narrativas complejas. En Suno AI, un estribillo bailable y memorable requiere:
+1. **Estructura Simétrica de 4+4 Compases (para estribillos de 8 barras):**
+   - **Barras 1 a 4:** Gancho melódico central, espacioso y pegadizo.
+   - **Barras 5 a 8:** Repetición hipnótica del mismo gancho con ligeras variaciones melódicas, extensiones de vocales con '...' o réplicas de ad-libs.
+2. **Economía Vocal en el Estribillo:** Si el estribillo tiene densidad Sparse o modo Bouncy, usa MÁXIMO 3 a 5 palabras por barra. Deja que el autotune y los pads respiren.
+3. **Prohibido la Narrativa de Verso en el Chorus:** Queda terminantemente prohibido contar historias, anécdotas largas o párrafos en el estribillo.`;
+
+  // Locked sections block
+  let lockedBlock = "";
+  if (params.lockedSections && params.lockedSections.length > 0) {
+    lockedBlock = `\n# 🔒 SECCIONES BLOQUEADAS (CONSERVAR EXACTAMENTE IDÉNTICAS)
+Las siguientes secciones ya fueron aprobadas por el usuario. DEBES reproducirlas EXACTAMENTE como están escritas, sin alterar una sola palabra ni ad-lib:
+${params.lockedSections.map(l => `[${l.name}]\n${l.content}`).join("\n\n")}`;
+  }
+
+  // Section regeneration directive
+  let regenerateBlock = "";
+  if (params.regenerateSection) {
+    regenerateBlock = `\n# ⚡ DIRECTIVA DE REGENERACIÓN EXCLUSIVA DE SECCIÓN
+Estás regenerando ÚNICAMENTE la sección "[${params.regenerateSection.sectionName}]".
+DEBES DEVOLVER EXCLUSIVAMENTE el encabezado [${params.regenerateSection.sectionName}] y sus compases cantados correspondientes. NO generes ninguna otra sección de la canción (ni Intro, ni Versos, ni Outro).
+Contexto musical previo para mantener coherencia de rima y flow:
+${params.regenerateSection.keepContext.slice(0, 500)}`;
+  }
+
+  // Language correction & reference track blocks
+  let correctionBlock = "";
+  if (params.correctionInstruction) {
+    correctionBlock = `\n# ⚠️ CORRECCIÓN OBLIGATORIA DE IDIOMA / SPANGLISH\n${params.correctionInstruction}`;
+  }
+
+  let refTrackBlock = "";
+  if (params.referenceTrack) {
+    refTrackBlock = `\n# 🧬 ADN DE TRACK DE REFERENCIA (ESTRUCTURA & RITMO)\n${params.referenceTrack.summary}\n- Densidad recomendada: ${params.referenceTrack.density}\n- Esquema de rima sugerido: ${params.referenceTrack.rhymeScheme}`;
+  }
+
+  const prompt = `${regenerateBlock ? `${regenerateBlock}\n\n` : ""}Eres un Ghostwriter de élite del Trap y Rap contemporáneo. Escribes letras auténticas, con groove callejero y perfectamente estructuradas para ser producidas y cantadas en SUNO AI.
 
 # 🧠 PROTOCOLO DE RAZONAMIENTO INTERNO (THINKING PROTOCOL)
 Antes de redactar la letra definitiva, utiliza tus tokens de razonamiento interno para completar estas 4 fases:
@@ -551,7 +612,12 @@ ${narrativeBlock}
 ${dictionaryBlock}
 ${producerBlock}
 ${cadenceBlock}
+${bouncyBlock}
+${chorusBlock}
 ${flowSwitchingBlock}
+${lockedBlock}
+${correctionBlock}
+${refTrackBlock}
 ${referenceBlock}
 ${featureReferenceBlock}
 ${adlibsBlock}
@@ -559,7 +625,8 @@ ${adlibsBlock}
 # 📐 REGLAS MUSICALES & MÉTRICA SUNO
 ${rhymeLevelInstruction}
 ${pocketGuideline}
-- **Puntuación Rítmica**: Utiliza comas ',' y puntos suspensivos '...' para marcar los silencios y respiraciones del cantante.
+- **Excepción Obligatoria de Densidad / Bouncy**: Si una sección indica [DENSIDAD SPARSE / BOUNCE] o la canción activa el [American Trap Bounce], la regla general de 8-10 sílabas queda TOTALMENTE ANULADA para esa sección, debiendo usar estrictamente entre 3 y 5 palabras por compás (4 a 6 sílabas) con elipsis '...' y ad-libs de ping-pong.
+${params.syllableSync ? "- **Sincronización Silábica**: Métrica estricta y simétrica compás a compás.\n" : ""}${params.phoneticAdlibs ? "- **Ad-libs Fonéticos**: Usa ad-libs fonéticos percusivos (brrr, skrrt, prr, woo, fah).\n" : ""}- **Puntuación Rítmica**: Utiliza comas ',' y puntos suspensivos '...' para marcar los silencios y respiraciones del cantante.
 - **Rimas Orgánicas**: ${customScheme ? `Sigue rigurosamente el esquema ${customScheme.pattern} (${customScheme.label}).` : "Rimas AABB o ABAB fluidas."}
 - **Dinámica Acústica Suno v4.5**: Puedes intercalar etiquetas acústicas como '[Vocal Cut]' en la barra de remate antes del estribillo, '[Beat Drop: Sub bass drop]' o '[Layered Chorus: stereo autotune harmonies]' para abrir coros en estéreo.
 - **Prohibido**: JAMÁS menciones el nombre real o apodo de ningún artista en la letra cantada a menos que sea un ad-lib propio.
@@ -600,7 +667,7 @@ ${structurePlan}
 2. NUNCA uses encabezados markdown '###' ni escribas líneas separadas como '*Intérprete:*' porque Suno intentará cantarlas.
 3. Ad-libs secundarios SIEMPRE entre paréntesis: (Yeah!), (Brrr!).
 4. ⚡ REGLA ESTRICTA DE BARRAS / COMPASES: Una barra cantada equivale EXACTAMENTE a una línea de texto. Si la sección especifica 'N barras' (ej: 8 barras, 16 barras, 4 barras), DEBES generar EXACTAMENTE ese número de líneas cantadas para esa sección. No omitas compases ni agregues líneas de más.
-5. Tu respuesta debe contener ÚNICAMENTE la letra de la canción. Sin introducciones, notas de producción ni texto extra fuera de los corchetes.`;
+5. ${params.regenerateSection ? `⚡ RESPUESTA EXCLUSIVA: Tu respuesta debe contener ÚNICAMENTE la sección [${params.regenerateSection.sectionName}] regenerada, sin ninguna otra parte de la canción.` : "Tu respuesta debe contener ÚNICAMENTE la letra de la canción. Sin introducciones, notas de producción ni texto extra fuera de los corchetes."}`;
 
   return prompt;
 }

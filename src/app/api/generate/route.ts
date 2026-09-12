@@ -51,6 +51,7 @@ interface GenerateBody {
   adlibStyle?: "textured" | "classic" | "minimal";
   situationalPresetId?: string;
   sectionVoices?: SectionVoiceAssignment[];
+  flowPocketMode?: "auto" | "bouncy" | "triplets" | "heavy";
 }
 
 // Get a reference for an artist: curated DB first, then generate on-the-fly (sandbox uses z-ai SDK)
@@ -146,6 +147,7 @@ export async function POST(req: NextRequest) {
       dynamismMode: body.dynamismMode,
       adlibStyle: body.adlibStyle,
       situationalPresetId: body.situationalPresetId,
+      flowPocketMode: body.flowPocketMode,
     });
 
     // Call the LLM via z-ai-web-dev-sdk (server-side only)

@@ -34,10 +34,10 @@ import {
   HOOK_STYLE_OPTIONS, getHookStyleOptionById,
   INSTRUMENTAL_BREAKS, getInstrumentalBreakById,
   SITUATIONAL_PRESETS, getSituationalPresetById,
-  SECTION_TEMPLATES,
+  SECTION_TEMPLATES, FLOW_POCKET_OPTIONS, getFlowPocketOptionById,
   getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, generateBeatPrompt,
   type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset, type DirtyLevel, type RepetitionPattern, type InstrumentalBreak, type SituationalPreset,
-  type SongSection, type SongStructure, type SectionTemplate
+  type SongSection, type SongStructure, type SectionTemplate, type FlowPocketOption
 } from "@/lib/trap-data";
 import type { HookVariationOption } from "@/app/api/hook-variations/route";
 import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
@@ -233,6 +233,7 @@ export default function TrapGhostPage() {
   const [dynamismMode, setDynamismMode] = useState<"classic" | "vanguard">("vanguard");
   const [adlibStyle, setAdlibStyle] = useState<"textured" | "classic" | "minimal">("textured");
   const [situationalPresetId, setSituationalPresetId] = useState<string>("none");
+  const [flowPocketMode, setFlowPocketMode] = useState<"auto" | "bouncy" | "triplets" | "heavy">("auto");
   const [sunoReadiness, setSunoReadiness] = useState<SunoReadinessResult | null>(null);
   // Round 12: API Key + model selector + producer name + flow profile
   const [geminiApiKey, setGeminiApiKey] = useState<string>("");
@@ -560,7 +561,12 @@ export default function TrapGhostPage() {
       dynamismMode,
       adlibStyle,
       situationalPresetId: situationalPresetId !== "none" ? situationalPresetId : undefined,
+      flowPocketMode: flowPocketMode !== "auto" ? flowPocketMode : undefined,
     };
+
+    if (!isRegen) {
+      setHookVariations([]);
+    }
 
     try {
       // === MODO GEMINI DIRECTO (desde el navegador del usuario) ===
@@ -687,7 +693,7 @@ export default function TrapGhostPage() {
       beatTypeId, featureSimId, customIntro, collabInteraction, altVoiceAsterisks,
       syllableSync, phoneticAdlibs, smartBarsMode, sectionVoices, sunoTagsMode,
       geminiApiKey, geminiModel, producerName, refTrackOpen, refTrackLyrics, dynamicSongForm,
-      dynamismMode, adlibStyle, situationalPresetId, customSections, isCustomStructure]);
+      dynamismMode, adlibStyle, situationalPresetId, customSections, isCustomStructure, flowPocketMode]);
 
   // ===== Copy for Suno AI (Clean Bracketed Format) =====
   const handleCopySuno = useCallback(async () => {
@@ -1248,6 +1254,7 @@ export default function TrapGhostPage() {
           barCountOverride: barCountOverride > 0 ? barCountOverride : undefined,
           rhymeSchemeId,
           temperature,
+          flowPocketMode: flowPocketMode !== "auto" ? flowPocketMode : undefined,
           regenerateSection: {
             sectionName,
             keepContext: context,
@@ -1258,11 +1265,15 @@ export default function TrapGhostPage() {
       if (!res.ok || data.error) throw new Error(data.error || "Error en re-generación");
       // Replace just the section in the existing lyrics
       const newSectionText = data.lyrics.trim();
-      // Simple replacement: find the old section and replace with new
-      const updatedLyrics = lyrics.replace(
-        new RegExp(`###?\\s*\\[${sectionName}\\][^]*?(?=###?\\s*\\[|$)`, "i"),
-        newSectionText + "\n\n"
-      );
+      // Safe replacement: find the old section by tag and replace with new
+      const escapedName = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const sectionRegex = new RegExp(`(?:###?\\s*)?\\[${escapedName}[^\\]]*\\][^]*?(?=(?:###?\\s*\\[|$))`, "i");
+      let updatedLyrics = lyrics;
+      if (sectionRegex.test(lyrics)) {
+        updatedLyrics = lyrics.replace(sectionRegex, `${newSectionText}\n\n`);
+      } else {
+        updatedLyrics = lyrics + `\n\n${newSectionText}`;
+      }
       setLyrics(updatedLyrics);
       setAnalysis(analyzeLanguageRatio(updatedLyrics, spanglishPercent));
       toast.success(`Sección "${sectionName}" re-generada`);
@@ -1274,7 +1285,7 @@ export default function TrapGhostPage() {
   }, [artistId, featureArtistId, moodId, selectedTopics, customTopic, spanglishPercent,
       bpmVibeId, structureId, narrativeArcId, producerId, producerTag, customDictionary,
       dynamicMarkers, chorusLangOverride, versesLangOverride, barCountOverride,
-      rhymeSchemeId, temperature, lyrics, customSections, isCustomStructure]);
+      rhymeSchemeId, temperature, lyrics, customSections, isCustomStructure, flowPocketMode]);
 
   // ===== Share URL (encode config into URL hash) =====
   const handleShareUrl = useCallback(() => {
@@ -1285,6 +1296,7 @@ export default function TrapGhostPage() {
       na: narrativeArcId, p: producerId, pt: producerTag, cd: customDictionary,
       dm: dynamicMarkers, cl: chorusLangOverride, vl: versesLangOverride,
       bc: barCountOverride, rs: rhymeSchemeId, tp: temperature,
+      fp: flowPocketMode !== "auto" ? flowPocketMode : undefined,
     };
     const encoded = btoa(encodeURIComponent(JSON.stringify(config)));
     const url = `${window.location.origin}${window.location.pathname}#config=${encoded}`;
@@ -1297,7 +1309,7 @@ export default function TrapGhostPage() {
   }, [artistId, featureArtistId, moodId, selectedTopics, customTopic, spanglishPercent,
       bpmVibeId, structureId, narrativeArcId, producerId, producerTag, customDictionary,
       dynamicMarkers, chorusLangOverride, versesLangOverride, barCountOverride,
-      rhymeSchemeId, temperature, customSections, isCustomStructure]);
+      rhymeSchemeId, temperature, customSections, isCustomStructure, flowPocketMode]);
 
   // ===== Load config from URL hash on mount =====
   useEffect(() => {
@@ -1329,6 +1341,7 @@ export default function TrapGhostPage() {
       if (config.bc !== undefined) setBarCountOverride(config.bc);
       if (config.rs) setRhymeSchemeId(config.rs);
       if (config.tp !== undefined) setTemperature(config.tp);
+      if (config.fp) setFlowPocketMode(config.fp);
       toast.success("Configuración cargada desde URL");
     } catch {
       toast.error("URL de configuración inválida");
@@ -1516,6 +1529,40 @@ export default function TrapGhostPage() {
     setTimeout(() => lyricsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
   }, [polishResult, lyrics, artist, artistId, analysis, spanglishPercent]);
 
+  // Helper: Detect the artist for the Chorus section in the current song
+  const getCurrentChorusArtist = useCallback((): { id: string; name: string } => {
+    // 1. Check current lyrics tags: [Chorus: Name, Hint]
+    if (lyrics) {
+      const chorusRegex = /\[\s*(?!(?:Pre|Post)[-\s])(?:Chorus|Hook|Estribillo|Coro)\s*:\s*([^\]]+)\]/i;
+      const match = lyrics.match(chorusRegex);
+      if (match && match[1]) {
+        let rawName = match[1].trim();
+        if (rawName.includes(",")) rawName = rawName.split(",")[0].trim();
+        if (rawName.includes(":")) rawName = rawName.split(":").pop()?.trim() || rawName;
+        const found = ARTISTS_DATA.flatMap(g => g.artists).find(
+          a => a.name.toLowerCase() === rawName.toLowerCase() || a.id === rawName.toLowerCase()
+        );
+        if (found) return { id: found.id, name: found.name };
+        if (rawName && rawName !== "Lead") return { id: artistId, name: rawName };
+      }
+    }
+
+    // 2. Check sectionVoices assignment for Chorus
+    const chorusVoice = sectionVoices.find(v => /^(?:Chorus|Hook|Estribillo|Coro)/i.test(v.sectionName));
+    if (chorusVoice?.voice) {
+      if (chorusVoice.voice === "feature" && featureArtist) {
+        return { id: featureArtist.id, name: featureArtist.name };
+      }
+      if (chorusVoice.voice !== "auto" && chorusVoice.voice !== "main" && chorusVoice.voice !== "both" && chorusVoice.voice !== "hype") {
+        const found = ARTISTS_DATA.flatMap(g => g.artists).find(a => a.id === chorusVoice.voice);
+        if (found) return { id: found.id, name: found.name };
+      }
+    }
+
+    // 3. Fallback to main artist
+    return { id: artistId, name: artist?.name ?? "Lead" };
+  }, [lyrics, sectionVoices, artistId, artist, featureArtist]);
+
   // ===== Hook Variations Generator (Priority 1) =====
   const handleGenerateHookVariations = useCallback(async (targetArtist?: string | unknown) => {
     if (!artistId) {
@@ -1534,7 +1581,9 @@ export default function TrapGhostPage() {
       let resolvedArtistName = artist?.name ?? "Lead";
 
       if (typeof targetArtist === "string" && targetArtist.trim()) {
-        const cleanName = targetArtist.trim();
+        let cleanName = targetArtist.trim();
+        if (cleanName.includes(",")) cleanName = cleanName.split(",")[0].trim();
+        if (cleanName.includes(":")) cleanName = cleanName.split(":").pop()?.trim() || cleanName;
         const found = ARTISTS_DATA.flatMap(g => g.artists).find(
           a => a.name.toLowerCase() === cleanName.toLowerCase() || a.id === cleanName.toLowerCase()
         );
@@ -1544,6 +1593,11 @@ export default function TrapGhostPage() {
         } else {
           resolvedArtistName = cleanName;
         }
+      } else {
+        // Auto-detect the chorus artist from current song lyrics / section voices
+        const detected = getCurrentChorusArtist();
+        resolvedArtistId = detected.id;
+        resolvedArtistName = detected.name;
       }
 
       const res = await fetch("/api/hook-variations", {
@@ -1571,7 +1625,7 @@ export default function TrapGhostPage() {
     } finally {
       setHookVariationsLoading(false);
     }
-  }, [artistId, featureArtistId, moodId, dirtyLevel, spanglishPercent, bpmVibe, lyrics, customTopic, geminiApiKey, geminiModel, artist]);
+  }, [artistId, featureArtistId, moodId, dirtyLevel, spanglishPercent, bpmVibe, lyrics, customTopic, geminiApiKey, geminiModel, artist, getCurrentChorusArtist]);
 
   const handleApplyHookVariation = useCallback((variation: HookVariationOption) => {
     if (!lyrics) {
@@ -2632,13 +2686,13 @@ export default function TrapGhostPage() {
                                     });
                                   }}
                                 >
-                                  <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[60px]"><SelectValue /></SelectTrigger>
+                                  <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[80px] sm:w-[95px]"><SelectValue /></SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="auto">Auto</SelectItem>
-                                    <SelectItem value="sparse">Sparse</SelectItem>
-                                    <SelectItem value="normal">Normal</SelectItem>
-                                    <SelectItem value="dense">Dense</SelectItem>
-                                    <SelectItem value="extra_dense">X-Dense</SelectItem>
+                                    <SelectItem value="sparse">Space / Bouncy (3-5 pal/b)</SelectItem>
+                                    <SelectItem value="normal">Normal (5-8 pal/b)</SelectItem>
+                                    <SelectItem value="dense">Dense (8-11 pal/b)</SelectItem>
+                                    <SelectItem value="extra_dense">X-Dense (12+ pal/b)</SelectItem>
                                   </SelectContent>
                                 </Select>
                               )}
@@ -3082,6 +3136,40 @@ export default function TrapGhostPage() {
                         {adlibStyle === "textured" && "Armonías secundarias cantadas, réplicas conversacionales entre dientes y silencios hiperrealistas [Pause]."}
                         {adlibStyle === "classic" && "Ad-libs icónicos característicos del artista entre paréntesis al final de la barra."}
                         {adlibStyle === "minimal" && "Voz principal al frente, cruda y sin pistas secundarias saturadas."}
+                      </p>
+                    </div>
+
+                    {/* Pocket & Rebote Rítmico (American Trap Bounce) */}
+                    <div className="space-y-2 pt-2.5 border-t border-slime/20">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                          <Activity className="w-3.5 h-3.5 text-slime" /> Pocket & Rebote Rítmico (Groove de Batería)
+                        </Label>
+                        {flowPocketMode === "bouncy" && (
+                          <Badge variant="outline" className="text-[9px] border-amber-400/60 text-amber-400 bg-amber-400/10">
+                            🏀 Atlanta Off-Beat
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                        {FLOW_POCKET_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setFlowPocketMode(opt.id)}
+                            className={`py-2 px-2 rounded-lg border text-center transition-all text-xs cursor-pointer flex flex-col items-center gap-1 ${
+                              flowPocketMode === opt.id
+                                ? "border-amber-400/80 bg-amber-400/15 text-amber-300 font-semibold shadow-sm"
+                                : "border-border/40 bg-black/20 text-muted-foreground hover:border-border hover:text-foreground"
+                            }`}
+                          >
+                            <span className="text-sm">{opt.icon}</span>
+                            <span className="text-[11px] leading-tight font-medium">{opt.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {getFlowPocketOptionById(flowPocketMode)?.description}
                       </p>
                     </div>
                   </div>

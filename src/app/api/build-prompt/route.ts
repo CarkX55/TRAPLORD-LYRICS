@@ -35,7 +35,7 @@ interface BuildPromptBody {
   phoneticAdlibs?: boolean;
   smartBarsMode?: boolean;
   sunoTagsMode?: "detailed" | "minimal";
-  sectionVoices?: { sectionName: string; voice: string; bars?: number; density?: "sparse" | "normal" | "dense" | "extra_dense"; repetitionPattern?: string; customKeyword?: string }[];
+  sectionVoices?: SectionVoiceAssignment[];
   chorusLanguageOverride?: "es" | "en" | "auto";
   versesLanguageOverride?: "es" | "en" | "auto";
   barCountOverride?: number;
@@ -52,6 +52,7 @@ interface BuildPromptBody {
   dynamismMode?: "classic" | "vanguard";
   adlibStyle?: "textured" | "classic" | "minimal";
   situationalPresetId?: string;
+  flowPocketMode?: "auto" | "bouncy" | "triplets" | "heavy";
 }
 
 function resolveTopics(topicIds: string[]): string[] {
@@ -161,6 +162,7 @@ export async function POST(req: NextRequest) {
       dynamismMode: body.dynamismMode,
       adlibStyle: body.adlibStyle,
       situationalPresetId: body.situationalPresetId,
+      flowPocketMode: body.flowPocketMode,
     });
 
     const spanglishInfo = buildSpanglishInstruction(body.spanglishPercent);

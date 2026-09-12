@@ -1147,5 +1147,51 @@ export function getSituationalPresetById(id: string): SituationalPreset | undefi
   return SITUATIONAL_PRESETS.find(p => p.id === id);
 }
 
+// ===== FLOW POCKET & BOUNCE MODES =====
+export interface FlowPocketOption {
+  id: "auto" | "bouncy" | "triplets" | "heavy";
+  label: string;
+  badge: string;
+  icon: string;
+  description: string;
+  sunoHint: string;
+}
 
+export const FLOW_POCKET_OPTIONS: FlowPocketOption[] = [
+  {
+    id: "auto",
+    label: "Natural / Artista",
+    badge: "Auto",
+    icon: "🎯",
+    description: "Cadencia y velocidad nativa registrada del artista seleccionado.",
+    sunoHint: "",
+  },
+  {
+    id: "bouncy",
+    label: "American Trap Bounce",
+    badge: "Atlanta Bounce",
+    icon: "🏀",
+    description: "Off-beat pocket de Atlanta (Gunna, Turbo, Baby). 3-5 palabras por barra, espacio para el 808 y ad-libs de ping-pong.",
+    sunoHint: "swung bouncy off-beat pocket, elastic 808 bounce, syncopated delivery, playful cadence",
+  },
+  {
+    id: "triplets",
+    label: "Triplets / Tresillos",
+    badge: "Migos / Drill",
+    icon: "⚡",
+    description: "Métrica en tresillos continuos, flujo acelerado y articulación rápida en el compás.",
+    sunoHint: "rapid articulate triplet flow, fast syncopated pocket",
+  },
+  {
+    id: "heavy",
+    label: "Barras Pesadas / Compacto",
+    badge: "Street / Heavy",
+    icon: "🧱",
+    description: "Líneas compactas y contundentes de 8 a 12 sílabas con narrativa directa sin respiros.",
+    sunoHint: "heavy punchline delivery, locked in the pocket, dense flow",
+  },
+];
 
+export function getFlowPocketOptionById(id: string): FlowPocketOption | undefined {
+  return FLOW_POCKET_OPTIONS.find(f => f.id === id);
+}
