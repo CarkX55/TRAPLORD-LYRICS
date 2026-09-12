@@ -35,13 +35,15 @@ import {
   INSTRUMENTAL_BREAKS, getInstrumentalBreakById,
   SITUATIONAL_PRESETS, getSituationalPresetById,
   SECTION_TEMPLATES, FLOW_POCKET_OPTIONS, getFlowPocketOptionById,
+  INTRO_STYLE_OPTIONS, getIntroStyleOptionById,
   getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, generateBeatPrompt,
   type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset, type DirtyLevel, type RepetitionPattern, type InstrumentalBreak, type SituationalPreset,
-  type SongSection, type SongStructure, type SectionTemplate, type FlowPocketOption
+  type SongSection, type SongStructure, type SectionTemplate, type FlowPocketOption, type IntroStyleOption, type IntroStyleId
 } from "@/lib/trap-data";
 import type { HookVariationOption } from "@/app/api/hook-variations/route";
 import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
 import { ArtistSearchCombobox } from "@/components/artist-search-combobox";
+import { SectionVoiceCombobox } from "@/components/section-voice-combobox";
 import { generateLrcContent, generateStudioRecordingSheet, downloadClientFile } from "@/lib/export-helpers";
 import { getFlowProfile, getCadenceLabel, type FlowProfile } from "@/lib/artist-flow-profiles";
 import { analyzeLanguageRatio, analyzeSunoReadiness, type LanguageAnalysis, type SunoReadinessResult } from "@/lib/language-detector";
@@ -2600,13 +2602,16 @@ export default function TrapGhostPage() {
                         const isInstrumental = sec.type === "instrumental" || sec.type === "beat_drop";
                         const canHaveBars = !isInstrumental;
                         const isChorus = sec.type === "chorus" || sec.name.toLowerCase().includes("chorus") || sec.name.toLowerCase().includes("hook") || sec.name.toLowerCase().includes("estribillo");
+                        const isIntro = sec.type === "intro" || sec.name.toLowerCase().includes("intro");
+                        const introStyleId = assign?.introStyle ?? "auto";
+                        const introStyle = getIntroStyleOptionById(introStyleId);
                         const repPatternId = assign?.repetitionPattern ?? "none";
                         const repPattern = getRepetitionPatternById(repPatternId);
                         const hookStyleId = assign?.hookStyle ?? "auto";
                         const hookStyle = getHookStyleOptionById(hookStyleId);
                         const hookMoodId = assign?.hookMood ?? "auto";
                         const hookMoodObj = MOODS.find(m => m.id === hookMoodId);
-                        const showCustomKeywordInput = (isChorus && hookStyleId === "mantra") || (!isChorus && (repPatternId === "mantra" || repPatternId === "staccato"));
+                        const showCustomKeywordInput = (isChorus && hookStyleId === "mantra") || (!isChorus && !isIntro && (repPatternId === "mantra" || repPatternId === "staccato"));
 
                         return (
                           <div key={`${sec.name}-${secIdx}`} className="p-2 rounded-md border border-border/40 bg-black/30 space-y-1.5">
@@ -2617,7 +2622,7 @@ export default function TrapGhostPage() {
                                   🎸 Solo Instrumental (Suno)
                                 </Badge>
                               ) : (
-                                <Select
+                                <SectionVoiceCombobox
                                   value={assign?.voice ?? "auto"}
                                   onValueChange={(v) => {
                                     setSectionVoices(prev => {
@@ -2626,28 +2631,10 @@ export default function TrapGhostPage() {
                                       return [...others, { ...assign, sectionName: sec.name, voice: v }];
                                     });
                                   }}
-                                >
-                                  <SelectTrigger className="bg-black/40 h-7 text-[10px] w-[125px] sm:w-[155px]"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="auto">— Voz: Auto —</SelectItem>
-                                    <SelectItem value="main">Main Artist</SelectItem>
-                                    {featureArtist && <SelectItem value="feature">Feature Artist</SelectItem>}
-                                    {featureArtist && <SelectItem value="trading_2x2">🤝 Trading Bars (2x2)</SelectItem>}
-                                    <SelectItem value="both">Both (Unísono)</SelectItem>
-                                    <SelectItem value="hype">Hype Man</SelectItem>
-                                    <SelectSeparator className="bg-border/40" />
-                                    {ARTISTS_DATA.map(group => (
-                                      <SelectGroup key={group.label}>
-                                        <SelectLabel className="text-slime/80 px-2 py-1 text-[10px] font-semibold">{group.label}</SelectLabel>
-                                        {group.artists.map(a => (
-                                          <SelectItem key={a.id} value={a.id}>
-                                            <span className="flex items-center gap-1.5"><span>👤</span>{a.name}<span className="text-muted-foreground text-[10px]">· {a.origin}</span></span>
-                                          </SelectItem>
-                                        ))}
-                                      </SelectGroup>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                  mainArtistName={artist?.name}
+                                  featureArtistName={featureArtist?.name}
+                                  hasFeature={!!featureArtist}
+                                />
                               )}
                               {canHaveBars && (
                                 <Select
@@ -2756,8 +2743,33 @@ export default function TrapGhostPage() {
                                     </SelectContent>
                                   </Select>
                                 </>
+                              ) : isIntro ? (
+                                /* Intro Style Selector */
+                                <Select
+                                  value={introStyleId}
+                                  onValueChange={(v) => {
+                                    setSectionVoices(prev => {
+                                      const others = prev.filter(p => p.sectionName !== sec.name);
+                                      const currentVoice = assign?.voice ?? "auto";
+                                      return [...others, { ...assign, sectionName: sec.name, voice: currentVoice, introStyle: v === "auto" ? undefined : v as IntroStyleId }];
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className={`bg-black/40 h-7 text-[10px] w-[145px] sm:w-[170px] ${introStyleId === "bouncy_warmup" ? "border-amber-400/80 text-amber-300 font-semibold bg-amber-400/10 shadow-xs" : introStyleId !== "auto" ? "border-slime/60 text-slime font-medium" : "text-muted-foreground"}`}>
+                                    <SelectValue placeholder="Estilo Intro" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {INTRO_STYLE_OPTIONS.map(opt => (
+                                      <SelectItem key={opt.id} value={opt.id}>
+                                        <span className="flex items-center gap-1.5">
+                                          <span>{opt.icon}</span> {opt.label}
+                                        </span>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               ) : (
-                                /* Repetition Pattern Selector for non-chorus sections */
+                                /* Repetition Pattern Selector for non-chorus/non-intro sections */
                                 <Select
                                   value={repPatternId}
                                   onValueChange={(v) => {
@@ -2784,7 +2796,7 @@ export default function TrapGhostPage() {
                               )}
                             </div>
 
-                            {/* Optional Details Row: Chorus Hook description/mood vs Verse Repetition pattern */}
+                            {/* Optional Details Row: Chorus Hook description/mood vs Intro style description vs Verse Repetition pattern */}
                             {isChorus ? (
                               ((hookStyle && hookStyle.id !== "auto") || hookMoodObj) && (
                                 <div className="flex items-center gap-2 pl-2.5 pr-2 py-1 rounded border border-amber-400/30 bg-amber-400/5 text-[10px] flex-wrap">
@@ -2814,6 +2826,18 @@ export default function TrapGhostPage() {
                                       className="h-6 text-[10px] bg-black/60 border-amber-400/40 w-36 sm:w-44 font-mono px-2"
                                     />
                                   )}
+                                </div>
+                              )
+                            ) : isIntro ? (
+                              introStyle && introStyle.id !== "auto" && (
+                                <div className="flex items-center gap-2 pl-2.5 pr-2 py-1 rounded border border-amber-400/30 bg-amber-400/5 text-[10px] flex-wrap">
+                                  <span className="text-amber-300 shrink-0 font-medium flex items-center gap-1">
+                                    <span>{introStyle.icon}</span> {introStyle.label}:
+                                    <span className="text-muted-foreground font-normal ml-1 truncate max-w-[260px] sm:max-w-md">{introStyle.description}</span>
+                                  </span>
+                                  <Badge variant="outline" className="text-[9px] border-amber-400/40 text-amber-300 bg-amber-400/10 ml-auto">
+                                    {introStyle.badge}
+                                  </Badge>
                                 </div>
                               )
                             ) : (

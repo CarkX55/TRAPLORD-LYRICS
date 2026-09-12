@@ -4,7 +4,6 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, X, Check, Shuffle, User, ChevronDown, Sparkles } from "lucide-react";
 import { ARTISTS_DATA, getArtistById, type Artist } from "@/lib/trap-data";
 
@@ -189,10 +188,10 @@ export function ArtistSearchCombobox({
       <PopoverContent
         align="start"
         sideOffset={6}
-        className="w-[330px] sm:w-[460px] p-0 bg-background/95 backdrop-blur-xl border border-slime/30 shadow-2xl shadow-slime/5 rounded-xl overflow-hidden z-50 animate-in fade-in-0 zoom-in-95"
+        className="w-[330px] sm:w-[460px] max-h-[min(560px,85vh)] flex flex-col p-0 bg-background/95 backdrop-blur-xl border border-slime/30 shadow-2xl shadow-slime/5 rounded-xl overflow-hidden z-50 animate-in fade-in-0 zoom-in-95"
       >
         {/* Header with Search Input */}
-        <div className="p-3 border-b border-border/40 bg-black/40 space-y-2.5">
+        <div className="p-3 border-b border-border/40 bg-black/40 space-y-2.5 shrink-0">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -201,6 +200,12 @@ export function ArtistSearchCombobox({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && filteredArtists.length > 0) {
+                    e.preventDefault();
+                    handleSelect(filteredArtists[0].id);
+                  }
+                }}
                 placeholder="Buscar artista, origen, estilo o ad-lib..."
                 className="w-full h-9 pl-9 pr-8 bg-black/60 border border-border/50 rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-slime/60 transition-colors"
               />
@@ -253,7 +258,7 @@ export function ArtistSearchCombobox({
         </div>
 
         {/* Results Info Bar */}
-        <div className="px-3 py-1.5 bg-black/20 border-b border-border/20 flex items-center justify-between text-[10px] text-muted-foreground">
+        <div className="px-3 py-1.5 bg-black/20 border-b border-border/20 flex items-center justify-between text-[10px] text-muted-foreground shrink-0">
           <span>
             {filteredArtists.length}{" "}
             {filteredArtists.length === 1 ? "artista" : "artistas encontrados"}
@@ -272,7 +277,7 @@ export function ArtistSearchCombobox({
         </div>
 
         {/* Scrollable Artists List */}
-        <ScrollArea className="max-h-[360px] p-2">
+        <div className="flex-1 min-h-0 max-h-[380px] overflow-y-auto overflow-x-hidden p-2 overscroll-contain custom-scroll">
           {/* Optional "None" item for feature */}
           {allowNone && (
             <div
@@ -380,7 +385,7 @@ export function ArtistSearchCombobox({
               })}
             </div>
           )}
-        </ScrollArea>
+        </div>
       </PopoverContent>
     </Popover>
   );

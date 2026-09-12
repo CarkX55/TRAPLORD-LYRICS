@@ -1195,3 +1195,69 @@ export const FLOW_POCKET_OPTIONS: FlowPocketOption[] = [
 export function getFlowPocketOptionById(id: string): FlowPocketOption | undefined {
   return FLOW_POCKET_OPTIONS.find(f => f.id === id);
 }
+
+// ===== INTRO STYLES (AMERICAN BOUNCY WARMUP & MORE) =====
+export type IntroStyleId = "auto" | "bouncy_warmup" | "studio_banter" | "pre_drop_hype" | "minimal_pad";
+
+export interface IntroStyleOption {
+  id: IntroStyleId;
+  label: string;
+  badge: string;
+  icon: string;
+  description: string;
+  sunoAcousticTag: string;
+  instruction: string;
+}
+
+export const INTRO_STYLE_OPTIONS: IntroStyleOption[] = [
+  {
+    id: "auto",
+    label: "Auto / Natural",
+    badge: "Auto",
+    icon: "🎯",
+    description: "Introducción atmosférica estándar según el flow nativo del artista.",
+    sunoAcousticTag: "Atmospheric filtered pad, spoken intro",
+    instruction: "Intro atmosférica y melódica según el estilo del artista.",
+  },
+  {
+    id: "bouncy_warmup",
+    label: "Atlanta Ad-lib Warmup",
+    badge: "Bouncy Warmup",
+    icon: "🏀",
+    description: "Calentamiento de Atlanta (Gunna/Turbo). 80-90% ad-libs afinados entre paréntesis, pausas '...', llamada al productor y tensión previa al drop.",
+    sunoAcousticTag: "Atmospheric filtered synths, autotune ad-libs warmup, swung delay, beat drop cue",
+    instruction: "Calentamiento vocal rítmico (Atlanta Bouncy). La intro debe consistir casi en su totalidad (80-90%) en ad-libs afinados entre paréntesis '(Yeah...)', '(Woah...)', '(Skrrt...)', elipsis '...' para sostener vocales, saludo/interacción con el productor ('Turn me up', 'Wheezy outta here') y aviso previo al drop.",
+  },
+  {
+    id: "studio_banter",
+    label: "Studio Banter / Cabina",
+    badge: "Studio Talk",
+    icon: "🗣️",
+    description: "Conversación espontánea al micro (Future / 21 Savage). 'Sube los cascos', flex casual, respiraciones y actitud de cabina.",
+    sunoAcousticTag: "Low filtered sub bass, studio mic talk, casual banter, raw spoken delivery",
+    instruction: "Charla espontánea de cabina y flex casual en el micrófono antes de que entre el ritmo ('Sube el retorno', 'Prende el mic', 'Diles que ya estamos'), con respiraciones y actitud callejera.",
+  },
+  {
+    id: "pre_drop_hype",
+    label: "Pre-Drop Stutter & Hype",
+    badge: "Pre-Drop Hype",
+    icon: "⚡",
+    description: "Tensión creciente (Carti / Rage). Murmullos repetitivos acelerados ('What? What?'), gritos lejanos y cuenta atrás explosiva hacia el 808.",
+    sunoAcousticTag: "Distorted synth arpeggio, rising tension, vocal stutter, explosive beat drop",
+    instruction: "Tensión rítmica creciente y aceleración hacia el drop (Travis / Carti / Rage). Murmullos repetitivos en crescendo ('What? What? What?', 'Yeah... yeah...'), gritos lejanos con reverb y cuenta atrás explosiva ('Hold up... GO!') justo antes del golpe de batería.",
+  },
+  {
+    id: "minimal_pad",
+    label: "Minimalist Pad / Silencio",
+    badge: "Minimal Pad",
+    icon: "🧊",
+    description: "Intro etérea casi instrumental. Deja respirar los sintetizadores con 1 o 2 ad-libs dispersos antes de la percusión.",
+    sunoAcousticTag: "Ethereal ambient pad, filtered space, distant lone ad-lib, sub build-up",
+    instruction: "Intro minimalista y etérea. Casi instrumental: deja respirar los sintetizadores o piano con solo 1 o 2 ad-libs monosilábicos aislados y silencios prolongados antes de la entrada del ritmo.",
+  },
+];
+
+export function getIntroStyleOptionById(id: string): IntroStyleOption | undefined {
+  return INTRO_STYLE_OPTIONS.find(i => i.id === id);
+}
+

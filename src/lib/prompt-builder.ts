@@ -1,4 +1,4 @@
-import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, getDirtyLevel, getRepetitionPatternById, getHookStyleOptionById, MOODS, getSituationalPresetById, getFlowPocketOptionById, type SongStructure, type BpmVibe, type BeatType, type FlowPocketOption } from "./trap-data";
+import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, getDirtyLevel, getRepetitionPatternById, getHookStyleOptionById, getIntroStyleOptionById, MOODS, getSituationalPresetById, getFlowPocketOptionById, type SongStructure, type BpmVibe, type BeatType, type FlowPocketOption, type IntroStyleId, type IntroStyleOption } from "./trap-data";
 import { getFlowProfile, getBreathInstruction, getCadenceLabel, type FlowProfile } from "./artist-flow-profiles";
 import { getArtistReference, type ArtistReference } from "./artist-references";
 import type { TrackAnalysis } from "./track-analyzer";
@@ -37,6 +37,7 @@ export interface SectionVoiceAssignment {
   customKeyword?: string; // optional custom word or phrase to repeat
   hookStyle?: string; // "auto" | "melodic" | "mantra" | "punchy" | "call_response" | "anthemic"
   hookMood?: string; // "auto" | moodId from MOODS
+  introStyle?: IntroStyleId; // "auto" | "bouncy_warmup" | "studio_banter" | "pre_drop_hype" | "minimal_pad"
 }
 
 
@@ -366,23 +367,44 @@ export function buildSystemPrompt(params: PromptParams): string {
         }
       }
 
+      // Intro specialized style processing
+      let introOverrideHint = "";
+      if (isIntro) {
+        let introStyleId = voiceAssign?.introStyle;
+        if (!introStyleId && params.flowPocketMode === "bouncy") {
+          introStyleId = "bouncy_warmup";
+        }
+        if (introStyleId && introStyleId !== "auto") {
+          const introOpt = getIntroStyleOptionById(introStyleId);
+          if (introOpt) {
+            introOverrideHint = introOpt.sunoAcousticTag;
+            repInstruction += ` → [${introOpt.instruction}]`;
+          }
+        }
+      }
+
       // Performance hint inside bracket for Suno AI
       const basePerfHint = (isChorus && chorusOverrideHint)
         ? chorusOverrideHint
+        : (isIntro && introOverrideHint)
+        ? introOverrideHint
         : getSunoSectionHint(s.type, sectionArtistId, params.moodId, params.bpmVibe, isDetailedSuno);
       const perfTag = basePerfHint ? `, ${basePerfHint}` : "";
       const bouncyTag = (params.flowPocketMode === "bouncy" && !perfTag.includes("bouncy")) ? ", swung bouncy off-beat pocket, elastic 808 bounce" : "";
 
       lines.push(`[${s.name}: ${voice}${perfTag}${repTag}${bouncyTag}] — ${bars}${dynamicNote}${densityInstruction}${langOverrideInstruction}${repInstruction}`);
 
-
-      if (useDynamicForm && songFormStyle === "beat_drop") {
-        if (isIntro) {
+      // Beat Drop cues
+      if (isIntro) {
+        let introStyleId = voiceAssign?.introStyle;
+        if (!introStyleId && params.flowPocketMode === "bouncy") introStyleId = "bouncy_warmup";
+        if (introStyleId === "bouncy_warmup" || introStyleId === "pre_drop_hype") {
+          lines.push(`[Beat Drop: Heavy 808 sub bass drop, explosive beat drop] — 🚫 NO LYRICS (Entrada contundente de las baterías y el bajo 808)`);
+        } else if (useDynamicForm && songFormStyle === "beat_drop") {
           lines.push(`[Beat Drop: Heavy 808 drop, distorted bassline] — 🚫 NO LYRICS (Drop del beat con 808 pesado)`);
         }
-        if (isChorus && i === totalSections - 2) {
-          lines.push(`[Beat Drop: Heavy 808 drop, tension release] — 🚫 NO LYRICS (Tensión antes del chorus final)`);
-        }
+      } else if (useDynamicForm && songFormStyle === "beat_drop" && isChorus && i === totalSections - 2) {
+        lines.push(`[Beat Drop: Heavy 808 drop, tension release] — 🚫 NO LYRICS (Tensión antes del chorus final)`);
       }
 
       return lines;
@@ -562,6 +584,42 @@ Los estribillos [Chorus / Hook] NO son versos ni deben contener oraciones narrat
 2. **Economía Vocal en el Estribillo:** Si el estribillo tiene densidad Sparse o modo Bouncy, usa MÁXIMO 3 a 5 palabras por barra. Deja que el autotune y los pads respiren.
 3. **Prohibido la Narrativa de Verso en el Chorus:** Queda terminantemente prohibido contar historias, anécdotas largas o párrafos en el estribillo.`;
 
+  // Specialized Intro Architecture block
+  const introVoiceAssign = params.sectionVoices?.find(v => v.sectionName.toLowerCase().includes("intro"));
+  let effectiveIntroStyle = introVoiceAssign?.introStyle;
+  if (!effectiveIntroStyle && params.flowPocketMode === "bouncy") {
+    effectiveIntroStyle = "bouncy_warmup";
+  }
+
+  let introBlock = "";
+  if (effectiveIntroStyle && effectiveIntroStyle !== "auto") {
+    if (effectiveIntroStyle === "bouncy_warmup") {
+      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: AD-LIB WARMUP & REBOTE DE ATLANTA
+La sección [Intro] NO debe contener oraciones narrativas completas ni versos hablados largos.
+Sigue esta estructura compás a compás:
+1. **Compás 1 (Producer Chat / Studio Setup):** Interacción espontánea con la cabina o el productor: ej: *(“Turn me up...”)*, *(“Sube los cascos”)*, o el Producer Tag entre comillas si está definido.
+2. **Compás 2 y 3 (Ping-Pong de Ad-libs Afinados):** Ad-libs rítmicos entre paréntesis con comas y puntos suspensivos que flotan sobre el pad antes de la batería: ej: *(Yeah, yeah...)*, *(Woah, woah... skrrt)*, *(Mmm... racks)*, *(Facts)*.
+3. **Compás 4 (Pre-Drop Stutter & Tensión):** Repetición rítmica de fragmentos o monosílabos acelerados y aviso del drop: ej: *(Hold up... hold up... [Beat Drop])* o *(Yeah... yeah... let's get it! [Beat Drop])*.
+4. **Regla de Oro:** El 80-90% de las líneas deben ser ad-libs entre paréntesis. Menos palabras = más espacio y rebote.`;
+    } else if (effectiveIntroStyle === "studio_banter") {
+      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: STUDIO BANTER / CHARLA DE CABINA
+La sección [Intro] debe sentirse como una toma real en el estudio (estilo Future / 21 Savage / Drake):
+1. Frases habladas con naturalidad al micrófono antes de empezar la pista: ej: *(“Diles que prendan el mic”)*, *(“Sube el autotune”)*, *(“Yeah... look”)*.
+2. Respiraciones audibles, comentarios de flex casual y pausas reflexivas mientras suena el bajo o teclado filtrado.
+3. Cierre seco justo antes de la entrada del ritmo.`;
+    } else if (effectiveIntroStyle === "pre_drop_hype") {
+      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: PRE-DROP STUTTER & HYPE (RAGE / CARTI)
+La sección [Intro] debe generar máxima tensión y anticipación para el drop de bajo (estilo Travis / Carti / Rage):
+1. Murmullos repetitivos acelerados con delay o reverb: ej: *(What? What? What?)*, *(Yeah... yeah... yeah...)*.
+2. Gritos lejanos de fondo y conteo o aviso explosivo: ej: *(Hold on... hold on... GO!)* justo antes del [Beat Drop].`;
+    } else if (effectiveIntroStyle === "minimal_pad") {
+      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: MINIMALIST PAD & ESPACIO
+La sección [Intro] debe ser casi instrumental:
+1. Máximo 1 o 2 ad-libs dispersos en toda la intro: ej: *(Yeah)* o *(Dímelo...)*.
+2. Deja respirar por completo el sintetizador o melodía principal sin saturar de voces antes de que entren las baterías.`;
+    }
+  }
+
   // Locked sections block
   let lockedBlock = "";
   if (params.lockedSections && params.lockedSections.length > 0) {
@@ -614,6 +672,7 @@ ${producerBlock}
 ${cadenceBlock}
 ${bouncyBlock}
 ${chorusBlock}
+${introBlock}
 ${flowSwitchingBlock}
 ${lockedBlock}
 ${correctionBlock}
