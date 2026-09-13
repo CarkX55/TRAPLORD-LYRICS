@@ -16,6 +16,7 @@ interface AgentPolishBody {
   geminiApiKey?: string;
   geminiModel?: string;
   autoIterate?: boolean;   // NEW — enable auto-iterate mode
+  hookStyle?: string;      // custom hook style assigned to chorus
 }
 
 interface AgentResult {
@@ -156,15 +157,18 @@ Devuelve SOLO JSON (sin markdown):
 // ===== AGENTE 4: HOOK STRENGTH ANALYZER (NEW — Phase 2) =====
 async function runHookAnalyzer(body: AgentPolishBody): Promise<AgentResult> {
   const flowProfile = getFlowProfile(body.artistId);
-  const hookStyle = flowProfile?.hookStyle ?? "melodic";
+  const rawHookStyle = body.hookStyle || flowProfile?.hookStyle || "melodic";
+  const hookStyle = rawHookStyle === "mantra" ? "repetitive" : rawHookStyle === "punchy" ? "simple_punchy" : rawHookStyle;
   const chorusLyrics = extractChorus(body.lyrics);
 
   // Adapt criteria to the artist's hook style
   const styleCriteria: Record<string, string> = {
-    repetitive: "Criterio para HOOK REPETITIVO (estilo Carti/Keef): ¿Hay una frase clave repetida en vamp? ¿Es pegadiza por repetición rítmica? No penalices la falta de complejidad lírica — la virtud es la hipnosis rítmica.",
-    melodic: "Criterio para HOOK MELODICO (estilo Drake/Gunna): ¿Es cantable y melódico? ¿Hay estabilidad melódica? ¿Se quedaría en la cabeza? Evalúa singability para Suno.",
+    repetitive: "Criterio para HOOK REPETITIVO / MANTRA (estilo Carti/Keef/Travis): ¿Hay una anáfora o frase de anclaje repetida con cadencia pesada? ¿Es hipnótico y espacioso (3-5 palabras por compás)? No penalices la repetición — la virtud es la hipnosis rítmica.",
+    melodic: "Criterio para HOOK MELÓDICO (estilo Drake/Gunna): ¿Es cantable y melódico? ¿Hay estabilidad melódica? ¿Se quedaría en la cabeza? Evalúa singability para Suno.",
     technical: "Criterio para HOOK TÉCNICO (estilo Eminem/Kendrick): ¿Tiene rimas internas complejas en el hook? ¿Hay multisilábicas? ¿El hook es una showcase técnica, no solo pegadizo?",
-    simple_punchy: "Criterio para HOOK DIRECTO (estilo 21 Savage/Gucci): ¿Son frases cortas y golpeadoras? ¿Minimalista pero impactante? No penalices la simplicidad — la virtud es el golpe seco.",
+    simple_punchy: "Criterio para HOOK DIRECTO / PUNCHLINES (estilo 21 Savage/Gucci): ¿Son frases cortas y golpeadoras sin relleno narrativo? ¿Minimalista pero impactante? No penalices la simplicidad — la virtud es el golpe seco.",
+    call_response: "Criterio para HOOK CALL & RESPONSE: ¿Hay un diálogo dinámico o réplica entre paréntesis en cada compás? ¿Las respuestas tienen actitud y ritmo?",
+    anthemic: "Criterio para HOOK HIMNO DE ESTADIO: ¿Tiene coros masivos, energía gigante y melodía coreable para conciertos?",
   };
 
   const hookPrompt = `Eres un experto analista de HOOKS/CHORUS en trap. Analiza SOLO los CHORUS de esta letra.
@@ -173,12 +177,12 @@ CHORUS EXTRAÍDOS:
 ${chorusLyrics}
 
 ARTISTA: ${body.artistName}
-HOOK STYLE DEL ARTISTA: ${hookStyle}
+HOOK STYLE SELECCIONADO: ${hookStyle}
 
-${styleCriteria[hookStyle]}
+${styleCriteria[hookStyle] || styleCriteria.melodic}
 
 Tu trabajo:
-1. Evalúa el hook según el criterio del HOOK STYLE (arriba). No apliques criterios genéricos — respeta el estilo del artista.
+1. Evalúa el hook según el criterio del HOOK STYLE (arriba). No apliques criterios genéricos — respeta el estilo del artista y la técnica de estribillo elegida.
 2. ¿Es MEMORABLE para Suno? ¿Se cantaría y recordaría?
 3. ¿Las repeticiones del chorus (si hay múltiples) VARÍAN o son idénticas copiadas?
 4. ¿El hook conecta con el mood de la canción?

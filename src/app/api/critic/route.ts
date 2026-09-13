@@ -9,11 +9,13 @@ interface CriticBody {
   artistName: string;
   moodLabel: string;
   spanglishTarget: number;
+  geminiApiKey?: string;
+  geminiModel?: string;
 }
 
 interface CriticFeedback {
   type: "strength" | "weakness" | "suggestion";
-  line?: string;       // line number reference
+  line?: string;
   text: string;
 }
 
@@ -58,29 +60,49 @@ Proporciona 3-5 puntos de feedback mezclando strengths, weaknesses y suggestions
 LETRA A ANALIZAR:
 ${body.lyrics}`;
 
-    const ZAI = (await import("z-ai-web-dev-sdk")).default;
-    const zai = await ZAI.create();
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: "user", content: prompt },
-      ],
-      thinking: { type: "disabled" },
-      temperature: 0.4, // low temperature for analytical consistency
-    });
+    let raw = "";
 
-    const raw = completion.choices[0]?.message?.content;
+    if (body.geminiApiKey?.trim()) {
+      const model = body.geminiModel || "gemini-2.5-flash";
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.4,
+              topP: 0.9,
+            },
+          }),
+        }
+      );
+      const json = await res.json();
+      if (json.error) {
+        throw new Error(`Gemini: ${json.error.message}`);
+      }
+      raw = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    } else {
+      const ZAI = (await import("z-ai-web-dev-sdk")).default;
+      const zai = await ZAI.create();
+      const completion = await zai.chat.completions.create({
+        messages: [{ role: "user", content: prompt }],
+        thinking: { type: "disabled" },
+        temperature: 0.4,
+      });
+      raw = completion.choices[0]?.message?.content ?? "";
+    }
+
     if (!raw || !raw.trim()) {
       return NextResponse.json({ error: "El crítico no devolvió contenido." }, { status: 502 });
     }
 
-    // Try to parse JSON (the model may wrap it in markdown)
     let parsed: { overallScore: number; summary: string; feedback: CriticFeedback[] };
     try {
-      // Strip markdown code fences if present
       const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      // If JSON parsing fails, return the raw text as summary
       return NextResponse.json({
         overallScore: 50,
         summary: raw.slice(0, 500),

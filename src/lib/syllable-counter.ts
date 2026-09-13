@@ -20,36 +20,52 @@ export interface SyllableAnalysis {
  * A diphthong = strong + weak (or weak + weak) = 1 syllable.
  * A hiatus = strong + strong = 2 syllables.
  */
-function countSyllablesSpanish(word: string): number {
+export function countSyllablesSpanish(word: string): number {
   const w = word.toLowerCase().replace(/[^a-záéíóúüñ]/g, "");
   if (w.length === 0) return 0;
   if (w.length <= 2) return 1;
 
-  const strong = "aeoáéó";
-  const weak = "iuüíú";
+  // En español: a, e, o, á, é, ó son abiertas (fuertes).
+  // Las cerradas con tilde (í, ú) actúan fonéticamente como abiertas (rompen diptongo y forman HIATO).
+  // Las cerradas átonas (i, u, ü) son débiles y pueden formar diptongo.
+  const strong = "aeoáéóíú";
+  const weakUnaccented = "iuü";
   let count = 0;
   let i = 0;
 
   while (i < w.length) {
     const ch = w[i];
-    if (strong.includes(ch) || weak.includes(ch)) {
+    const isStrong = strong.includes(ch);
+    const isWeak = weakUnaccented.includes(ch);
+
+    if (isStrong || isWeak) {
       count++;
-      // Check for diphthong: if next char is a weak vowel, consume it
-      if (i + 1 < w.length && weak.includes(w[i + 1])) {
+      const next = i + 1 < w.length ? w[i + 1] : "";
+      const isNextStrong = strong.includes(next);
+      const isNextWeak = weakUnaccented.includes(next);
+
+      if (isStrong && isNextWeak) {
+        // Diptongo: Fuerte + Débil átona (ej: ai, au, ei, eu, oi)
         i += 2;
-        // Check for triphthong
-        if (i < w.length && weak.includes(w[i])) {
+        // Posible triptongo (ej: uai, uei)
+        if (i < w.length && weakUnaccented.includes(w[i])) {
           i++;
         }
         continue;
+      } else if (isWeak && isNextStrong) {
+        // Diptongo: Débil átona + Fuerte (ej: ia, ie, io, ua, ue, uo, ió)
+        i += 2;
+        continue;
+      } else if (isWeak && isNextWeak && ch !== next) {
+        // Diptongo: Débil + Débil distinta (ej: iu, ui)
+        i += 2;
+        continue;
       }
-      // Check for hiatus: strong + strong = 2 syllables (don't consume next)
+      // Hiato: Fuerte + Fuerte o Fuerte + Débil acentuada (í, ú) -> se cuenta individual
     }
     i++;
   }
 
-  // Accent on last syllable doesn't change count
-  // Unaccented word ending in consonant (not n/s) → last syllable is stressed (no count change)
   return Math.max(1, count);
 }
 
@@ -58,7 +74,7 @@ function countSyllablesSpanish(word: string): number {
  * English syllable rules are complex; we use a simplified approach:
  * count vowel groups, subtract silent 'e' at end, handle 'le' ending.
  */
-function countSyllablesEnglish(word: string): number {
+export function countSyllablesEnglish(word: string): number {
   const w = word.toLowerCase().replace(/[^a-z]/g, "");
   if (w.length === 0) return 0;
   if (w.length <= 3) return 1;

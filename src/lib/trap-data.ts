@@ -972,43 +972,43 @@ export const REPETITION_PATTERNS: RepetitionPattern[] = [
   },
   {
     id: "mantra",
-    label: "Mantra Hipnótico (3x/4x)",
+    label: "Mantra Hipnótico (Anáfora / Loop)",
     icon: "🔁",
-    sunoTag: "Hypnotic repetitive mantra, heavy 808s",
-    description: "Repite un concepto o palabra clave 3 o 4 veces por compás con cadencia pesada.",
-    example: "Pikete, pikete, pikete... (Yeah!) / Racks on racks on racks"
+    sunoTag: "Hypnotic repetitive mantra, heavy 808 bounce",
+    description: "Anáfora de anclaje: frase clave de 2-3 palabras fija al inicio de las barras con pocas palabras por compás (3-5 pal/b).",
+    example: "Same squad... (same squad) / Same squad, nunca cambié de cabeza"
   },
   {
     id: "staccato",
     label: "Staccato Chants",
     icon: "⚡",
-    sunoTag: "Staccato drill chants, rhythmic delivery",
-    description: "Palabras cortadas y percusivas que golpean con el hi-hat y el bajo.",
-    example: "Trap, trap, Glock, Glock, no te me coloques"
+    sunoTag: "Staccato drill chants, percussive delivery",
+    description: "Golpes secos y percusivos de 1-2 palabras separadas por puntos o comas que caen con el hi-hat y el 808.",
+    example: "Glock. Switch. Black. Tint. / Corte limpio. No hay testigo."
   },
   {
     id: "call_response",
-    label: "Call & Response Sucio",
+    label: "Call & Response Dialéctico",
     icon: "💬",
     sunoTag: "Dirty call and response, layered ad-libs",
-    description: "Barra principal seguida de una réplica o remate explícito entre paréntesis (ad-lib).",
-    example: "Ella quiere la cadena (tócala) / dice que no frena (móntala)"
+    description: "Diálogo picado: cada barra líder recibe una contrapregunta cínica o echo punchline entre paréntesis.",
+    example: "Dicen que me van a frenar (¿cuándo?) / Hablan de lealtad pero no los vi (nunca)"
   },
   {
     id: "stutter",
-    label: "Stutter / Tartamudeo",
+    label: "Stutter / MPC Chops",
     icon: "🔂",
-    sunoTag: "Stutter vocal flow, fast chops",
-    description: "Repetición rítmica de la primera sílaba o palabra al inicio de las barras.",
-    example: "M-M-Markoff en el beat / to-toda la noche"
+    sunoTag: "Stutter vocal flow, rhythmic chops",
+    description: "Chop rítmico de sampler en la palabra de entrada compás a compás.",
+    example: "Hold up, h-hold up... / Drop-drop top en la noche"
   },
   {
     id: "echo",
-    label: "Echo / Fade Out",
+    label: "Echo / Stereo Delay",
     icon: "🌊",
-    sunoTag: "Echo fade vocals, spatial reverb",
-    description: "Desvanecimiento de la última palabra con puntos suspensivos.",
-    example: "en la suite... en la suite... en la suite..."
+    sunoTag: "Echo fade vocals, spatial delay, wide stereo",
+    description: "Cascada de delay estéreo en la última palabra o rima con puntos suspensivos.",
+    example: "en la suite... (en la suite...) / ya no sé... (ya no sé...)"
   }
 ];
 
@@ -1043,8 +1043,8 @@ export const HOOK_STYLE_OPTIONS: HookStyleOption[] = [
     badge: "Singable",
     icon: "🎵",
     sunoTag: "Melodic auto-tune flow, soaring harmonics, wide vocal harmonies",
-    description: "Notas alargadas, melodía vocal abierta y ganchos armónicos ideales para autotune.",
-    instruction: "REGLA HOOK MELÓDICO: Estribillo altamente cantable, notas vocales sostenidas, ganchos armónicos pegadizos y líneas fluidas abiertas para autotune y capas vocales envolventes."
+    description: "Notas alargadas con '...', melodía vocal abierta y ganchos armónicos ideales para autotune.",
+    instruction: "REGLA HOOK MELÓDICO: Estribillo altamente cantable, notas vocales sostenidas con '...', vocales abiertas (terminaciones en -ía, -ás, -ando), ganchos armónicos pegadizos y capas vocales envolventes en estéreo."
   },
   {
     id: "mantra",
@@ -1052,8 +1052,8 @@ export const HOOK_STYLE_OPTIONS: HookStyleOption[] = [
     badge: "Repetitivo",
     icon: "🔁",
     sunoTag: "Hypnotic repetitive mantra, heavy 808 bounce",
-    description: "Repetición hipnótica de una palabra/frase clave (3-4 veces por compás con cadencia pesada).",
-    instruction: "REGLA HOOK MANTRA: Repetición hipnótica y obsesiva de un concepto o frase clave (3 o 4 veces por compás con comas de pausa rítmica para Suno), ultra bailable y adictivo para clubs."
+    description: "Anáfora hipnótica: frase de anclaje de 2-3 palabras al inicio de las barras con economía estricta (3-5 pal/b).",
+    instruction: "REGLA HOOK MANTRA: Estribillo hipnótico basado en una frase de anclaje (anáfora) de 2 o 3 palabras repetida al inicio de los compases, o un loop rítmico minimalista de 3 a 5 palabras por barra con elipsis '...' y ad-libs de contrarritmo."
   },
   {
     id: "punchy",
@@ -1061,17 +1061,17 @@ export const HOOK_STYLE_OPTIONS: HookStyleOption[] = [
     badge: "Street",
     icon: "💥",
     sunoTag: "Hard-hitting punchline hook, raw street delivery, anthemic energy",
-    description: "Golpe seco, barras crudas y actitud dominante sin adornos.",
-    instruction: "REGLA HOOK PUNCHLINES: Barras directas, frases cortantes y contundentes, actitud cruda sin adornos innecesarios, remates secos que impactan al inicio del compás."
+    description: "Golpe seco, barras crudas en pareados y actitud dominante sin relleno narrativo.",
+    instruction: "REGLA HOOK PUNCHLINES: Barras directas, frases cortantes en pareados contundentes, actitud cruda y dominante, hechos concretos sin relleno narrativo y remates secos en el beat 1."
   },
   {
     id: "call_response",
-    label: "Call & Response",
+    label: "Call & Response Dialéctico",
     badge: "Dinámico",
     icon: "💬",
     sunoTag: "Anthemic call and response, layered hype ad-libs",
-    description: "Voz principal con respuestas inmediatas de ad-libs o coros en capas.",
-    instruction: "REGLA HOOK CALL & RESPONSE: Alternancia dinámica donde la línea líder recibe una respuesta o réplica inmediata entre paréntesis con ad-libs explosivos o coros en capas."
+    description: "Línea líder con réplica cínica, respuesta dialéctica o echo punchline entre paréntesis en cada compás.",
+    instruction: "REGLA HOOK CALL & RESPONSE: Alternancia dinámica dialéctica donde cada compás líder recibe una contrapregunta, respuesta cínica o echo punchline entre paréntesis en contratiempo."
   },
   {
     id: "anthemic",
@@ -1079,8 +1079,8 @@ export const HOOK_STYLE_OPTIONS: HookStyleOption[] = [
     badge: "Anthemic",
     icon: "🏟️",
     sunoTag: "Massive anthemic chorus, crowd gang vocals, epic stadium energy",
-    description: "Coros masivos, energía gigante y melodía coreable para conciertos.",
-    instruction: "REGLA HOOK HIMNO: Energía masiva de festival, coros de multitud (gang vocals), melodía épica y coreable diseñada para que el público la grite al unísono."
+    description: "Coros masivos de multitud (gang vocals), energía gigante y melodía coreable para conciertos.",
+    instruction: "REGLA HOOK HIMNO: Energía masiva de festival, coros de multitud (gang vocals), melodía épica y coreable con exclamaciones grupales diseñadas para que el público las grite al unísono."
   }
 ];
 

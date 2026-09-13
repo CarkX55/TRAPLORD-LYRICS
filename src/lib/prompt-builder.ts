@@ -878,3 +878,246 @@ export function buildSunoStyleResult(params: SunoStylePromptParams): SunoStyleRe
 export function buildSunoStylePrompt(params: SunoStylePromptParams): string {
   return buildSunoStyleResult(params).prompt;
 }
+
+/**
+ * Limpiador quirúrgico de encabezados de sección para Suno AI v4.5.
+ * Elimina cualquier instrucción, conteo de barras residual o Markdown '###'.
+ */
+export function cleanSunoBracketHeaders(lyrics: string): string {
+  if (!lyrics) return "";
+  return lyrics
+    // Eliminar Markdown headers: ### [Section] -> [Section] o ### Section
+    .replace(/^#{1,6}\s*(\[[^\]]+\])/gm, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    // Eliminar Markdown bold/italic envolviendo corchetes: **[Section]** o *[Section]* -> [Section]
+    .replace(/^[*_]{1,3}\s*(\[[^\]]+\])\s*[*_]{0,3}/gm, "$1")
+    .replace(/(\[[^\]]+\])\s*[*_]{1,3}/gm, "$1")
+    // Limpiar notas residuales pegadas al corchete: e.g. [Chorus: ...] — 8 barras → [REGLA...]
+    .replace(/^(\[[^\]]+\])[ \t]*[—–-][ \t]*.*$/gm, "$1")
+    .replace(/^(\[[^\]]+\])[ \t]*→.*$/gm, "$1")
+    // Limpiar notas de intérprete tipo *Intérprete:*
+    .replace(/^\*+(?:Int[ée]rprete?|Interpr[èe]te?):\s*([^*\n]+)\*+$/gim, "")
+    .replace(/^(?:Int[ée]rprete?|Interpr[èe]te?):\s*.+$/gim, "")
+    // Limpiar saltos de línea triples
+    .replace(/^\s*[\r\n]{2,}/gm, "\n\n")
+    .trim();
+}
+
+// ========================================================================
+// PIPELINE DE ESTUDIO EN 3 PASADAS (TOPLINER ➔ GHOSTWRITER ➔ VOCAL DIRECTOR)
+// ========================================================================
+
+/**
+ * PASADA 1: TOPLINER & RHYTHMIC ENGINE
+ * Diseña el estribillo / hook central y los mantras hipnóticos con economía estricta (3 a 5 palabras por compás).
+ */
+export function buildStage1ToplinePrompt(params: PromptParams): string {
+  const artist = getArtistById(params.artistId);
+  const featureArtist = params.featureArtistId ? getArtistById(params.featureArtistId) : null;
+  const flowProfile = getFlowProfile(params.artistId);
+  const spanglish = buildSpanglishInstruction(params.spanglishPercent);
+  const dirty = getDirtyLevel(params.dirtyLevel ?? 2);
+
+  // Identificar secciones de Hook / Chorus y secciones con Mantra/Staccato
+  const targetSections = params.structure.sections.filter(s => {
+    const isChorus = s.type === "chorus" || s.name.toLowerCase().includes("chorus") || s.name.toLowerCase().includes("hook") || s.name.toLowerCase().includes("estribillo");
+    const va = params.sectionVoices?.find(v => v.sectionName === s.name);
+    const isMantraOrStaccato = va?.repetitionPattern === "mantra" || va?.repetitionPattern === "staccato" || va?.hookStyle === "mantra";
+    return isChorus || isMantraOrStaccato;
+  });
+
+  const sectionDetails = targetSections.map(s => {
+    const va = params.sectionVoices?.find(v => v.sectionName === s.name);
+    const isChorus = s.type === "chorus" || s.name.toLowerCase().includes("chorus") || s.name.toLowerCase().includes("hook") || s.name.toLowerCase().includes("estribillo");
+    let voice = artist?.name ?? "Lead";
+    if (va?.voice === "feature" && featureArtist) voice = featureArtist.name;
+    else if (va?.voice === "both") voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
+
+    const hookStyleId = va?.hookStyle ?? (flowProfile?.hookStyle ?? "melodic");
+    const hookStyleOpt = getHookStyleOptionById(hookStyleId);
+    const repPattern = va?.repetitionPattern ? getRepetitionPatternById(va.repetitionPattern) : undefined;
+    const kw = va?.customKeyword?.trim();
+
+    return `- Sección [${s.name}]: Cantada por ${voice}. Barras: ${va?.bars || 8} compases. Estilo: ${isChorus ? (hookStyleOpt?.label ?? "Melódico") : (repPattern?.label ?? "Mantra")}${kw ? ` · Palabra/Frase clave obligatoria: "${kw}"` : ""}.`;
+  }).join("\n");
+
+  return `Eres el Topliner y Diseñador de Ganchos (Hook Architect) más cotizado del Trap y Rap contemporáneo.
+Tu misión en esta sesión de estudio es componer EXCLUSIVAMENTE el [Chorus / Hook] central y los patrones rítmicos de Mantra/Staccato de la canción. NO escribas versos ni intros todavía.
+
+# 🎯 PROYECTO & ARTISTA
+- Artista Principal: ${artist?.name ?? "Lead"} (${artist?.origin ?? "Trap"}) — ${flowProfile?.sunoVocalTimbre ?? "melodic auto-tune male vocal"}
+${featureArtist ? `- Feature: ${featureArtist.name} (${featureArtist.origin})` : ""}
+- Tempo: ${params.bpmVibe.range} BPM (${params.bpmVibe.label})
+- Temática Central: ${params.customTopic || params.topics.join(", ") || "Calle, ambición y estilo de vida"}
+- Nivel de Actitud: ${dirty.label} (${dirty.badge})
+${spanglish.prompt}
+
+# 📋 SECCIONES REQUERIDAS DE ESTA PASADA:
+${sectionDetails || "- [Chorus]: 8 compases pegadizos."}
+
+# 🏀 REGLAS DE ARQUITECTURA TOPLINE DE ESTUDIO:
+1. **ECONOMÍA ESTRICTA DE PALABRAS (POCKET AMERICAN BOUNCE):**
+   - MÁXIMO **3 a 5 palabras por compás (4 a 6 sílabas)**.
+   - Queda TERMINANTEMENTE PROHIBIDO escribir frases largas de 10-15 palabras o párrafos narrativos. Menos palabras = más rebote de bajo 808.
+2. **PUNTUACIÓN ELÁSTICA PARA SUNO AI:**
+   - Usa comas ',' y puntos suspensivos '...' en cada compás para que Suno alargue las notas con swing (*swung delay*): ej: *"Same squad... (same squad), los números en la mesa (clean)"*.
+3. **ARQUITECTURA DE MANTRA HIPNÓTICO (PROHIBIDO EL REPETIR "DINERO, DINERO, DINERO"):**
+   - Si la sección es Mantra, aplica **Anáfora de Anclaje** (la misma frase de 2 o 3 palabras al inicio de cada barra y el remate varía):
+     *Ejemplo real:*
+     [Chorus: ${artist?.name ?? "Lead"}, Hypnotic repetitive mantra, heavy 808 bounce]
+     Same squad... (same squad), los números en la mesa (clean)
+     Same squad... nunca cambié de cabeza (yeah)
+     Same squad... la presión nunca me pesa
+     Same squad... contando mientras tú rezas (facts)
+   - O aplica **Triplet Ostinato** (3 compases con la misma fórmula rítmica + 1 compás de remate payoff):
+     *Ejemplo real:*
+     Billetes azules, billetes azules en la mesa (sauce)
+     Billetes azules, billetes azules con destreza (wuh)
+     To' lo que toco se convierte en pieza
+     Billetes azules, hasta que me duela la cabeza (let's go)
+4. **ARQUITECTURA DE HOOK MELÓDICO (SI APLICA):**
+   - Notas abiertas alargadas con '...', vocales fluidas (-ía, -ás, -ando), ganchos envolventes y ad-libs de eco melódico entre paréntesis:
+     *Ejemplo real:*
+     Buscando una salida en el retrovisor... (ooh-ooh)
+     Sé que me llamaste pero no es amor... (no-no)
+     Las luces de la noche borran el dolor... (yeah)
+     Dime si te quedas cuando salga el sol... (shine)
+5. **ARQUITECTURA DE HOOK PUNCHLINES DE CALLE (SI APLICA):**
+   - Frases secas, hechos crudos sin relleno y remates contundentes en el beat 1:
+     *Ejemplo real:*
+     Diez mil euros en el chándal del club (facts)
+     El abogado me llama a las seis (call me)
+     No confío en amigos nuevos (never)
+     Solo en mi familia y en lo que tú veis (on god)
+
+# 📋 FORMATO DE SALIDA ESTRICTO:
+Devuelve EXCLUSIVAMENTE las secciones de gancho/mantra solicitadas con su encabezado entre corchetes limpios:
+[Chorus: ${artist?.name ?? "Lead"}, Style tag]
+Línea 1...
+Línea 2...
+
+NO escribas notas de producción, introducciones ni explicaciones.`;
+}
+
+/**
+ * PASADA 2: GHOSTWRITER & VERSE ARCHITECT
+ * Desarrolla la letra completa de la canción incorporando el gancho fijado en la Pasada 1.
+ */
+export function buildStage2GhostwriterPrompt(params: PromptParams, lockedTopline: string): string {
+  const artist = getArtistById(params.artistId);
+  const featureArtist = params.featureArtistId ? getArtistById(params.featureArtistId) : null;
+  const flowProfile = getFlowProfile(params.artistId);
+  const featureFlowProfile = featureArtist ? getFlowProfile(featureArtist.id) : null;
+  const spanglish = buildSpanglishInstruction(params.spanglishPercent);
+  const dirty = getDirtyLevel(params.dirtyLevel ?? 2);
+
+  const customScheme = params.rhymeSchemeId && params.rhymeSchemeId !== "rs_free" ? getRhymeSchemeById(params.rhymeSchemeId) : null;
+  const rhymeTier = getRhymeTier(params.artistId);
+  let rhymeLevelInstruction = "";
+  if (customScheme) {
+    rhymeLevelInstruction = `MÉTRICA / ESQUEMA DE RIMA OBLIGATORIO (${customScheme.pattern} - ${customScheme.label}): ${customScheme.description}.`;
+  } else if (rhymeTier === 1) {
+    rhymeLevelInstruction = `MÉTRICA TÉCNICA: Rimas multisilábicas obligatorias (2+ sílabas coincidentes) y rimas internas dentro del compás.`;
+  } else if (rhymeTier === 2) {
+    rhymeLevelInstruction = `MÉTRICA EQUILIBRADA: Combina multisilábicas con rimas de 1 sílaba contundentes. Rimas internas naturales y cadencia pegadiza.`;
+  } else {
+    rhymeLevelInstruction = `MÉTRICA DIRECTA / STREET: Prioriza la cadencia, el golpe rítmico y la actitud cruda.`;
+  }
+
+  // Estructura limpia
+  const structurePlan = params.structure.sections.map(s => {
+    const va = params.sectionVoices?.find(v => v.sectionName === s.name);
+    let voice = artist?.name ?? "Lead";
+    if (va?.voice === "feature" && featureArtist) voice = featureArtist.name;
+    else if (va?.voice === "both") voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
+    const bars = va?.bars ? `${va.bars} barras` : (s.type === "verse" ? "8-12 barras" : "4-8 barras");
+    return `[${s.name}: ${voice}] — ${bars}`;
+  }).join("\n");
+
+  return `Eres un Ghostwriter de élite del Trap y Rap contemporáneo. Escribes barras auténticas de estudio con peso callejero y narrativa cinematográfica.
+
+# 🔒 GANCHO Y MANTRAS APROBADOS DE LA SESIÓN (INMUTABLES)
+El Topliner de la sesión ya compuso y aprobó el siguiente estribillo/mantra central. DEBES incluirlo EXACTAMENTE en cada aparición de [Chorus / Hook] dentro de la canción sin alterar una sola palabra:
+${lockedTopline}
+
+# 🎤 IDENTIDAD & CONTEXTO
+${spanglish.prompt}
+- Artista Principal: ${artist?.name ?? "Lead"} (${artist?.origin}) — ${flowProfile?.cadenceInstruction ?? "Flow rítmico."}
+${featureArtist ? `- Feature: ${featureArtist.name} (${featureArtist.origin}) — ${featureFlowProfile?.cadenceInstruction ?? "Flow feature."}` : ""}
+- BPM & Vibra: ${params.bpmVibe.range} BPM (${params.bpmVibe.label})
+- Temática: ${params.customTopic || params.topics.join(", ") || "Trap de estudio"}
+- Actitud / Dirty Level: ${dirty.label} (${dirty.badge}) — ${dirty.instruction}
+${params.customDictionary?.trim() ? `- Diccionario de calle / Marcas: { ${params.customDictionary.trim()} }` : ""}
+
+# 🔄 FLOW SWITCHING DINÁMICO EN CADA VERSO (MICROMOVIMIENTOS DE ESTUDIO):
+Los versos NO deben sonar planos ni monótonos de principio a fin. En cada verso de 8 a 16 barras, ejecuta una progresión dinámica en 3 movimientos:
+1. **Barras 1 a 4 (Pacing & Atmósfera):** Entrada espaciosa, ritmo pausado, establece la escena con detalles visuales concretos y tensión.
+2. **Barras 5 a 8 (Shift Rítmico & Aceleración):** CAMBIA DE MARCHA. Introduce tresillos (triplets), rimas internas continuas o síncopa rápida para inyectar adrenalina.
+3. **Barras 9 a 12/16 (Tensión & Punchline Payoff):** Vuelve a abrir espacio con golpes secos y remata con el punchline más pesado que catapulte directamente al [Chorus].
+
+# 🚫 REGLA DE REALISMO "SHOW, DON'T TELL" (CERO CLICHÉS DE IA):
+- Prohibido usar frases genéricas abstractas como "el asfalto no perdona", "fuego/juego/cielo", "haciendo money sin parar", "caminando en la oscuridad".
+- Sustitúyelas por detalles visuales concretos: marcas reales (Rick Owens, Patek, Goyard, Prada), modelos de coche, llamadas del abogado a deshoras, olores, billetes en la mesa y códigos de calle reales.
+
+# 📐 MÉTRICA & SALIDA:
+${rhymeLevelInstruction}
+- Cada compás equivale EXACTAMENTE a una línea de texto.
+- Distribuye la estructura completa de la canción:
+${structurePlan}
+
+# 📋 FORMATO DE SALIDA ESTRICTO:
+Devuelve ÚNICAMENTE la letra de la canción estructurada con encabezados entre corchetes limpios [Intro: Detail], [Verse 1: Artist], [Chorus: Artist], etc. Sin introducciones ni notas fuera de los corchetes.`;
+}
+
+/**
+ * PASADA 3: VOCAL DIRECTOR & CALL & RESPONSE ARRANGER
+ * Añade la dimensión vocal tridimensional: diálogos de Call & Response, ad-libs con intención y metatags de Suno v4.5.
+ */
+export function buildStage3VocalDirectorPrompt(params: PromptParams, fullLyrics: string): string {
+  const artist = getArtistById(params.artistId);
+  const featureArtist = params.featureArtistId ? getArtistById(params.featureArtistId) : null;
+
+  // Detectar secciones con Call & Response
+  const callResponseSections = params.structure.sections.filter(s => {
+    const va = params.sectionVoices?.find(v => v.sectionName === s.name);
+    return va?.repetitionPattern === "call_response" || va?.hookStyle === "call_response";
+  }).map(s => s.name);
+
+  return `Eres el Director Vocal y Productor de Mezcla en la cabina de grabación para Suno AI v4.5.
+Tu trabajo es tomar la letra borrador de la canción y darle la DIMENSIÓN VOCAL TRIDIMENSIONAL que distingue una maqueta plana de un hit masterizado.
+
+# ARTISTAS EN CABINA:
+- Voz Principal: ${artist?.name ?? "Lead"}
+${featureArtist ? `- Segunda Voz / Feature: ${featureArtist.name}` : ""}
+${callResponseSections.length > 0 ? `- Secciones con Call & Response obligatorio: ${callResponseSections.join(", ")}` : ""}
+
+# 🛠️ TAREAS DEL DIRECTOR VOCAL:
+
+1. **PRODUCCIÓN DE CALL & RESPONSE DIALÉCTICO (EN SECCIONES ASIGNADAS):**
+   - En las secciones marcadas como Call & Response (${callResponseSections.join(", ") || "las indicadas"}), CADA compás líder DEBE recibir una respuesta o réplica dialéctica entre paréntesis en contratiempo:
+     *Réplicas cínicas:* Voz: "Dicen que me van a frenar..." ➔ Ad-lib: *(¿cuándo?)*
+     *Contraataques de calle:* Voz: "Hablan de lealtad pero no los vi..." ➔ Ad-lib: *(nunca)*
+     *Echo Punchlines:* Voz: "Treinta mil en la sudadera Rick..." ➔ Ad-lib: *(Rick Owens)*
+     *Descartes:* Voz: "Piden favores como si fuera su hermano..." ➔ Ad-lib: *(olvídalo)*
+   - PROHIBIDO rellenar el Call & Response con muletillas repetitivas como (Yeah!) en cada compás. Debe ser un diálogo con personalidad.
+
+2. **PULIDO DE AD-LIBS TRIDIMENSIONALES (ANTI-MULETILLAS):**
+   - Reemplaza los ad-libs genéricos muertos por 3 funciones acústicas:
+     a) Colas melódicas en eco: *(no me busques...)*, *(uh-uh)*, *(sola)*.
+     b) Comentarios cínicos entre dientes: *(¿quién si no?)*, *(facts)*, *(dime)*.
+     c) Silencios rítmicos: Inserta '[Pause]' antes de caídas de beat o de barras de impacto pesado.
+
+3. **CORTES Y DINÁMICA ACÚSTICA SUNO AI v4.5:**
+   - En la barra final de cada verso antes de entrar al estribillo, inserta '[Vocal Cut]' al final de la línea para generar anticipación explosiva.
+   - Si la intro prepara el beat, asegúrate de que termine con '[Beat Drop: Heavy 808 drop]' en su propia línea.
+
+4. **LIMPIEZA QUIRÚRGICA DE ENCABEZADOS (SUNO NATIVE):**
+   - Todos los encabezados de sección deben quedar limpios entre corchetes: ej: '[Verse 1: ${artist?.name ?? "Lead"}]', '[Chorus: ${artist?.name ?? "Lead"}, Hypnotic mantra]'.
+   - Elimina cualquier texto residual de instrucciones como '— 8 barras → [REGLA...]'.
+
+# LETRA BORRADOR A TRANSFORMAR:
+${fullLyrics}
+
+# 📋 FORMATO DE SALIDA:
+Devuelve ÚNICAMENTE la letra final masterizada con las réplicas dialécticas y etiquetas acústicas limpias, lista para Suno AI.`;
+}

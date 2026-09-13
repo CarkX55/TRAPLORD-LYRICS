@@ -13,6 +13,8 @@ interface CaptionBody {
   qualityScore?: number;
   punchlineText?: string;
   platform: "instagram" | "twitter" | "tiktok";
+  geminiApiKey?: string;
+  geminiModel?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -70,17 +72,40 @@ REQUISITOS:
 
 Devuelve SOLO el caption (sin explicaciones, sin metadatos):`;
 
-    const ZAI = (await import("z-ai-web-dev-sdk")).default;
-    const zai = await ZAI.create();
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: "user", content: prompt },
-      ],
-      thinking: { type: "disabled" },
-      temperature: 0.9, // creative for social media
-    });
+    let caption = "";
 
-    const caption = completion.choices[0]?.message?.content;
+    if (body.geminiApiKey?.trim()) {
+      const model = body.geminiModel || "gemini-2.5-flash";
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.85,
+              topP: 0.95,
+            },
+          }),
+        }
+      );
+      const json = await res.json();
+      if (json.error) {
+        throw new Error(`Gemini: ${json.error.message}`);
+      }
+      caption = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    } else {
+      const ZAI = (await import("z-ai-web-dev-sdk")).default;
+      const zai = await ZAI.create();
+      const completion = await zai.chat.completions.create({
+        messages: [{ role: "user", content: prompt }],
+        thinking: { type: "disabled" },
+        temperature: 0.9,
+      });
+      caption = completion.choices[0]?.message?.content ?? "";
+    }
+
     if (!caption || !caption.trim()) {
       return NextResponse.json({ error: "No se pudo generar el caption." }, { status: 502 });
     }

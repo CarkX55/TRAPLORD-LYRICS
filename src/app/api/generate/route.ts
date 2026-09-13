@@ -1,14 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildSystemPrompt, buildSpanglishInstruction, buildSunoStyleResult, type LockedSection, type RegenerateSectionParams, type SectionVoiceAssignment } from "@/lib/prompt-builder";
+import {
+  buildSystemPrompt,
+  buildStage1ToplinePrompt,
+  buildStage2GhostwriterPrompt,
+  buildStage3VocalDirectorPrompt,
+  cleanSunoBracketHeaders,
+  buildSpanglishInstruction,
+  buildSunoStyleResult,
+  type LockedSection,
+  type RegenerateSectionParams,
+  type SectionVoiceAssignment,
+  type PromptParams,
+} from "@/lib/prompt-builder";
 
-import { MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, BEAT_TYPES, generateBeatPrompt, getArtistById, type SongSection, type SongStructure } from "@/lib/trap-data";
+import {
+  MOODS,
+  TOPICS,
+  BPM_VIBES,
+  STRUCTURES,
+  NARRATIVE_ARCS,
+  BEAT_TYPES,
+  generateBeatPrompt,
+  getArtistById,
+  type SongSection,
+  type SongStructure,
+} from "@/lib/trap-data";
 import { buildCorrectionInstruction, analyzeLanguageRatio, type LanguageAnalysis } from "@/lib/language-detector";
 import { getArtistReference } from "@/lib/artist-references";
 import { generateArtistReference } from "@/lib/reference-generator";
 import { analyzeReferenceTrack } from "@/lib/track-analyzer";
 
 export const runtime = "nodejs";
-export const maxDuration = 90; // increased for reference generation + track analysis
+export const maxDuration = 90;
 
 interface GenerateBody {
   artistId: string;
@@ -33,11 +56,11 @@ interface GenerateBody {
   rhymeSchemeId?: string;
   lockedSections?: LockedSection[];
   regenerateSection?: RegenerateSectionParams;
-  previousLyrics?: string; // for re-generation with correction
-  autoCorrect?: boolean; // enable post-generation verification + auto re-gen
-  referenceTrackLyrics?: string; // NEW Phase 4
-  dynamicSongForm?: boolean; // NEW Phase 6
-  producerName?: string; // ensure passed
+  previousLyrics?: string;
+  autoCorrect?: boolean;
+  referenceTrackLyrics?: string;
+  dynamicSongForm?: boolean;
+  producerName?: string;
   featureSimId?: string;
   beatTypeId?: string;
   customIntro?: string;
@@ -52,16 +75,67 @@ interface GenerateBody {
   situationalPresetId?: string;
   sectionVoices?: SectionVoiceAssignment[];
   flowPocketMode?: "auto" | "bouncy" | "triplets" | "heavy";
+  geminiApiKey?: string;
+  geminiModel?: string;
+  useLegacySinglePass?: boolean;
 }
 
-// Get a reference for an artist: curated DB first, then generate on-the-fly (sandbox uses z-ai SDK)
-async function getOrGenerateReference(artistId: string) {
+// Unified LLM Caller: Gemini API (User Key) or Z.ai SDK (Sandbox)
+async function callLLM(prompt: string, body: GenerateBody, temperature: number = 0.72): Promise<string> {
+  if (body.geminiApiKey && body.geminiApiKey.trim()) {
+    const model = body.geminiModel || "gemini-2.5-flash";
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature,
+            topP: 0.95,
+          },
+        }),
+      }
+    );
+    const json = await res.json();
+    if (json.error) {
+      throw new Error(`Gemini: ${json.error.message}`);
+    }
+    const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text || !text.trim()) {
+      throw new Error("Gemini no devolvió contenido.");
+    }
+    return text.trim();
+  } else {
+    // Sandbox z-ai
+    const ZAI = (await import("z-ai-web-dev-sdk")).default;
+    const zai = await ZAI.create();
+    const completion = await zai.chat.completions.create({
+      messages: [{ role: "user", content: prompt }],
+      temperature,
+    });
+    const text = completion.choices[0]?.message?.content;
+    if (!text || !text.trim()) {
+      throw new Error("El modelo sandbox no devolvió contenido.");
+    }
+    return text.trim();
+  }
+}
+
+// Get a reference for an artist: curated DB first, then generate on-the-fly
+async function getOrGenerateReference(artistId: string, geminiApiKey?: string, geminiModel?: string) {
   const curated = getArtistReference(artistId);
   if (curated) return curated;
   const artist = getArtistById(artistId);
   if (!artist) return null;
   try {
-    return await generateArtistReference({ artistId, artistName: artist.name });
+    return await generateArtistReference({
+      artistId,
+      artistName: artist.name,
+      geminiApiKey,
+      geminiModel,
+    });
   } catch (err) {
     console.error(`[generate] ref gen failed for ${artistId}:`, err instanceof Error ? err.message : err);
     return null;
@@ -97,16 +171,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Phase 3+4: fetch/generate artist references + analyze reference track (all in parallel, sandbox uses z-ai SDK)
+    // Parallel artist references + track analysis with unified key
     const [mainRef, featRef, refTrack] = await Promise.all([
-      getOrGenerateReference(body.artistId),
-      body.featureArtistId ? getOrGenerateReference(body.featureArtistId) : Promise.resolve(null),
+      getOrGenerateReference(body.artistId, body.geminiApiKey, body.geminiModel),
+      body.featureArtistId ? getOrGenerateReference(body.featureArtistId, body.geminiApiKey, body.geminiModel) : Promise.resolve(null),
       body.referenceTrackLyrics?.trim()
-        ? analyzeReferenceTrack({ lyrics: body.referenceTrackLyrics })
+        ? analyzeReferenceTrack({
+            lyrics: body.referenceTrackLyrics,
+            geminiApiKey: body.geminiApiKey,
+            geminiModel: body.geminiModel,
+          })
         : Promise.resolve(null),
     ]);
 
-    const prompt = buildSystemPrompt({
+    const promptParams: PromptParams = {
       artistId: body.artistId,
       featureArtistId: body.featureArtistId ?? "",
       moodId,
@@ -148,24 +226,48 @@ export async function POST(req: NextRequest) {
       adlibStyle: body.adlibStyle,
       situationalPresetId: body.situationalPresetId,
       flowPocketMode: body.flowPocketMode,
-    });
+    };
 
-    // Call the LLM via z-ai-web-dev-sdk (server-side only)
-    const ZAI = (await import("z-ai-web-dev-sdk")).default;
-    const zai = await ZAI.create();
-    // Temperature control: lower = more adherence to rules, higher = more creativity
-    // Default 0.72 for tight rhymes and authentic flow
     const temperature = typeof body.temperature === "number" ? body.temperature : 0.72;
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: "user", content: prompt },
-      ],
-      temperature,
-    });
+    let lyrics = "";
+    let pipelineStagesCompleted: string[] = [];
 
-    const lyrics = completion.choices[0]?.message?.content;
+    // CASE 1: Single section regeneration
+    if (body.regenerateSection) {
+      const singlePrompt = buildSystemPrompt(promptParams);
+      const rawLyrics = await callLLM(singlePrompt, body, temperature);
+      lyrics = cleanSunoBracketHeaders(rawLyrics);
+      pipelineStagesCompleted = ["single_section_regenerated"];
+    }
+    // CASE 2: Legacy single-pass prompt (if explicitly requested)
+    else if (body.useLegacySinglePass) {
+      const singlePrompt = buildSystemPrompt(promptParams);
+      const rawLyrics = await callLLM(singlePrompt, body, temperature);
+      lyrics = cleanSunoBracketHeaders(rawLyrics);
+      pipelineStagesCompleted = ["legacy_single_pass"];
+    }
+    // CASE 3: STUDIO PIPELINE IN 3 PASSES (STANDARD)
+    else {
+      // --- PASADA 1: Topliner & Rhythmic Engine (Hooks & Mantras) ---
+      const stage1Prompt = buildStage1ToplinePrompt(promptParams);
+      const stage1Topline = await callLLM(stage1Prompt, body, 0.82);
+      pipelineStagesCompleted.push("topline_and_mantras_locked");
+
+      // --- PASADA 2: Ghostwriter & Verse Architect (Barras alrededor del Hook) ---
+      const stage2Prompt = buildStage2GhostwriterPrompt(promptParams, stage1Topline);
+      const stage2Lyrics = await callLLM(stage2Prompt, body, 0.72);
+      pipelineStagesCompleted.push("verses_and_storytelling_completed");
+
+      // --- PASADA 3: Vocal Director & Call & Response Engineer ---
+      const stage3Prompt = buildStage3VocalDirectorPrompt(promptParams, stage2Lyrics);
+      const stage3Lyrics = await callLLM(stage3Prompt, body, 0.75);
+      pipelineStagesCompleted.push("vocal_call_and_response_mastered");
+
+      lyrics = cleanSunoBracketHeaders(stage3Lyrics);
+    }
+
     if (!lyrics || !lyrics.trim()) {
-      return NextResponse.json({ error: "El modelo no devolvió contenido válido." }, { status: 502 });
+      return NextResponse.json({ error: "El motor de estudio no devolvió contenido válido." }, { status: 502 });
     }
 
     // Post-generation: analyze the language ratio
@@ -191,16 +293,17 @@ export async function POST(req: NextRequest) {
       lyrics,
       analysis,
       spanglishLabel: spanglishInfo.label,
-      promptPreview: prompt.slice(0, 500) + "...",
+      promptPreview: `Pipeline de Estudio (3 Pasadas) completado con éxito: ${pipelineStagesCompleted.join(" ➔ ")}`,
       temperature,
       beatPrompt,
       sunoStylePrompt: sunoStyleResult.prompt,
       sunoLayers: sunoStyleResult.layers,
       sunoCharCount: sunoStyleResult.charCount,
       refTrackSummary: refTrack?.summary ?? null,
+      pipelineStages: pipelineStagesCompleted,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Error desconocido en la generación.";
+    const message = err instanceof Error ? err.message : "Error desconocido en la generación de estudio.";
     console.error("[generate] error:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -41,7 +41,7 @@ import {
   type SongSection, type SongStructure, type SectionTemplate, type FlowPocketOption, type IntroStyleOption, type IntroStyleId
 } from "@/lib/trap-data";
 import type { HookVariationOption } from "@/app/api/hook-variations/route";
-import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
+import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, cleanSunoBracketHeaders, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
 import { ArtistSearchCombobox } from "@/components/artist-search-combobox";
 import { SectionVoiceCombobox } from "@/components/section-voice-combobox";
 import { generateLrcContent, generateStudioRecordingSheet, downloadClientFile } from "@/lib/export-helpers";
@@ -571,94 +571,35 @@ export default function TrapGhostPage() {
     }
 
     try {
-      // === MODO GEMINI DIRECTO (desde el navegador del usuario) ===
-      if (geminiApiKey && geminiApiKey.trim()) {
-        const promptRes = await fetch("/api/build-prompt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(configPayload),
-        });
-        const promptData: { prompt?: string; spanglishLabel?: string; beatPrompt?: BeatPrompt; sunoStylePrompt?: string; sunoLayers?: SunoStyleLayers; temperature?: number; error?: string; refTrackSummary?: string } = await promptRes.json();
-        if (!promptRes.ok || promptData.error) {
-          throw new Error(promptData.error || "Error construyendo el prompt");
-        }
-        // Capture reference track analysis summary (Phase 4)
-        if (promptData.refTrackSummary) {
-          setRefTrackAnalysis(promptData.refTrackSummary);
-        }
+      // Notificación de inicio del pipeline de estudio
+      toast.info("🎛️ Sesión iniciada: Topliner ➔ Ghostwriter ➔ Vocal Director...");
 
-        const model = geminiModel || "gemini-2.5-flash";
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey.trim()}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: promptData.prompt }] }],
-              generationConfig: {
-                temperature: promptData.temperature ?? 0.72,
-                topP: 0.95,
-                thinkingConfig: { thinkingBudget: -1 },
-              },
-            }),
-          }
-        );
-        const geminiJson = await geminiRes.json();
-        if (geminiJson.error) {
-          throw new Error(`Gemini: ${geminiJson.error.message}`);
-        }
-        const newLyrics = geminiJson.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!newLyrics || !newLyrics.trim()) {
-          throw new Error("Gemini no devolvió contenido válido.");
-        }
-
-        const langAnalysis = analyzeLanguageRatio(newLyrics, spanglishPercent);
-        const readiness = analyzeSunoReadiness(newLyrics);
-        setLyrics(newLyrics);
-        setAnalysis(langAnalysis);
-        setSunoReadiness(readiness);
-        setSpanglishLabel(promptData.spanglishLabel ?? "");
-        if (promptData.beatPrompt) setBeatPrompt(promptData.beatPrompt);
-        if (promptData.sunoStylePrompt) setSunoStylePrompt(promptData.sunoStylePrompt);
-        if (promptData.sunoLayers) setSunoLayers(promptData.sunoLayers);
-        if (lockedSections.length > 0) setLockedSections([]);
-
-        const moodLabel = MOODS.find(m => m.id === moodId)?.label ?? moodId;
-        const entry: HistoryEntry = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          timestamp: new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
-          artistName: artist?.name ?? "Libre",
-          moodLabel,
-          spanglishPercent,
-          actualEnglishPercent: langAnalysis.englishPercent,
-          deviation: langAnalysis.deviation,
-          status: langAnalysis.status,
-          lyricsPreview: newLyrics.slice(0, 120).replace(/\n/g, " "),
-          fullLyrics: newLyrics,
-          analysis: langAnalysis,
-        };
-        setHistory(prev => [entry, ...prev].slice(0, 8));
-        toast.success(isRegen ? "Letra regenerada con corrección" : "Letra generada (Gemini)");
-        setTimeout(() => lyricsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
-        return;
-      }
-
-      // === MODO Z.ai SDK (servidor sandbox) ===
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(configPayload),
       });
-      const data: GenerateResponse & { error?: string; refTrackSummary?: string; sunoStylePrompt?: string; sunoLayers?: SunoStyleLayers } = await res.json();
+
+      const data: GenerateResponse & {
+        error?: string;
+        refTrackSummary?: string;
+        sunoStylePrompt?: string;
+        sunoLayers?: SunoStyleLayers;
+        pipelineStages?: string[];
+      } = await res.json();
+
       if (!res.ok || data.error) {
-        throw new Error(data.error || "Error en la generación");
+        throw new Error(data.error || "Error en la generación de estudio");
       }
-      // Capture reference track analysis summary (Phase 4)
+
+      // Capturar análisis de tema de referencia
       if (data.refTrackSummary) {
         setRefTrackAnalysis(data.refTrackSummary);
       }
-      const readiness = analyzeSunoReadiness(data.lyrics);
-      setLyrics(data.lyrics);
+
+      const cleanLyrics = cleanSunoBracketHeaders(data.lyrics);
+      const readiness = analyzeSunoReadiness(cleanLyrics);
+      setLyrics(cleanLyrics);
       setAnalysis(data.analysis);
       setSunoReadiness(readiness);
       setSpanglishLabel(data.spanglishLabel);
@@ -666,6 +607,7 @@ export default function TrapGhostPage() {
       if (data.sunoStylePrompt) setSunoStylePrompt(data.sunoStylePrompt);
       if (data.sunoLayers) setSunoLayers(data.sunoLayers);
       if (lockedSections.length > 0) setLockedSections([]);
+
       const moodLabel = MOODS.find(m => m.id === moodId)?.label ?? moodId;
       const entry: HistoryEntry = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -676,12 +618,13 @@ export default function TrapGhostPage() {
         actualEnglishPercent: data.analysis.englishPercent,
         deviation: data.analysis.deviation,
         status: data.analysis.status,
-        lyricsPreview: data.lyrics.slice(0, 120).replace(/\n/g, " "),
-        fullLyrics: data.lyrics,
+        lyricsPreview: cleanLyrics.slice(0, 120).replace(/\n/g, " "),
+        fullLyrics: cleanLyrics,
         analysis: data.analysis,
       };
       setHistory(prev => [entry, ...prev].slice(0, 8));
-      toast.success(isRegen ? "Letra regenerada con corrección de idioma" : "Letra generada");
+
+      toast.success(isRegen ? "⚡ Letra regenerada (Pipeline de Estudio 3D)" : "🔥 Letra de estudio masterizada (3 Pasadas)");
       setTimeout(() => lyricsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error desconocido");
@@ -701,13 +644,7 @@ export default function TrapGhostPage() {
   const handleCopySuno = useCallback(async () => {
     if (!lyrics) return;
     try {
-      const clean = lyrics
-        .replace(/^###\s*(\[[^\]]+\])/gm, "$1")
-        .replace(/^#{1,6}\s+/gm, "")
-        .replace(/^\*+(?:Int[ée]rprete?|Interpr[èe]te?):\s*([^*\n]+)\*+$/gim, "")
-        .replace(/^(?:Int[ée]rprete?|Interpr[èe]te?):\s*.+$/gim, "")
-        .replace(/^\s*[\r\n]{2,}/gm, "\n\n")
-        .trim();
+      const clean = cleanSunoBracketHeaders(lyrics);
       await navigator.clipboard.writeText(clean);
       toast.success("⚡ Letra copiada limpia con metatags (lista para Suno AI)");
     } catch {
@@ -1257,6 +1194,8 @@ export default function TrapGhostPage() {
           rhymeSchemeId,
           temperature,
           flowPocketMode: flowPocketMode !== "auto" ? flowPocketMode : undefined,
+          geminiApiKey: geminiApiKey || undefined,
+          geminiModel,
           regenerateSection: {
             sectionName,
             keepContext: context,
@@ -1265,8 +1204,8 @@ export default function TrapGhostPage() {
       });
       const data: GenerateResponse & { error?: string } = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || "Error en re-generación");
-      // Replace just the section in the existing lyrics
-      const newSectionText = data.lyrics.trim();
+      // Replace just the section in the existing lyrics with clean format
+      const newSectionText = cleanSunoBracketHeaders(data.lyrics);
       // Safe replacement: find the old section by tag and replace with new
       const escapedName = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const sectionRegex = new RegExp(`(?:###?\\s*)?\\[${escapedName}[^\\]]*\\][^]*?(?=(?:###?\\s*\\[|$))`, "i");
@@ -1359,7 +1298,12 @@ export default function TrapGhostPage() {
       const res = await fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: lyrics, targetLang }),
+        body: JSON.stringify({
+          text: lyrics,
+          targetLang,
+          geminiApiKey: geminiApiKey || undefined,
+          geminiModel,
+        }),
       });
       const data: { translated?: string; error?: string } = await res.json();
       if (!res.ok || data.error) {
@@ -1372,7 +1316,7 @@ export default function TrapGhostPage() {
     } finally {
       setTranslating(false);
     }
-  }, [lyrics]);
+  }, [lyrics, geminiApiKey, geminiModel]);
 
   // ===== Lyrics critic (AI-powered feedback) =====
   const handleCritic = useCallback(async () => {
@@ -1389,6 +1333,8 @@ export default function TrapGhostPage() {
           artistName: artist?.name ?? "Libre",
           moodLabel,
           spanglishTarget: spanglishPercent,
+          geminiApiKey: geminiApiKey || undefined,
+          geminiModel,
         }),
       });
       const data = await res.json();
@@ -1402,7 +1348,7 @@ export default function TrapGhostPage() {
     } finally {
       setCriticLoading(false);
     }
-  }, [lyrics, artist, moodId, spanglishPercent]);
+  }, [lyrics, artist, moodId, spanglishPercent, geminiApiKey, geminiModel]);
 
   // ===== Agent Polish (4 agentes IA que revisan y mejoran) =====
   const handleAgentPolish = useCallback(async () => {
@@ -1420,6 +1366,8 @@ export default function TrapGhostPage() {
     setPolishResult(null);
     try {
       const structurePlan = structure.sections.map(s => `[${s.name}]`).join(", ");
+      const chorusVoice = sectionVoices.find(v => v.sectionName.toLowerCase().includes("chorus") || v.sectionName.toLowerCase().includes("estribillo") || v.sectionName.toLowerCase().includes("hook"));
+      const selectedHookStyle = chorusVoice?.hookStyle;
       const res = await fetch("/api/agent-polish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1434,6 +1382,7 @@ export default function TrapGhostPage() {
           geminiApiKey: geminiApiKey || undefined,
           geminiModel,
           autoIterate: polishAutoIterate,
+          hookStyle: selectedHookStyle,
         }),
       });
       const data = await res.json();
@@ -1449,7 +1398,7 @@ export default function TrapGhostPage() {
     } finally {
       setPolishLoading(false);
     }
-  }, [lyrics, artist, artistId, moodId, spanglishPercent, bpmVibe, structure, geminiApiKey, geminiModel, polishAutoIterate]);
+  }, [lyrics, artist, artistId, moodId, spanglishPercent, bpmVibe, structure, sectionVoices, geminiApiKey, geminiModel, polishAutoIterate]);
 
   // ===== Auto-corregir letra desde el Crítico =====
   const handleFixFromCritic = useCallback(async () => {
@@ -1461,6 +1410,8 @@ export default function TrapGhostPage() {
     setFixingFromCritic(true);
     try {
       const structurePlan = structure.sections.map(s => `[${s.name}]`).join(", ");
+      const chorusVoice = sectionVoices.find(v => v.sectionName.toLowerCase().includes("chorus") || v.sectionName.toLowerCase().includes("estribillo") || v.sectionName.toLowerCase().includes("hook"));
+      const selectedHookStyle = chorusVoice?.hookStyle;
       const res = await fetch("/api/agent-polish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1475,6 +1426,7 @@ export default function TrapGhostPage() {
           geminiApiKey: geminiApiKey || undefined,
           geminiModel,
           autoIterate: false,
+          hookStyle: selectedHookStyle,
         }),
       });
       const data = await res.json();
@@ -1502,7 +1454,7 @@ export default function TrapGhostPage() {
     } finally {
       setFixingFromCritic(false);
     }
-  }, [lyrics, criticResult, artist, artistId, moodId, spanglishPercent, bpmVibe, structure, geminiApiKey, geminiModel, analysis]);
+  }, [lyrics, criticResult, artist, artistId, moodId, spanglishPercent, bpmVibe, structure, sectionVoices, geminiApiKey, geminiModel, analysis]);
 
   // ===== Aplicar letra pulida =====
   const applyPolishedLyrics = useCallback(() => {
@@ -1782,6 +1734,8 @@ export default function TrapGhostPage() {
           qualityScore: qualityScore?.total,
           punchlineText: punchlineAnalysis?.topPunchline?.text,
           platform,
+          geminiApiKey: geminiApiKey || undefined,
+          geminiModel,
         }),
       });
       const data: { caption?: string; error?: string } = await res.json();
@@ -1795,7 +1749,7 @@ export default function TrapGhostPage() {
     } finally {
       setSocialLoading(false);
     }
-  }, [artistId, moodId, bpmVibeId, producerId, spanglishPercent, qualityScore, punchlineAnalysis]);
+  }, [artistId, moodId, bpmVibeId, producerId, spanglishPercent, qualityScore, punchlineAnalysis, geminiApiKey, geminiModel]);
 
   // ===== Remix: combine sections from different history entries =====
   const handleRemix = useCallback(() => {
