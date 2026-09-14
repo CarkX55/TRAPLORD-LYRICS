@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeSunoReadiness, type SunoReadinessResult } from "@/lib/language-detector";
+import { parseRawLyricsToAST, stringifyASTToSunoLyrics, type SongDocument } from "@/lib/song-document";
+import type { RepairOperation } from "@/lib/repair-engine";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 interface CriticBody {
-  lyrics: string;
+  lyrics?: string;
+  document?: SongDocument;
   artistName: string;
   moodLabel: string;
   spanglishTarget: number;
+  situationalPresetId?: string;
   geminiApiKey?: string;
   geminiModel?: string;
 }
@@ -19,46 +23,87 @@ interface CriticFeedback {
   text: string;
 }
 
+interface CriticDimensions {
+  flow: number;              // Rhythmic pocket & breath variance
+  narrative: number;         // Progression & scene turn vs static loop
+  lexical: number;           // Street jargon authenticity & register
+  specificity: number;       // Physical details / concrete brands vs abstract claims
+  sceneDependency: number;   // How tied the lyrics are to this specific song vs generic filler
+  genericnessPenalty: number;// Penalty for clichés and empty rhymes (0 = zero generic, 100 = full cliché)
+  cohesion: number;          // Transition between sections
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as CriticBody;
 
-    if (!body.lyrics || !body.lyrics.trim()) {
-      return NextResponse.json({ error: "No se proporcionó letra para criticar." }, { status: 400 });
+    let doc: SongDocument;
+    if (body.document && body.document.sections && body.document.sections.length > 0) {
+      doc = body.document;
+    } else if (body.lyrics && body.lyrics.trim()) {
+      doc = parseRawLyricsToAST(body.lyrics);
+    } else {
+      return NextResponse.json({ error: "No se proporcionó letra o documento para criticar." }, { status: 400 });
     }
 
-    const sunoReadiness = analyzeSunoReadiness(body.lyrics);
+    const fullLyrics = stringifyASTToSunoLyrics(doc);
+    const sunoReadiness = analyzeSunoReadiness(fullLyrics);
 
-    const prompt = `Eres un crítico experto de letras de trap/rap. Analiza la siguiente letra generada al estilo de "${body.artistName}" con mood "${body.moodLabel}" y target de spanglish ${body.spanglishTarget}%.
+    // Prepare structural breakdown with bar IDs for surgical diagnosis
+    const barListing = doc.sections.map(sec => {
+      const barsText = sec.bars.map(b => `  [ID: ${b.id} | Compás ${b.position}${b.locked ? " 🔒 BLOQUEADO" : ""}] ${b.lyricText}`).join("\n");
+      return `Sección [${sec.name} | SecID: ${sec.id}]:\n${barsText}`;
+    }).join("\n\n");
 
-DEBES devolver EXCLUSIVAMENTE un JSON válido con esta estructura (sin markdown, sin explicaciones):
+    const prompt = `Eres el Multi-Crítico y Supervisor de Estudio más riguroso del Trap y Rap contemporáneo.
+Analiza la siguiente canción estructurada como un AST (Abstract Syntax Tree) compás a compás.
+Artista: "${body.artistName}" | Mood: "${body.moodLabel}" | Objetivo Spanglish: ${body.spanglishTarget}%
+
+# COMPASES DE LA CANCIÓN CON IDENTIFICADORES:
+${barListing}
+
+# TAREAS DEL MULTI-CRÍTICO:
+1. Evalúa críticamente las 7 Dimensiones de Calidad (cada una de 0 a 100):
+   - flow: Pocket rítmico, cantabilidad y variedad de respiración.
+   - narrative: Progresión de la historia y giro dramático (evita escenas estáticas en bucle).
+   - lexical: Autenticidad de la jerga callejera; CERO términos formales, de oficina o clínicos (e.g. "cunnilingus").
+   - specificity: Detalles visuales concretos, marcas, modelos, objetos físicos vs frases abstractas vacías.
+   - sceneDependency: ¿Estas barras pertenecen de forma única a esta situación o son barras genéricas intercambiables?
+   - genericnessPenalty: Penalización por clichés de IA ("el asfalto no perdona", "fuego/juego/cielo", "contando money"). (0 = original y fresco, 100 = puro cliché).
+   - cohesion: Fluidez de transición entre verso, puente y estribillo.
+2. Identifica entre 1 y 3 compases individuales débiles que requieran REPARACIÓN QUIRÚRGICA (NO sugieras barras que tengan 🔒 BLOQUEADO).
+
+DEBES devolver EXCLUSIVAMENTE un JSON válido con esta estructura exacta (sin markdown, sin texto extra fuera del JSON):
 {
   "overallScore": <número 0-100>,
-  "summary": "<resumen de 1-2 frases>",
+  "summary": "<resumen analítico de 1-2 frases>",
+  "dimensions": {
+    "flow": <0-100>,
+    "narrative": <0-100>,
+    "lexical": <0-100>,
+    "specificity": <0-100>,
+    "sceneDependency": <0-100>,
+    "genericnessPenalty": <0-100>,
+    "cohesion": <0-100>
+  },
   "feedback": [
     {
       "type": "strength" | "weakness" | "suggestion",
-      "line": "<referencia a línea o sección, opcional>",
+      "line": "<referencia a compás o sección>",
       "text": "<feedback específico y accionable>"
     }
+  ],
+  "repairOperations": [
+    {
+      "id": "rep_1",
+      "sectionId": "<SecID de la sección>",
+      "targetBarIds": ["<ID_del_compas>"],
+      "barRange": [<compas_inicio>, <compas_fin>],
+      "problem": "cliche" | "register" | "repetition" | "weak_hook" | "scene_stall" | "genericness" | "rhythm",
+      "instruction": "<instrucción concreta de cómo reescribir esta barra sustituyendo clichés por microdetalles físicos>"
+    }
   ]
-}
-
-Criterios de análisis:
-1. Coherencia narrativa (¿la historia tiene sentido?)
-2. Uso de slang auténtico del artista
-3. Densidad de punchlines
-4. Flow y métrica (¿las frases son cantables y tienen pocket?)
-5. Ad-libs apropiados entre paréntesis
-6. Cumplimiento del ratio spanglish
-7. Originalidad y detección de clichés prohibidos (penaliza fórmulas gastadas como "el asfalto no perdona", "fuego/juego/suelo", "haciendo money sin parar", "stacking paper")
-8. Transiciones entre secciones
-9. Compatibilidad con Suno AI (¿están las secciones en [brackets] limpios sin markdown '###', ad-libs entre paréntesis y sin fugas de texto?)
-
-Proporciona 3-5 puntos de feedback mezclando strengths, weaknesses y suggestions. Sé específico (cita líneas concretas cuando sea posible).
-
-LETRA A ANALIZAR:
-${body.lyrics}`;
+}`;
 
     let raw = "";
 
@@ -72,7 +117,7 @@ ${body.lyrics}`;
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
-              temperature: 0.4,
+              temperature: 0.3,
               topP: 0.9,
             },
           }),
@@ -89,7 +134,7 @@ ${body.lyrics}`;
       const completion = await zai.chat.completions.create({
         messages: [{ role: "user", content: prompt }],
         thinking: { type: "disabled" },
-        temperature: 0.4,
+        temperature: 0.3,
       });
       raw = completion.choices[0]?.message?.content ?? "";
     }
@@ -98,7 +143,14 @@ ${body.lyrics}`;
       return NextResponse.json({ error: "El crítico no devolvió contenido." }, { status: 502 });
     }
 
-    let parsed: { overallScore: number; summary: string; feedback: CriticFeedback[] };
+    let parsed: {
+      overallScore: number;
+      summary: string;
+      dimensions?: CriticDimensions;
+      feedback: CriticFeedback[];
+      repairOperations?: any[];
+    };
+
     try {
       const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       parsed = JSON.parse(cleaned);
@@ -106,15 +158,52 @@ ${body.lyrics}`;
       return NextResponse.json({
         overallScore: 50,
         summary: raw.slice(0, 500),
+        dimensions: {
+          flow: 50,
+          narrative: 50,
+          lexical: 50,
+          specificity: 50,
+          sceneDependency: 50,
+          genericnessPenalty: 30,
+          cohesion: 50,
+        },
         feedback: [],
+        repairOperations: [],
         sunoReadiness,
+        document: doc,
         raw: true,
       });
     }
 
+    // Hydrate repair operations with sourceVersionId and songId
+    const sanitizedRepairs: RepairOperation[] = (parsed.repairOperations || []).map((op: any, idx: number) => ({
+      id: op.id || `rep_${Date.now()}_${idx}`,
+      songId: doc.id,
+      sourceVersionId: doc.versionId,
+      sectionId: op.sectionId,
+      barRange: op.barRange || [1, 1],
+      targetBarIds: Array.isArray(op.targetBarIds) ? op.targetBarIds : [],
+      problem: op.problem || "genericness",
+      instruction: op.instruction || "Reescribir con mayor concreción física y actitud callejera.",
+      preserveWords: op.preserveWords || [],
+    }));
+
     return NextResponse.json({
-      ...parsed,
+      overallScore: parsed.overallScore ?? 75,
+      summary: parsed.summary ?? "Análisis completado.",
+      dimensions: parsed.dimensions ?? {
+        flow: 75,
+        narrative: 75,
+        lexical: 80,
+        specificity: 70,
+        sceneDependency: 70,
+        genericnessPenalty: 20,
+        cohesion: 75,
+      },
+      feedback: parsed.feedback ?? [],
+      repairOperations: sanitizedRepairs,
       sunoReadiness,
+      document: doc,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido en el crítico.";
@@ -122,3 +211,4 @@ ${body.lyrics}`;
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+

@@ -29,6 +29,7 @@ import { buildCorrectionInstruction, analyzeLanguageRatio, type LanguageAnalysis
 import { getArtistReference } from "@/lib/artist-references";
 import { generateArtistReference } from "@/lib/reference-generator";
 import { analyzeReferenceTrack } from "@/lib/track-analyzer";
+import { parseRawLyricsToAST } from "@/lib/song-document";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -291,6 +292,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       lyrics,
+      songDocument: parseRawLyricsToAST(lyrics),
       analysis,
       spanglishLabel: spanglishInfo.label,
       promptPreview: `Pipeline de Estudio (3 Pasadas) completado con éxito: ${pipelineStagesCompleted.join(" ➔ ")}`,

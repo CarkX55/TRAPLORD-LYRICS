@@ -1295,8 +1295,121 @@ export const ARTIST_REFERENCES: Record<string, ArtistReference> = {
     verified: true,
     source: "real-knowledge",
   },
+
+  "2chainz": {
+    artistId: "2chainz",
+    peakEra: "2012-2013 (Based on a T.R.U. Story / B.O.A.T.S. II)",
+    verseBars: [
+      "She got a big booty, so I call her Big Booty (2 Chainz!)",
+      "Scn-sc-sc-scenario, riding in a foreign, I'm the top student (Yeah!)",
+    ],
+    hookBars: [
+      "I'm in the kitchen, yams everywhere (Truuu!)",
+      "Two chains, four rings, real niggas in the building (2 Chainz!)",
+    ],
+    signatureBar: "2 Chainz! Four bracelets, bankroll thick, Southside College Park",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  lil_wayne: {
+    artistId: "lil_wayne",
+    peakEra: "2006-2008 (Da Drought 3 / Tha Carter III)",
+    verseBars: [
+      "Real Gs move in silence like lasagna (Yeah!)",
+      "Safe sex is great sex, better wear a latex, 'cause you don't want that late text (Tunechi!)",
+    ],
+    hookBars: [
+      "Got money and the power, minute after minute, hour after hour (Young Mula baby!)",
+      "A milli, a milli, a milli, a milli, a-a-a milli (Yeah!)",
+    ],
+    signatureBar: "Young Mula baby! Weezy F. Baby and the F is for phenomenal",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  "50_cent": {
+    artistId: "50_cent",
+    peakEra: "2003-2005 (Get Rich or Die Tryin' / The Massacre)",
+    verseBars: [
+      "Many men, wish death upon me, blood in my eye, dog, and I can't see (Yeah!)",
+      "I'm tryin' to be what I'm destined to be, and niggas tryin' to take my life away (50!)",
+    ],
+    hookBars: [
+      "In da club, bottle full of bub, look, mami, I got the X if you into takin' drugs (G-Unit!)",
+      "I'm into havin' sex, I ain't into makin' love, so come give me a hug (Yeah!)",
+    ],
+    signatureBar: "G-G-G-G-Unit! 50 Cent, South Jamaica Queens, you know how we do it",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  rick_ross: {
+    artistId: "rick_ross",
+    peakEra: "2008-2010 (Deeper Than Rap / Teflon Don)",
+    verseBars: [
+      "Every day I'm hustlin', every day I'm hustlin' (Hustlin'!)",
+      "Who the fuck you think you fuckin' with, I'm the fuckin' boss (UGH!)",
+    ],
+    hookBars: [
+      "B.M.F., blowing Money Fast, real niggas getting cash (Maybach Music!)",
+      "I think I'm Big Meech, Larry Hoover, whipping work, hallelujah (Boss!)",
+    ],
+    signatureBar: "UGH! Maybach Music, Rozay, the biggest boss that you've seen thus far",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  camron: {
+    artistId: "camron",
+    peakEra: "2002-2004 (Come Home With Me / Purple Haze)",
+    verseBars: [
+      "Harlem world, pink range, pink mink, diamond ring (Killa!)",
+      "I'm in the lobby with the shotty, telling everybody chill (Dipset!)",
+    ],
+    hookBars: [
+      "Hey Ma, what's up? Let's slide, all right, all right (Holla!)",
+      "And we get it on most every night, when that daylight come, you good (Yeah!)",
+    ],
+    signatureBar: "Killa! Cam'ron, Dipset Byrd Gang, Harlem USA in the pink fur",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  ludacris: {
+    artistId: "ludacris",
+    peakEra: "2000-2003 (Word of Mouf / Chicken-n-Beer)",
+    verseBars: [
+      "Move bitch, get out the way, get out the way bitch, get out the way (Luda!)",
+      "I got hoes in different area codes, area codes (Woo!)",
+    ],
+    hookBars: [
+      "Roll out, roll out, roll out, roll out (Watch out!)",
+      "Disturbing Tha Peace, Cadillac on 24s, southern heat (DTP!)",
+    ],
+    signatureBar: "Luda! Disturbing Tha Peace, Atlanta Georgia, roll out!",
+    verified: true,
+    source: "real-knowledge",
+  },
+
+  t_pain: {
+    artistId: "t_pain",
+    peakEra: "2005-2008 (Rappa Ternt Sanga / Epiphany)",
+    verseBars: [
+      "She made us drinks, to drink, we drunk 'em, got drunk (Hey!)",
+      "And now I'm in love with a stripper, counting racks on the floor (Yeahhh!)",
+    ],
+    hookBars: [
+      "I'm 'n luv wit a stripper, she workin' that pole, watch her go (Nappy Boy!)",
+      "Buy you a drank, ima take you home with me, what you think about that? (Ooh!)",
+    ],
+    signatureBar: "Yeahhh! T-Pain, Nappy Boy Radio, Tallahassee in the building",
+    verified: true,
+    source: "real-knowledge",
+  },
 };
 
 export function getArtistReference(artistId: string): ArtistReference | null {
   return ARTIST_REFERENCES[artistId] ?? null;
 }
+
