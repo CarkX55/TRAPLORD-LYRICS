@@ -85,6 +85,7 @@ interface GenerateBody {
   flowPocketMode?: "auto" | "bouncy" | "triplets" | "heavy";
   geminiApiKey?: string;
   geminiModel?: string;
+  thinkingBudget?: number; // 0: disabled/instant, 1024-2048: balanced, 4096-8192: deep study, -1: auto
   useLegacySinglePass?: boolean;
 }
 
@@ -105,6 +106,20 @@ async function callLLM(prompt: string, body: GenerateBody, temperature: number =
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 28000); // 28s per attempt
 
+          // Build generationConfig with optional thinkingConfig
+          const generationConfig: Record<string, unknown> = {
+            temperature,
+            topP: 0.95,
+          };
+
+          if (typeof body.thinkingBudget === "number") {
+            if (body.thinkingBudget >= 0) {
+              generationConfig.thinkingConfig = {
+                thinkingBudget: body.thinkingBudget,
+              };
+            }
+          }
+
           const res = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
             {
@@ -113,10 +128,7 @@ async function callLLM(prompt: string, body: GenerateBody, temperature: number =
               signal: controller.signal,
               body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                  temperature,
-                  topP: 0.95,
-                },
+                generationConfig,
               }),
             }
           );

@@ -275,6 +275,7 @@ export default function TrapGhostPage() {
   // Round 12: API Key + model selector + producer name + flow profile
   const [geminiApiKey, setGeminiApiKey] = useState<string>("");
   const [geminiModel, setGeminiModel] = useState<string>("gemini-2.0-flash");
+  const [thinkingBudget, setThinkingBudget] = useState<number>(-1); // -1: auto, 0: instant, 1024: balanced, 4096: deep
   const [producerName, setProducerName] = useState<string>("Markoff");
   const [availableModels, setAvailableModels] = useState<{ id: string; name: string }[]>([]);
   const [loadingModels, setLoadingModels] = useState<boolean>(false);
@@ -378,6 +379,8 @@ export default function TrapGhostPage() {
       }
       const storedModel = localStorage.getItem("gemini_model");
       if (storedModel) setGeminiModel(storedModel);
+      const storedBudget = localStorage.getItem("gemini_thinking_budget");
+      if (storedBudget !== null) setThinkingBudget(Number(storedBudget));
       const storedProducer = localStorage.getItem("producer_name");
       if (storedProducer) setProducerName(storedProducer);
     } catch {}
@@ -598,6 +601,7 @@ export default function TrapGhostPage() {
       previousLyrics: isRegen ? lyrics : undefined,
       geminiApiKey: geminiApiKey || undefined,
       geminiModel,
+      thinkingBudget,
       referenceTrackLyrics: refTrackOpen && refTrackLyrics.trim() ? refTrackLyrics : undefined,
       dynamicSongForm,
       sunoTagsMode,
@@ -1268,6 +1272,7 @@ export default function TrapGhostPage() {
           flowPocketMode: flowPocketMode !== "auto" ? flowPocketMode : undefined,
           geminiApiKey: geminiApiKey || undefined,
           geminiModel,
+          thinkingBudget,
           regenerateSection: {
             sectionName,
             keepContext: context,
@@ -2110,8 +2115,9 @@ export default function TrapGhostPage() {
                         try {
                           localStorage.setItem("gemini_api_key", geminiApiKey.trim());
                           localStorage.setItem("gemini_model", geminiModel);
+                          localStorage.setItem("gemini_thinking_budget", String(thinkingBudget));
                           localStorage.setItem("producer_name", producerName);
-                          toast.success("API Key guardada en este navegador");
+                          toast.success("Configuración de Gemini guardada en este navegador");
                           if (geminiApiKey.trim()) fetchGeminiModels(geminiApiKey);
                         } catch { toast.error("No se pudo guardar"); }
                       }} className="border-slime/30 hover:bg-slime/10 hover:text-slime shrink-0" title="Guardar en localStorage">
@@ -2159,6 +2165,43 @@ export default function TrapGhostPage() {
                         )}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  {/* Thinking Level Selector (New) */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <Brain className="w-3.5 h-3.5 text-purple-400" />
+                        Nivel de Thinking (Razonamiento del Modelo)
+                      </Label>
+                      <Badge
+                        variant="outline"
+                        className={`text-[9px] font-mono ${
+                          thinkingBudget === 0
+                            ? "border-slime/50 text-slime bg-slime/10"
+                            : thinkingBudget === 1024
+                            ? "border-cyan-400/50 text-cyan-400 bg-cyan-400/10"
+                            : thinkingBudget === 4096
+                            ? "border-purple-400/50 text-purple-400 bg-purple-400/10"
+                            : "border-muted text-muted-foreground"
+                        }`}
+                      >
+                        {thinkingBudget === 0 ? "⚡ 0 tokens (Instant)" : thinkingBudget === 1024 ? "⚖️ 1024 tokens (Rápido)" : thinkingBudget === 4096 ? "🧠 4096 tokens (Estudio)" : "🤖 Auto (Default)"}
+                      </Badge>
+                    </div>
+
+                    <Select value={String(thinkingBudget)} onValueChange={(val) => setThinkingBudget(Number(val))}>
+                      <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">⚡ Sin Thinking / Instantáneo (0 tokens — Máxima velocidad, no se cuelga)</SelectItem>
+                        <SelectItem value="1024">⚖️ Thinking Equilibrado (1024 tokens — Rápido con buena métrica)</SelectItem>
+                        <SelectItem value="4096">🧠 Thinking Profundo (4096 tokens — Máxima complejidad lírica y rítmica)</SelectItem>
+                        <SelectItem value="-1">🤖 Automático de Google (Decisión por defecto del modelo)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground leading-tight">
+                      Si notas que la app tarda o se satura, elige <strong>"Sin Thinking / Instantáneo"</strong> para generar barras al instante en 3-5 segundos sin retrasos.
+                    </p>
                   </div>
                 </CollapsibleContent>
               </Card>
