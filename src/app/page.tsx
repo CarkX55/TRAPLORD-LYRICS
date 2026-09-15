@@ -638,6 +638,14 @@ export default function TrapGhostPage() {
       });
     }, 28000);
 
+    const progressTimer3 = setTimeout(() => {
+      setGenerationProgress({
+        step: 3,
+        title: "Paso 3/3: Masterización & Entrega de Estudio",
+        detail: "Puliendo métricas, balance de rimas y compilando la letra final...",
+      });
+    }, 45000);
+
     try {
       // Notificación de inicio del pipeline de estudio
       toast.info("🎛️ Sesión de estudio iniciada: Topliner ➔ Ghostwriter ➔ Director Vocal...");
@@ -704,6 +712,7 @@ export default function TrapGhostPage() {
     } finally {
       clearTimeout(progressTimer1);
       clearTimeout(progressTimer2);
+      clearTimeout(progressTimer3);
       setLoading(false);
       setGenerationProgress(null);
     }

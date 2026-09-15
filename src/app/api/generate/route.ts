@@ -89,74 +89,74 @@ interface GenerateBody {
   useLegacySinglePass?: boolean;
 }
 
-// Unified LLM Caller with Retry and Auto-Fallback for high resilience
+// Unified LLM Caller with Multi-Model Fallback for high resilience
 async function callLLM(prompt: string, body: GenerateBody, temperature: number = 0.72): Promise<string> {
   if (body.geminiApiKey && body.geminiApiKey.trim()) {
-    const primaryModel = body.geminiModel || "gemini-2.5-flash";
-    // Fallback models in case primary model hits 503 / capacity limits or 429
-    const fallbackList = [primaryModel, "gemini-2.5-flash", "gemini-2.0-flash"].filter(
+    const primaryModel = (body.geminiModel && body.geminiModel.trim()) ? body.geminiModel.trim() : "gemini-2.0-flash";
+    // Resilient fallback chain: user selected model -> gemini-2.0-flash -> gemini-1.5-flash
+    const fallbackList = [primaryModel, "gemini-2.0-flash", "gemini-1.5-flash"].filter(
       (m, idx, arr) => arr.indexOf(m) === idx
     );
 
     let lastError: Error | null = null;
 
     for (const model of fallbackList) {
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 28000); // 28s per attempt
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s per model attempt
 
-          // Build generationConfig with optional thinkingConfig
-          const generationConfig: Record<string, unknown> = {
-            temperature,
-            topP: 0.95,
+        // Build generationConfig with optional thinkingConfig
+        const generationConfig: Record<string, unknown> = {
+          temperature,
+          topP: 0.95,
+        };
+
+        // Only attach thinkingConfig for models that support it and when thinkingBudget >= 0
+        if (
+          typeof body.thinkingBudget === "number" &&
+          body.thinkingBudget >= 0 &&
+          (model.includes("2.0") || model.includes("2.5") || model.includes("3") || model.includes("thinking"))
+        ) {
+          generationConfig.thinkingConfig = {
+            thinkingBudget: body.thinkingBudget,
           };
-
-          if (typeof body.thinkingBudget === "number") {
-            if (body.thinkingBudget >= 0) {
-              generationConfig.thinkingConfig = {
-                thinkingBudget: body.thinkingBudget,
-              };
-            }
-          }
-
-          const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              signal: controller.signal,
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig,
-              }),
-            }
-          );
-          clearTimeout(timeoutId);
-
-          const json = await res.json();
-          if (json.error) {
-            const isRetryable = json.error.code === 503 || json.error.code === 429 || json.error.status === "UNAVAILABLE";
-            if (isRetryable && (attempt < 2 || model !== fallbackList[fallbackList.length - 1])) {
-              console.warn(`[callLLM] Retrying on ${model} (attempt ${attempt}) due to: ${json.error.message}`);
-              await new Promise(r => setTimeout(r, 1200));
-              continue;
-            }
-            throw new Error(`Gemini (${model}): ${json.error.message}`);
-          }
-          const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (!text || !text.trim()) {
-            throw new Error(`Gemini (${model}) no devolvió contenido.`);
-          }
-          return text.trim();
-        } catch (err) {
-          lastError = err instanceof Error ? err : new Error(String(err));
-          const isAbort = lastError.name === "AbortError";
-          console.warn(`[callLLM] Model ${model} failed (attempt ${attempt}): ${lastError.message}`);
-          if (attempt < 2 && !isAbort) {
-            await new Promise(r => setTimeout(r, 1000));
-          }
         }
+
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig,
+            }),
+          }
+        );
+        clearTimeout(timeoutId);
+
+        const json = await res.json();
+        if (json.error) {
+          const errMsg = json.error.message || json.error.status || `Error ${json.error.code}`;
+          console.warn(`[callLLM] Model ${model} returned API error (${json.error.code}): ${errMsg}`);
+          lastError = new Error(`Gemini (${model}): ${errMsg}`);
+          // If capacity limit (503), rate limit (429), or missing model (404), immediately fall back to next model!
+          continue;
+        }
+
+        const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text || !text.trim()) {
+          console.warn(`[callLLM] Model ${model} returned empty candidates`);
+          lastError = new Error(`Gemini (${model}) no devolvió contenido.`);
+          continue;
+        }
+
+        return text.trim();
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.warn(`[callLLM] Model ${model} fetch exception: ${lastError.message}`);
+        // Proceed to next fallback model
       }
     }
 
@@ -454,21 +454,38 @@ export async function POST(req: NextRequest) {
       }
 
       // --- PASADA 3: Vocal Director & Call & Response Engineer ---
-      const stage3Prompt = buildStage3VocalDirectorPrompt(promptParams, lyricsForStage3);
-      const t3 = Date.now();
-      const stage3Lyrics = await callLLM(stage3Prompt, body, 0.75);
-      const d3Ms = Date.now() - t3;
-      pipelineStagesCompleted.push("vocal_call_and_response_mastered");
-      stageLogs.push({
-        stageId: "stage_3_vocal_director",
-        stageName: "Pasada 3: Director Vocal & Mezcla de Efectos",
-        description: "Call & Response dialéctico, ad-libs con actitud, textura humana compás a compás y tags Suno v4.5 con Language Drift Guard",
-        model: modelUsed,
-        temperature: 0.75,
-        durationMs: d3Ms,
-        prompt: stage3Prompt,
-        rawResponse: stage3Lyrics,
-      });
+      let stage3Lyrics = "";
+      try {
+        const stage3Prompt = buildStage3VocalDirectorPrompt(promptParams, lyricsForStage3);
+        const t3 = Date.now();
+        stage3Lyrics = await callLLM(stage3Prompt, body, 0.75);
+        const d3Ms = Date.now() - t3;
+        pipelineStagesCompleted.push("vocal_call_and_response_mastered");
+        stageLogs.push({
+          stageId: "stage_3_vocal_director",
+          stageName: "Pasada 3: Director Vocal & Mezcla de Efectos",
+          description: "Call & Response dialéctico, ad-libs con actitud, textura humana compás a compás y tags Suno v4.5 con Language Drift Guard",
+          model: modelUsed,
+          temperature: 0.75,
+          durationMs: d3Ms,
+          prompt: stage3Prompt,
+          rawResponse: stage3Lyrics,
+        });
+      } catch (stage3Err) {
+        console.warn("[generate] Pasada 3 vocal director falló por saturación del proveedor, activando salvaguarda de estudio:", stage3Err);
+        stage3Lyrics = lyricsForStage3;
+        pipelineStagesCompleted.push("stage_3_studio_guard_recovered");
+        stageLogs.push({
+          stageId: "stage_3_studio_guard",
+          stageName: "Pasada 3: Salvaguarda de Estudio Activa",
+          description: "Versos consolidados de la Pasada 2 preservados con éxito para garantizar la entrega de la letra.",
+          model: modelUsed,
+          temperature: 0.75,
+          durationMs: 0,
+          prompt: "Salvaguarda automática de estudio ante saturación del modelo",
+          rawResponse: lyricsForStage3,
+        });
+      }
 
       finalRaw = stage3Lyrics;
       lyrics = cleanSunoBracketHeaders(stage3Lyrics);
