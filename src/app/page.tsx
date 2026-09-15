@@ -617,7 +617,7 @@ export default function TrapGhostPage() {
 
     setGenerationProgress({
       step: 1,
-      title: "Paso 1/3: Topliner & Hook Architect",
+      title: "Paso 1/2: Topliner & Hook Contract",
       detail: "Diseñando ganchos melódicos, anáforas rítmicas y ancla semántica...",
     });
 
@@ -625,30 +625,30 @@ export default function TrapGhostPage() {
     const progressTimer1 = setTimeout(() => {
       setGenerationProgress({
         step: 2,
-        title: "Paso 2/3: Ghostwriter & Versos Cinemáticos",
-        detail: "Estructurando barras, flow switching y narrativa alrededor del hook...",
+        title: "Paso 2/2: Ghostwriter & Master Vocal",
+        detail: "Estructurando barras, flow switching, ad-libs y performance...",
       });
-    }, 13000);
+    }, 10000);
 
     const progressTimer2 = setTimeout(() => {
       setGenerationProgress({
-        step: 3,
-        title: "Paso 3/3: Director Vocal & Mezcla de Efectos",
-        detail: "Aplicando réplicas dialécticas, modulación humana y tags Suno v4.5...",
+        step: 2,
+        title: "Paso 2/2: Auditoría Determinista de Estudio",
+        detail: "Verificando consistencia rítmica, AST y balance de idioma...",
       });
-    }, 28000);
+    }, 20000);
 
     const progressTimer3 = setTimeout(() => {
       setGenerationProgress({
-        step: 3,
-        title: "Paso 3/3: Masterización & Entrega de Estudio",
-        detail: "Puliendo métricas, balance de rimas y compilando la letra final...",
+        step: 2,
+        title: "Paso 2/2: Finalizando Entrega de Estudio",
+        detail: "Compilando la letra masterizada...",
       });
-    }, 45000);
+    }, 30000);
 
     try {
       // Notificación de inicio del pipeline de estudio
-      toast.info("🎛️ Sesión de estudio iniciada: Topliner ➔ Ghostwriter ➔ Director Vocal...");
+      toast.info("🎛️ Sesión de estudio iniciada: Topliner ➔ Master Vocal...");
 
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -705,7 +705,7 @@ export default function TrapGhostPage() {
       };
       setHistory(prev => [entry, ...prev].slice(0, 8));
 
-      toast.success(isRegen ? "⚡ Letra regenerada (Pipeline de Estudio 3D)" : "🔥 Letra de estudio masterizada (3 Pasadas)");
+      toast.success(isRegen ? "⚡ Letra regenerada (Pipeline de Estudio 2-Pass)" : "🔥 Letra de estudio masterizada (2-Pass Master)");
       setTimeout(() => lyricsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error desconocido");

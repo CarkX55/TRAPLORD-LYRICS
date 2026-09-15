@@ -371,19 +371,20 @@ export async function POST(req: NextRequest) {
         rawResponse: rawLyrics,
       });
     }
-    // CASE 3: STUDIO PIPELINE IN 3 PASSES (STANDARD)
+    // CASE 3: STUDIO PIPELINE SNAPPY (2-PASS PRIMARY + EXCEPTIONAL REPAIR ONLY)
     else {
-      processMode = "pipeline_3_pass";
-      // --- PASADA 1: Topliner & Rhythmic Engine (Hooks & Mantras) ---
+      processMode = "pipeline_2_pass_primary";
+
+      // --- PASADA 1: Topliner & Contrato de Gancho (Hooks & Mantras) ---
       const stage1Prompt = buildStage1ToplinePrompt(promptParams);
       const t1 = Date.now();
       const stage1Topline = await callLLM(stage1Prompt, body, 0.82);
       const d1Ms = Date.now() - t1;
-      pipelineStagesCompleted.push("topline_and_mantras_locked");
+      pipelineStagesCompleted.push("hook_contract_locked");
       stageLogs.push({
         stageId: "stage_1_topline",
-        stageName: "Pasada 1: Topliner & Diseñador de Ganchos",
-        description: "Diseño melódico, mantras rítmicos, economía de palabras y anáforas de estribillo guiado por Ancla Semántica",
+        stageName: "Pasada 1: Topliner & Contrato de Gancho",
+        description: "Diseño melódico, mantras rítmicos, economía de palabras y ancla semántica fijada",
         model: modelUsed,
         temperature: 0.82,
         durationMs: d1Ms,
@@ -394,7 +395,7 @@ export async function POST(req: NextRequest) {
       const stage1Syllable = calculateSyllableLanguageRatio(stage1Topline, languageTarget);
       driftHistory.push({
         stage: "stage_1",
-        stageLabel: "Pasada 1 (Hook Topline)",
+        stageLabel: "Pasada 1 (Hook Contract)",
         englishPercent: stage1Syllable.englishPercent,
         spanishPercent: stage1Syllable.spanishPercent,
         deviationFromTarget: stage1Syllable.deviationFromTarget,
@@ -402,16 +403,16 @@ export async function POST(req: NextRequest) {
         decision: stage1Syllable.bandDecision,
       });
 
-      // --- PASADA 2: Ghostwriter & Verse Architect (Barras alrededor del Hook) ---
+      // --- PASADA 2: Ghostwriter & Vocal Director Master (5 Modular Contracts) ---
       const stage2Prompt = buildStage2GhostwriterPrompt(promptParams, stage1Topline);
       const t2 = Date.now();
       const stage2Lyrics = await callLLM(stage2Prompt, body, 0.72);
       const d2Ms = Date.now() - t2;
-      pipelineStagesCompleted.push("verses_and_storytelling_completed");
+      pipelineStagesCompleted.push("studio_master_completed");
       stageLogs.push({
         stageId: "stage_2_ghostwriter",
-        stageName: "Pasada 2: Ghostwriter & Versos Cinemáticos",
-        description: "Estructura de la canción alrededor del Hook, ADN musical, rimas y giro dramático (Scene Engine)",
+        stageName: "Pasada 2: Master de Estudio (Ghostwriter & Vocal)",
+        description: "Estructura completa, flow switching, ad-libs tridimensionales y tags acústicos Suno AI",
         model: modelUsed,
         temperature: 0.72,
         durationMs: d2Ms,
@@ -419,10 +420,11 @@ export async function POST(req: NextRequest) {
         rawResponse: stage2Lyrics,
       });
 
-      const stage2Syllable = calculateSyllableLanguageRatio(stage2Lyrics, languageTarget);
+      const candidateLyrics = cleanSunoBracketHeaders(stage2Lyrics);
+      const stage2Syllable = calculateSyllableLanguageRatio(candidateLyrics, languageTarget);
       driftHistory.push({
         stage: "stage_2",
-        stageLabel: "Pasada 2 (Versos & Historia)",
+        stageLabel: "Pasada 2 (Master de Estudio)",
         englishPercent: stage2Syllable.englishPercent,
         spanishPercent: stage2Syllable.spanishPercent,
         deviationFromTarget: stage2Syllable.deviationFromTarget,
@@ -430,87 +432,65 @@ export async function POST(req: NextRequest) {
         decision: stage2Syllable.bandDecision,
       });
 
-      // --- EVALUACIÓN LINGÜÍSTICA Y REPARACIÓN CONTROLADA ---
-      const repairPlan = evaluateAndPlanLanguageRepair(stage2Lyrics, languageTarget);
+      // --- AUDITORÍA DETERMINISTA LOCAL & QUALITY GATE (0ms) ---
+      const candidateAST = parseRawLyricsToAST(candidateLyrics);
+      const repairPlan = evaluateAndPlanLanguageRepair(candidateLyrics, languageTarget);
+      const isHardFail = stage2Syllable.bandDecision === "hard_fail" || candidateAST.sections.length === 0;
+
       repairDecisionData = {
-        action: repairPlan.action,
-        reason: repairPlan.reason,
+        action: isHardFail ? "exceptional_repair" : "direct_deliver",
+        reason: isHardFail ? (repairPlan.reason || "Hard drift detectado") : "Calidad y estructura verificadas en 2 pasadas",
         netScore: repairPlan.netScore,
         targetBarsCount: repairPlan.targetBarIds.length,
       };
 
-      let lyricsForStage3 = stage2Lyrics;
-      // If hard patch needed and we have target bars, execute focused bar adjustment
-      if ((repairPlan.action === "hard_patch" || repairPlan.action === "eval_patch") && repairPlan.targetBarIds.length > 0) {
+      // --- RUTA 1: HAPPY PATH (95%+ de generaciones) ➔ Entrega Directa en 2 Pasadas (20-25s) ---
+      if (!isHardFail) {
+        finalRaw = stage2Lyrics;
+        lyrics = candidateLyrics;
+      }
+      // --- RUTA 2: REPARACIÓN EXCEPCIONAL QUIRÚRGICA (Solo ante Hard Fail comprobado) ---
+      else {
         try {
-          const patchInstruction = `Ajusta estas barras específicas para cumplir el balance de idioma (${Math.round(languageTarget.center * 100)}% EN / ${Math.round((1 - languageTarget.center) * 100)}% ES) manteniendo exactamente la rima, métrica y flow de la canción:\n${stage2Lyrics}`;
+          const tRepair = Date.now();
+          const patchInstruction = `Ajusta estas barras específicas de la canción para cumplir el balance de idioma (${Math.round(languageTarget.center * 100)}% EN / ${Math.round((1 - languageTarget.center) * 100)}% ES) manteniendo exactamente la rima, métrica y flow:\n${candidateLyrics}`;
           const patchedText = await callLLM(patchInstruction, body, 0.65);
+          const dRepairMs = Date.now() - tRepair;
           if (patchedText && patchedText.trim()) {
-            lyricsForStage3 = patchedText;
-            pipelineStagesCompleted.push("language_distribution_calibrated");
-            const repairedSyllable = calculateSyllableLanguageRatio(patchedText, languageTarget);
+            finalRaw = patchedText;
+            lyrics = cleanSunoBracketHeaders(patchedText);
+            pipelineStagesCompleted.push("exceptional_repair_calibrated");
+            stageLogs.push({
+              stageId: "stage_exceptional_repair",
+              stageName: "🩺 Reparación Excepcional de Calibración",
+              description: "Calibración quirúrgica activada por fallo duro en balance de idioma o métrica",
+              model: modelUsed,
+              temperature: 0.65,
+              durationMs: dRepairMs,
+              prompt: patchInstruction,
+              rawResponse: patchedText,
+            });
+
+            const repairedSyllable = calculateSyllableLanguageRatio(lyrics, languageTarget);
             driftHistory.push({
               stage: "repaired",
-              stageLabel: "Reparación Lingüística Quirúrgica",
+              stageLabel: "Reparación Excepcional",
               englishPercent: repairedSyllable.englishPercent,
               spanishPercent: repairedSyllable.spanishPercent,
               deviationFromTarget: repairedSyllable.deviationFromTarget,
               confidence: repairedSyllable.confidence,
               decision: repairedSyllable.bandDecision,
             });
+          } else {
+            finalRaw = stage2Lyrics;
+            lyrics = candidateLyrics;
           }
         } catch {
-          // If patch fails, preserve original stage2Lyrics to guarantee musical flow
+          // Si la llamada de reparación excepcional falla por saturación, preservamos el Master de la Pasada 2
+          finalRaw = stage2Lyrics;
+          lyrics = candidateLyrics;
         }
       }
-
-      // --- PASADA 3: Vocal Director & Call & Response Engineer ---
-      let stage3Lyrics = "";
-      try {
-        const stage3Prompt = buildStage3VocalDirectorPrompt(promptParams, lyricsForStage3);
-        const t3 = Date.now();
-        stage3Lyrics = await callLLM(stage3Prompt, body, 0.75);
-        const d3Ms = Date.now() - t3;
-        pipelineStagesCompleted.push("vocal_call_and_response_mastered");
-        stageLogs.push({
-          stageId: "stage_3_vocal_director",
-          stageName: "Pasada 3: Director Vocal & Mezcla de Efectos",
-          description: "Call & Response dialéctico, ad-libs con actitud, textura humana compás a compás y tags Suno v4.5 con Language Drift Guard",
-          model: modelUsed,
-          temperature: 0.75,
-          durationMs: d3Ms,
-          prompt: stage3Prompt,
-          rawResponse: stage3Lyrics,
-        });
-      } catch (stage3Err) {
-        console.warn("[generate] Pasada 3 vocal director falló por saturación del proveedor, activando salvaguarda de estudio:", stage3Err);
-        stage3Lyrics = lyricsForStage3;
-        pipelineStagesCompleted.push("stage_3_studio_guard_recovered");
-        stageLogs.push({
-          stageId: "stage_3_studio_guard",
-          stageName: "Pasada 3: Salvaguarda de Estudio Activa",
-          description: "Versos consolidados de la Pasada 2 preservados con éxito para garantizar la entrega de la letra.",
-          model: modelUsed,
-          temperature: 0.75,
-          durationMs: 0,
-          prompt: "Salvaguarda automática de estudio ante saturación del modelo",
-          rawResponse: lyricsForStage3,
-        });
-      }
-
-      finalRaw = stage3Lyrics;
-      lyrics = cleanSunoBracketHeaders(stage3Lyrics);
-
-      const stage3Syllable = calculateSyllableLanguageRatio(lyrics, languageTarget);
-      driftHistory.push({
-        stage: "stage_3",
-        stageLabel: "Pasada 3 (Director Vocal & Ad-libs)",
-        englishPercent: stage3Syllable.englishPercent,
-        spanishPercent: stage3Syllable.spanishPercent,
-        deviationFromTarget: stage3Syllable.deviationFromTarget,
-        confidence: stage3Syllable.confidence,
-        decision: stage3Syllable.bandDecision,
-      });
     }
 
     if (!lyrics || !lyrics.trim()) {
