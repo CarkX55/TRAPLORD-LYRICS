@@ -2165,9 +2165,9 @@ export default function TrapGhostPage() {
                           <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                         )) : (
                           <>
-                            <SelectItem value="gemini-2.5-flash">✨ Gemini 2.5 Flash (Thinking Máximo · Recomendado)</SelectItem>
-                            <SelectItem value="gemini-2.5-pro">✨ Gemini 2.5 Pro (Máxima Calidad Lírica)</SelectItem>
-                            <SelectItem value="gemini-2.0-flash">🔥 Gemini 2.0 Flash</SelectItem>
+                            <SelectItem value="gemini-2.5-flash">⚡ Gemini 2.5 Flash</SelectItem>
+                            <SelectItem value="gemini-2.5-pro">⚡ Gemini 2.5 Pro</SelectItem>
+                            <SelectItem value="gemini-2.0-flash">🔥 Gemini 2.0 Flash (Recomendado · Rápido y Estable)</SelectItem>
                             <SelectItem value="gemini-1.5-flash">📊 Gemini 1.5 Flash</SelectItem>
                             <SelectItem value="gemini-1.5-pro">📊 Gemini 1.5 Pro</SelectItem>
                           </>
