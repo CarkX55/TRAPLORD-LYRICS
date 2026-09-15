@@ -324,6 +324,7 @@ export default function TrapGhostPage() {
   const [generationLog, setGenerationLog] = useState<GenerationProcessLog | null>(null);
   const [logModalOpen, setLogModalOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
+  const [generationProgress, setGenerationProgress] = useState<{ step: number; title: string; detail: string } | null>(null);
   const [regenCount, setRegenCount] = useState<number>(0);
 
   // Presets
@@ -610,9 +611,32 @@ export default function TrapGhostPage() {
       setHookVariations([]);
     }
 
+    setGenerationProgress({
+      step: 1,
+      title: "Paso 1/3: Topliner & Hook Architect",
+      detail: "Diseñando ganchos melódicos, anáforas rítmicas y ancla semántica...",
+    });
+
+    // Simulated phase milestones to provide clear feedback to the user while Gemini processes
+    const progressTimer1 = setTimeout(() => {
+      setGenerationProgress({
+        step: 2,
+        title: "Paso 2/3: Ghostwriter & Versos Cinemáticos",
+        detail: "Estructurando barras, flow switching y narrativa alrededor del hook...",
+      });
+    }, 13000);
+
+    const progressTimer2 = setTimeout(() => {
+      setGenerationProgress({
+        step: 3,
+        title: "Paso 3/3: Director Vocal & Mezcla de Efectos",
+        detail: "Aplicando réplicas dialécticas, modulación humana y tags Suno v4.5...",
+      });
+    }, 28000);
+
     try {
       // Notificación de inicio del pipeline de estudio
-      toast.info("🎛️ Sesión iniciada: Topliner ➔ Ghostwriter ➔ Vocal Director...");
+      toast.info("🎛️ Sesión de estudio iniciada: Topliner ➔ Ghostwriter ➔ Director Vocal...");
 
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -674,7 +698,10 @@ export default function TrapGhostPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error desconocido");
     } finally {
+      clearTimeout(progressTimer1);
+      clearTimeout(progressTimer2);
       setLoading(false);
+      setGenerationProgress(null);
     }
   }, [artistId, featureArtistId, moodId, selectedTopics, customTopic, spanglishPercent,
       bpmVibeId, structureId, narrativeArcId, producerId, producerTag, customDictionary,
@@ -3956,10 +3983,54 @@ export default function TrapGhostPage() {
               )}
 
               {loading && !lyrics ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-4">
-                  <div className="trap-spinner" />
-                  <p className="text-sm text-muted-foreground">Cocinando la letra...</p>
-                  <p className="text-[11px] text-muted-foreground/70">El ghostwriter está escribiendo</p>
+                <div className="flex flex-col items-center justify-center py-16 gap-4 animate-fade-slide">
+                  <div className="relative">
+                    <div className="trap-spinner !w-12 !h-12 !border-cyber" />
+                    <Sparkles className="w-5 h-5 text-cyber absolute inset-0 m-auto animate-pulse" />
+                  </div>
+                  
+                  {/* Studio Phase Indicator */}
+                  <div className="max-w-md w-full px-4 space-y-3 text-center">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-foreground">
+                        {generationProgress?.title || "Cocinando la letra en el estudio..."}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {generationProgress?.detail || "Ejecutando el pipeline de producción de estudio en 3 fases"}
+                      </p>
+                    </div>
+
+                    {/* 3-Step Progress Bar */}
+                    <div className="flex items-center gap-1.5 justify-center pt-1">
+                      {[1, 2, 3].map((stepNum) => {
+                        const currentStep = generationProgress?.step || 1;
+                        const isDone = currentStep > stepNum;
+                        const isCurrent = currentStep === stepNum;
+                        return (
+                          <div
+                            key={stepNum}
+                            className={`h-1.5 rounded-full transition-all duration-500 ${
+                              isDone
+                                ? "w-10 bg-slime"
+                                : isCurrent
+                                ? "w-16 bg-cyber animate-pulse"
+                                : "w-8 bg-muted/40"
+                            }`}
+                          />
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex justify-between text-[10px] font-mono text-muted-foreground px-2">
+                      <span className={generationProgress?.step === 1 ? "text-cyber font-bold" : ""}>1. Topliner</span>
+                      <span className={generationProgress?.step === 2 ? "text-cyber font-bold" : ""}>2. Ghostwriter</span>
+                      <span className={generationProgress?.step === 3 ? "text-cyber font-bold" : ""}>3. Director Vocal</span>
+                    </div>
+
+                    <p className="text-[10px] text-muted-foreground/60 italic pt-2">
+                      Protección contra caídas activa: reintentos y tolerancia a fallos habilitados
+                    </p>
+                  </div>
                 </div>
               ) : lyrics ? (
                 <ScrollArea className="h-[600px] pr-4">

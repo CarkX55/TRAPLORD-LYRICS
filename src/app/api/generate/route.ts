@@ -39,7 +39,7 @@ import { evaluateAndPlanLanguageRepair } from "@/lib/language-repair";
 import type { LanguageDriftStep } from "@/lib/generation-logger";
 
 export const runtime = "nodejs";
-export const maxDuration = 90;
+export const maxDuration = 180;
 
 interface GenerateBody {
   artistId: string;
@@ -88,35 +88,69 @@ interface GenerateBody {
   useLegacySinglePass?: boolean;
 }
 
-// Unified LLM Caller: Gemini API (User Key) or Z.ai SDK (Sandbox)
+// Unified LLM Caller with Retry and Auto-Fallback for high resilience
 async function callLLM(prompt: string, body: GenerateBody, temperature: number = 0.72): Promise<string> {
   if (body.geminiApiKey && body.geminiApiKey.trim()) {
-    const model = body.geminiModel || "gemini-2.5-flash";
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature,
-            topP: 0.95,
-          },
-        }),
-      }
+    const primaryModel = body.geminiModel || "gemini-2.5-flash";
+    // Fallback models in case primary model hits 503 / capacity limits or 429
+    const fallbackList = [primaryModel, "gemini-2.5-flash", "gemini-2.0-flash"].filter(
+      (m, idx, arr) => arr.indexOf(m) === idx
     );
-    const json = await res.json();
-    if (json.error) {
-      throw new Error(`Gemini: ${json.error.message}`);
+
+    let lastError: Error | null = null;
+
+    for (const model of fallbackList) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 28000); // 28s per attempt
+
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: controller.signal,
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                  temperature,
+                  topP: 0.95,
+                },
+              }),
+            }
+          );
+          clearTimeout(timeoutId);
+
+          const json = await res.json();
+          if (json.error) {
+            const isRetryable = json.error.code === 503 || json.error.code === 429 || json.error.status === "UNAVAILABLE";
+            if (isRetryable && (attempt < 2 || model !== fallbackList[fallbackList.length - 1])) {
+              console.warn(`[callLLM] Retrying on ${model} (attempt ${attempt}) due to: ${json.error.message}`);
+              await new Promise(r => setTimeout(r, 1200));
+              continue;
+            }
+            throw new Error(`Gemini (${model}): ${json.error.message}`);
+          }
+          const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!text || !text.trim()) {
+            throw new Error(`Gemini (${model}) no devolvió contenido.`);
+          }
+          return text.trim();
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error(String(err));
+          const isAbort = lastError.name === "AbortError";
+          console.warn(`[callLLM] Model ${model} failed (attempt ${attempt}): ${lastError.message}`);
+          if (attempt < 2 && !isAbort) {
+            await new Promise(r => setTimeout(r, 1000));
+          }
+        }
+      }
     }
-    const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text || !text.trim()) {
-      throw new Error("Gemini no devolvió contenido.");
-    }
-    return text.trim();
+
+    throw lastError || new Error("Gemini no pudo procesar la solicitud tras reintentos con modelos de respaldo.");
   } else {
-    // Sandbox z-ai
+    // Sandbox z-ai with fallback
     const ZAI = (await import("z-ai-web-dev-sdk")).default;
     const zai = await ZAI.create();
     const completion = await zai.chat.completions.create({
