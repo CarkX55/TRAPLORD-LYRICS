@@ -30,13 +30,13 @@ export const HOOK_STRATEGIES: Record<HookStrategyType, HookStrategyDefinition> =
   mantra: {
     id: "mantra",
     label: "Mantra Hipnótico",
-    tagline: "Repetición densa y minimalista (3 a 5 palabras por compás) con rebote de bajo 808.",
+    tagline: "Repetición rítmica y pegadiza con groove y rebote de bajo 808.",
     sunoAcousticTag: "Hypnotic repetitive mantra, heavy 808 sub-bass, wide stereo autotune",
-    instructionPrompt: `ESTRATEGIA DE CORO: MANTRA HIPNÓTICO
-- Límite absoluto: 3 a 5 palabras por compás (4 a 6 sílabas). Menos palabras = más espacio para el bajo 808.
-- Repite la frase núcleo de 2 o 3 palabras con pausas '...' y swing elástico en el contratiempo.
-- En la barra 5, introduce una variación sutil de notas para renovar la atención antes de repetir el mantra.
-- PROHIBIDO traducir palabras al inglés entre paréntesis. Los ad-libs deben ser ecos melódicos o monosílabos rítmicos.`,
+    instructionPrompt: `ESTRATEGIA DE CORO: MANTRA RÍTMICO
+- Enfoca el gancho en un motivo musical pegadizo y bailable con repetición rítmica hipnótica.
+- Fraseo con swing y actitud, dejando espacio para el bajo 808 sin sonar telegráfico.
+- En la barra 5, introduce una variación sutil de melodía o remate para renovar la atención antes de resolver.
+- PROHIBIDO traducir palabras al inglés entre paréntesis. Los ad-libs deben ser ecos melódicos o réplicas de actitud.`,
   },
   anaphora: {
     id: "anaphora",

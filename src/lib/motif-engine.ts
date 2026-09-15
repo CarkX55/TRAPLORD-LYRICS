@@ -41,45 +41,24 @@ export function synthesizeSemanticAnchor(params: {
   if (scene) {
     return {
       anchorType: "physical_image",
-      title: `Atmósfera en ${scene.title}`,
-      sensoryDescription: scene.sceneImagery[0] || `${scene.anchorObjects[0] ?? "pantalla"} bajo la luz tenue`,
+      title: `Escenario: ${scene.title}`,
+      sensoryDescription: scene.atmosphere,
       emotionalAxis: `${scene.conflict} (${scene.emotionalState})`,
-      suggestedAction: scene.sceneTurn || "mirar los números subir mientras el humo flota hacia el techo",
+      suggestedAction: scene.sceneTurn || "desarrollar la tensión lírica y rítmica del momento",
       literalizationPenaltyWords: penaltyWords,
     };
   }
 
-  // Contextual fallback generation based on topics & customTopic
-  const topicCombined = [params.customTopic, ...params.topics].filter(Boolean).join(" ").toLowerCase();
-  
-  if (topicCombined.includes("cardano") || topicCombined.includes("crypto") || topicCombined.includes("dinero") || topicCombined.includes("flex")) {
-    return {
-      anchorType: "sensory_detail",
-      title: "Pantalla brillante & Silencio en la Suite",
-      sensoryDescription: "Pantalla OLED con velas verdes iluminando el mármol en una habitación oscura",
-      emotionalAxis: "Frío desapego, desconfianza hacia los que piden favores y certeza absoluta en el plan",
-      suggestedAction: "borrar la notificación del banco sin abrirla mientras el bajo 808 retumba",
-      literalizationPenaltyWords: penaltyWords,
-    };
-  }
-
-  if (topicCombined.includes("calle") || topicCombined.includes("hermano") || topicCombined.includes("muertos") || topicCombined.includes("familia")) {
-    return {
-      anchorType: "behavioral_action",
-      title: "Mesa Llena & Memoria Intacta",
-      sensoryDescription: "Humo denso contra cristales tintados, una copa servida que nadie bebe",
-      emotionalAxis: "Lealtad innegociable a los que no están y desprecio a las falsas alianzas",
-      suggestedAction: "echar un trago al suelo antes de contar las ganancias en la mesa",
-      literalizationPenaltyWords: penaltyWords,
-    };
-  }
+  // Derive purely and organically from the user's topics and artist style — ZERO INJECTED PROPS
+  const userTopicString = [params.customTopic, ...params.topics].filter(Boolean).join(", ");
+  const topicLabel = userTopicString || "Vida nocturna, ambición y calle";
 
   return {
-    anchorType: "spatial_tension",
-    title: "Aislamiento en la Cima",
-    sensoryDescription: "Luces de la ciudad desde el piso 40, cristales empañados y cadenas pesadas",
-    emotionalAxis: "Éxito solitario donde las palabras sobran y el ritmo manda",
-    suggestedAction: "mirar el horizonte sin pestañear al entrar el beat",
+    anchorType: "emotional_contradiction",
+    title: `Eje Temático: ${topicLabel}`,
+    sensoryDescription: `Desarrolla la temática elegida (${topicLabel}) con la actitud, vocabulario y flow natural de ${artist?.name ?? "el artista"}.`,
+    emotionalAxis: `Actitud y tono auténtico: transmitir el mood "${params.moodId}" con rimas fluidas y expresión callejera orgánica, sin palabras forzadas.`,
+    suggestedAction: `Escribir barras musicales con fraseo completo y rima real en torno a ${topicLabel}.`,
     literalizationPenaltyWords: penaltyWords,
   };
 }

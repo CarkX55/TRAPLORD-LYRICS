@@ -959,9 +959,9 @@ export function cleanSunoBracketHeaders(lyrics: string): string {
 // ========================================================================
 
 /**
- * PASADA 1: TOPLINER & HOOK CONTRACT
- * Diseña el estribillo / hook central como un objeto musical/acústico con economía estricta (3 a 5 palabras por compás)
- * y estrategias de gancho avanzadas. Prohíbe radicalmente el "coro escolar de traducción".
+ * PASADA 1: TOPLINER & HOOK CONTRACT (DESENCASILLADO & ORGÁNICO)
+ * Diseña el estribillo / hook central con musicalidad, fraseo completo y el estilo auténtico del artista.
+ * Prohíbe las restricciones telegráficas artificiales y los atrezzos inyectados.
  */
 export function buildStage1ToplinePrompt(params: PromptParams): string {
   const artist = getArtistById(params.artistId);
@@ -971,13 +971,29 @@ export function buildStage1ToplinePrompt(params: PromptParams): string {
   const dirty = getDirtyLevel(params.dirtyLevel ?? 2);
   const mainDNA = getMusicalDNAForArtist(params.artistId);
 
-  // Hook Strategy recomendada
+  // Hook Strategy: Check if the user explicitly chose a style or repetition pattern
   const hookVa = params.sectionVoices?.find(v => v.sectionName.toLowerCase().includes("chorus") || v.sectionName.toLowerCase().includes("hook"));
-  const recommendedStrategy = recommendHookStrategy(
-    mainDNA.flow.cadenceType,
-    hookVa?.hookStyle && hookVa.hookStyle !== "auto" ? hookVa.hookStyle : undefined
-  );
-  const strategyConfig = HOOK_STRATEGIES[recommendedStrategy];
+  const userExplicitHookStyle = hookVa?.hookStyle && hookVa.hookStyle !== "auto" ? hookVa.hookStyle : undefined;
+  const userExplicitRepPattern = hookVa?.repetitionPattern && hookVa.repetitionPattern !== "none" ? hookVa.repetitionPattern : undefined;
+
+  let hookInstructionBlock = "";
+  if (userExplicitHookStyle || userExplicitRepPattern) {
+    const recommendedStrategy = recommendHookStrategy(
+      mainDNA.flow.cadenceType,
+      userExplicitHookStyle
+    );
+    const strategyConfig = HOOK_STRATEGIES[recommendedStrategy];
+    hookInstructionBlock = `
+# 🔁 PATRÓN DE GANCHO SELECCIONADO POR EL USUARIO: ${strategyConfig.label.toUpperCase()}
+- **Instrucción**: ${strategyConfig.instructionPrompt}`;
+  } else {
+    // AUTO MODE = AUTÉNTICO ESTILO DEL ARTISTA (Sin encasillamientos telegráficos)
+    hookInstructionBlock = `
+# 🎵 ESTILO DE GANCHO: AUTÉNTICO DE ${artist?.name ?? "EL ARTISTA"} (MODO ESTUDIO ORGÁNICO)
+- Compón el estribillo / hook central capturando la identidad lírica, métrica, rima y fraseo musical auténtico de ${artist?.name ?? "el artista"}.
+- Adapta la melodía y el groove al tempo (${params.bpmVibe.range} BPM), estado de ánimo (${params.moodId}) y las temáticas elegidas por el usuario.
+- Escribe barras musicales completas y pegadizas con la actitud y slang natural del artista, sin sonar telegráfico ni forzar palabras mecánicas.`;
+  }
 
   // Identificar secciones de Hook / Chorus y secciones con Mantra/Staccato
   const targetSections = params.structure.sections.filter(s => {
@@ -989,66 +1005,55 @@ export function buildStage1ToplinePrompt(params: PromptParams): string {
 
   const sectionDetails = targetSections.map(s => {
     const va = params.sectionVoices?.find(v => v.sectionName === s.name);
-    const isChorus = s.type === "chorus" || s.name.toLowerCase().includes("chorus") || s.name.toLowerCase().includes("hook") || s.name.toLowerCase().includes("estribillo");
     let voice = artist?.name ?? "Lead";
     if (va?.voice === "feature" && featureArtist) voice = featureArtist.name;
     else if (va?.voice === "both") voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
 
-    const hookStyleId = va?.hookStyle ?? (flowProfile?.hookStyle ?? "melodic");
-    const hookStyleOpt = getHookStyleOptionById(hookStyleId);
-    const repPattern = va?.repetitionPattern ? getRepetitionPatternById(va.repetitionPattern) : undefined;
     const kw = va?.customKeyword?.trim();
-
-    return `- Sección [${s.name}]: Cantada por ${voice}. Barras: ${va?.bars || 8} compases. Estilo: ${isChorus ? (hookStyleOpt?.label ?? strategyConfig.label) : (repPattern?.label ?? "Mantra")}${kw ? ` · Palabra/Frase clave obligatoria: "${kw}"` : ""}.`;
+    return `- Sección [${s.name}]: Cantada por ${voice}. Barras: ${va?.bars || 8} compases.${kw ? ` · Palabra/Frase clave obligatoria: "${kw}"` : ""}.`;
   }).join("\n");
 
-  const anchor = params.semanticAnchor;
-  const anchorBlock = anchor ? `
-# ⚓ ANCLA SEMÁNTICA DEL GANCHO (SEMANTIC ANCHOR — SHOW, DON'T TELL):
-- **Eje Sensorial / Imagen Físico-Conductual**: ${anchor.sensoryDescription}
-- **Tensión Emocional**: ${anchor.emotionalAxis}
-- **Acción / Comportamiento Concreto**: "${anchor.suggestedAction}"
-- 🚫 REGLA DE LITERALIZACIÓN: Queda PROHIBIDO listar mecánicamente la lista de sustantivos temáticos como un inventario de palabras en cada compás. Desarrolla el conflicto y la imagen física anterior.` : "";
+  const userTopicsList = [params.customTopic, ...params.topics].filter(Boolean);
+  const topicsBlock = userTopicsList.length > 0
+    ? `- **Temáticas Elegidas por el Usuario**: ${userTopicsList.join(", ")}`
+    : "- **Temática**: Estilo libre de trap y calle.";
 
   return `Eres el Topliner y Diseñador de Ganchos (Hook Architect) más cotizado del Trap y Rap contemporáneo.
-Tu misión en esta sesión de estudio es componer EXCLUSIVAMENTE el [Chorus / Hook] central y los patrones rítmicos de Mantra/Staccato de la canción. NO escribas versos ni intros todavía.
+Tu misión en esta sesión de estudio es componer EXCLUSIVAMENTE el [Chorus / Hook] central de la canción con total musicalidad y autenticidad callejera. NO escribas versos ni intros todavía.
 
-# 🎯 PROYECTO & ADN VOCAL
+# 🎯 PROYECTO & ADN DEL ARTISTA
 - Artista Principal: ${artist?.name ?? "Lead"} (${artist?.origin ?? "Trap"})
-- Timbre & Entrega Vocal (Vocal DNA): ${mainDNA.vocal.sunoVocalTimbre} | Rango Melódico: ${mainDNA.vocal.melodicRange}
+- Timbre & Entrega Vocal: ${mainDNA.vocal.sunoVocalTimbre} | Rango Melódico: ${mainDNA.vocal.melodicRange}
+${flowProfile?.cadenceInstruction ? `- Cadencia y Flow característico: ${flowProfile.cadenceInstruction}` : ""}
 ${featureArtist ? `- Feature: ${featureArtist.name} (${featureArtist.origin})` : ""}
 - Tempo: ${params.bpmVibe.range} BPM (${params.bpmVibe.label})
-- Nivel de Actitud: ${dirty.label} (${dirty.badge})
-${anchorBlock}
+- Nivel de Actitud / Dirty: ${dirty.label} (${dirty.badge})
+${topicsBlock}
+${params.customDictionary?.trim() ? `- Diccionario de calle del usuario: { ${params.customDictionary.trim()} }` : ""}
 ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 
 # 📋 SECCIONES REQUERIDAS DE ESTA PASADA:
 ${sectionDetails || "- [Chorus]: 8 compases pegadizos."}
 
-# 🔁 ESTRATEGIA DE GANCHO RECOMENDADA: ${strategyConfig.label.toUpperCase()} (${strategyConfig.sunoAcousticTag})
-- **Descripción**: ${strategyConfig.tagline}
-- **Instrucción de Estudio**: ${strategyConfig.instructionPrompt}
+${hookInstructionBlock}
 
-# 🏀 REGLAS ESTRUCTURALES DE ARQUITECTURA TOPLINE:
-1. **ECONOMÍA ESTRICTA DE PALABRAS (POCKET AMERICAN BOUNCE):**
-   - MÁXIMO **3 a 5 palabras por compás (4 a 6 sílabas)**.
-   - Frases cortas y contundentes. Menos palabras = más espacio para el bajo 808.
-2. **PUNTUACIÓN ELÁSTICA PARA SUNO AI:**
-   - Usa comas ',' y puntos suspensivos '...' en cada compás para que Suno alargue las notas con swing elástico en contratiempo.
-3. **AUTONOMÍA RÍTMICA Y PROHIBICIÓN DE TRADUCCIÓN:**
-   - Cada línea debe funcionar de forma autónoma dentro del groove bailable e hipnótico.
-   - Queda TERMINANTEMENTE PROHIBIDO incluir equivalencias semánticas o traducciones entre idiomas (la misma palabra repetida en otro idioma entre paréntesis).
-   - Los ad-libs deben cumplir una función musical de contratiempo acústico, eco melódico o réplica dialéctica con personalidad callejera: *(Yeah)*, *(Facts)*, *(Ice)*.
-4. **ARQUITECTURA DE MANTRA / ANÁFORA (SI APLICA):**
-   - Si la sección es Mantra, ancla la misma frase motriz breve al inicio de cada barra y varía el remate rítmico, o ejecuta un patrón de 3 compases continuos más 1 de resolución payoff.
-5. **🚫 HIGIENE DE PROMPT (CERO CONTAMINACIÓN LÉXICA):**
-   - Queda TERMINANTEMENTE PROHIBIDO reutilizar vocabulario o nombres procedentes de las instrucciones o diagnósticos del sistema. El estribillo debe ser 100% original y emanar del Ancla Semántica.
+# 🏀 REGLAS DE ARQUITECTURA TOPLINE (MÚSICA REAL DE ESTUDIO):
+1. **FRASEO MUSICAL Y BARRAS COMPLETAS:**
+   - Escribe compases que fluyan con ritmo natural, swing y musicalidad real.
+   - Queda TERMINANTEMENTE PROHIBIDO sonar a telegrama inconexo o lista de palabras sueltas. El estribillo debe tener melodía, sentido y pegada.
+2. **VOCABULARIO ORGÁNICO (CERO PALABRAS INYECTADAS):**
+   - Desarrolla el gancho basándote ÚNICAMENTE en las temáticas elegidas por el usuario y el vocabulario callejero característico de ${artist?.name ?? "el artista"}.
+   - Queda TERMINANTEMENTE PROHIBIDO inventar o forzar objetos de atrezzo artificiales no pedidos (como OLED, mármol, etc.).
+3. **AUTONOMÍA Y AD-LIBS:**
+   - Cada compás debe tener fuerza propia dentro del groove.
+   - Queda PROHIBIDO incluir traducciones literales entre idiomas entre paréntesis.
+   - Los ad-libs entre paréntesis *(Ad-lib)* cumplen función musical en contratiempo: réplicas de actitud, colas melódicas o acentos rítmicos: *(Yeah)*, *(Facts)*, *(Uh)*.
 
 # 📋 FORMATO DE SALIDA ESTRICTO:
-Devuelve EXCLUSIVAMENTE las secciones de gancho/mantra solicitadas con su encabezado entre corchetes limpios (SOLO el nombre de la sección y del artista, SIN notas de estilo ni acústica dentro del corchete):
+Devuelve EXCLUSIVAMENTE las secciones de gancho solicitadas con su encabezado entre corchetes limpios (SOLO el nombre de la sección y del artista, SIN notas de estilo ni acústica dentro del corchete):
 [Chorus: ${artist?.name ?? "Lead"}]
-Línea 1... *(Ad-lib)*
-Línea 2... *(Ad-lib)*
+Línea 1 *(Ad-lib)*
+Línea 2 *(Ad-lib)*
 
 NO escribas notas de producción, introducciones ni explicaciones fuera de los corchetes.`;
 }
@@ -1088,22 +1093,15 @@ export function buildStage2GhostwriterPrompt(params: PromptParams, lockedTopline
     return va?.repetitionPattern === "call_response" || va?.hookStyle === "call_response";
   }).map(s => s.name);
 
-  // Situational Scene Engine
+  // Situational Scene Engine (solo si el usuario lo seleccionó activamente)
   let sceneBlock = "";
   if (params.situationalPresetId && params.situationalPresetId !== "none") {
     const sitScene = getSceneById(params.situationalPresetId);
     if (sitScene) {
       sceneBlock = `
-- **Escenario Físico**: ${sitScene.title} (${sitScene.badge}) — ${sitScene.tagline}
-- **Ubicación & Atmósfera**: ${sitScene.setting} | ${sitScene.atmosphere}
-- **Conflicto Central**: ${sitScene.conflict}
-- **Hechos Inmutables (Scene Facts - No contradecir)**:
-${sitScene.sceneFacts.map(f => `  • ${f}`).join("\n")}
-- **Imágenes Sensoriales (Show, Don't Tell)**:
-${sitScene.sceneImagery.map(i => `  • ${i}`).join("\n")}
-- **Objetos Ancla Físicos en la Escena**: ${sitScene.anchorObjects.join(", ")}
-- **⚡ GIRO DRAMÁTICO PARA EL VERSO 2 (SCENE TURN)**: "${sitScene.sceneTurn}"
-  *OBLIGACIÓN:* En el Verso 2 el tiempo DEBE haber avanzado. Algo ha cambiado o se ha torcido. Prohibido mantener la escena estática del Verso 1.`;
+- **Escenario Físico**: ${sitScene.title} (${sitScene.badge})
+- **Atmósfera & Conflicto**: ${sitScene.atmosphere} | ${sitScene.conflict}
+- **⚡ Giro Dramático para el Verso 2**: "${sitScene.sceneTurn}" (El tiempo avanza, algo cambia).`;
     }
   }
 
@@ -1123,6 +1121,8 @@ ${sitScene.sceneImagery.map(i => `  • ${i}`).join("\n")}
     return `[${s.name}: ${voice}] — ${bars}`;
   }).join("\n");
 
+  const userTopicsList = [params.customTopic, ...params.topics].filter(Boolean);
+
   return `Eres un Ghostwriter de élite y Director Vocal de cabina en el Trap y Rap contemporáneo.
 Tu misión es componer la canción definitiva masterizada con el máximo calibre lírico, flow elástico y dimensión vocal tridimensional para Suno AI v4.5.
 
@@ -1131,20 +1131,20 @@ El Topliner ya fijó el estribillo de la sesión. DEBES incluirlo EXACTAMENTE en
 ${lockedTopline}
 
 ================================================================================
-# 📜 CONTRATO 1: IDENTIDAD DEL TEMA & ANCLA SEMÁNTICA (SONG CONTRACT)
+# 📜 CONTRATO 1: IDENTIDAD DEL TEMA & TEMÁTICAS (SONG CONTRACT)
 ================================================================================
 - Artista Principal: ${artist?.name ?? "Lead"} (${artist?.origin})
 ${featureArtist ? `- Feature Artist: ${featureArtist.name} (${featureArtist.origin})` : ""}
 - Tempo & Vibra: ${params.bpmVibe.range} BPM (${params.bpmVibe.label})
 - Actitud / Dirty Level: ${dirty.label} (${dirty.badge}) — ${dirty.instruction}
+${userTopicsList.length > 0 ? `- Temáticas Elegidas por el Usuario: ${userTopicsList.join(", ")}` : "- Temática: Vida de calle y rap auténtico"}
 ${params.customDictionary?.trim() ? `- Diccionario de calle / Marcas: { ${params.customDictionary.trim()} }` : ""}
-${params.semanticAnchor ? `- Ancla Semántica de la Sesión: ${params.semanticAnchor.sensoryDescription} (${params.semanticAnchor.emotionalAxis})` : ""}
 ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 
-🚫 REGLAS DE MEMORIA NEGATIVA & ANTI-CHECKLISTING:
-1. **Cero Listas de Vocabulario:** No listes mecánicamente palabras temáticas en cada compás como un inventario. Desarrolla acciones concretas.
-2. **Memoria Negativa Inter-Estrofas:** Si usas un objeto, metáfora o marca en el Verso 1 (un reloj, un coche, etc.), queda TERMINANTEMENTE PROHIBIDO repetirlo en el Verso 2. Haz que la historia avance mediante consecuencias.
-3. **Cero Clichés Baratos:** Prohibido "el asfalto no perdona", "fuego/juego/cielo", "haciendo money sin parar". Sustitúyelos por detalles físicos reales.
+🚫 REGLAS DE VOCABULARIO Y AUTENTICIDAD:
+1. **Cero Palabras Inyectadas / Cero Atrezzo Artificial:** Desarrolla la narrativa y metáforas ÚNICAMENTE a través de las temáticas elegidas por el usuario y el vocabulario natural de ${artist?.name ?? "el artista"}. Queda terminantemente prohibido meter objetos no pedidos.
+2. **Memoria Negativa Inter-Estrofas:** Si usas un concepto o metáfora en el Verso 1, no lo repitas en el Verso 2. Haz que la historia avance con consecuencias.
+3. **Cero Clichés Baratos de IA:** Prohibido "el asfalto no perdona", "fuego/juego/cielo", "haciendo money sin parar". Escribe barras reales con peso callejero y actitud genuina.
 4. **Higiene de Privacidad:** NUNCA calques biografía personal íntima, familiares fallecidos ni nombres de pandillas reales concretas de la infancia del artista.
 
 ================================================================================
@@ -1174,7 +1174,7 @@ En cada verso de 8 a 16 barras, ejecuta una progresión dinámica en 3 movimient
 # 📜 CONTRATO 4: CAPA VOCAL, PERFORMANCE & AD-LIBS MASTER (VOCAL CONTRACT)
 ================================================================================
 Como Director Vocal, incorpora la capa de performance completa DIRECTAMENTE en esta letra:
-1. **Ad-libs Tridimensionales en Contrattiempo:**
+1. **Ad-libs Tridimensionales en Contratiempo:**
    - Cada compás debe incluir ad-libs con personalidad entre paréntesis en cursiva: colas melódicas *(no me busques...)*, réplicas cínicas *(¿quién si no?)*, *(facts)*, o grunts callejeros.
    - PROHIBIDO muletillas vacías repetitivas como (Yeah) en todas las líneas.
 2. **Call & Response Dialéctico:**
