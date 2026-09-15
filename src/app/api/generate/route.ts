@@ -111,11 +111,12 @@ async function callLLM(prompt: string, body: GenerateBody, temperature: number =
           topP: 0.95,
         };
 
-        // Only attach thinkingConfig for models that support it and when thinkingBudget >= 0
+        // Only attach thinkingConfig for models that specifically support thinking tokens
+        const isThinkingModel = model.includes("thinking") || model.includes("-exp");
         if (
+          isThinkingModel &&
           typeof body.thinkingBudget === "number" &&
-          body.thinkingBudget >= 0 &&
-          (model.includes("2.0") || model.includes("2.5") || model.includes("3") || model.includes("thinking"))
+          body.thinkingBudget >= 0
         ) {
           generationConfig.thinkingConfig = {
             thinkingBudget: body.thinkingBudget,
@@ -234,6 +235,9 @@ export async function POST(req: NextRequest) {
             lyrics: body.referenceTrackLyrics,
             geminiApiKey: body.geminiApiKey,
             geminiModel: body.geminiModel,
+          }).catch(err => {
+            console.warn("[generate] analyzeReferenceTrack failed:", err instanceof Error ? err.message : err);
+            return null;
           })
         : Promise.resolve(null),
     ]);

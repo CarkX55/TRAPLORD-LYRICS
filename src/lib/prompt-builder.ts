@@ -1106,8 +1106,15 @@ ${featDNA ? `\n- **Feature DNA (${featureArtist?.name})**: Flow ${featDNA.flow.c
   const structurePlan = params.structure.sections.map(s => {
     const va = params.sectionVoices?.find(v => v.sectionName === s.name);
     let voice = artist?.name ?? "Lead";
+    const isHype = va?.voice === "hype";
     if (va?.voice === "feature" && featureArtist) voice = featureArtist.name;
     else if (va?.voice === "both") voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
+    else if (isHype) voice = `${artist?.name ?? "Lead"} (Hype Man / Ad-libs Only)`;
+
+    if (isHype || (s.type === "intro" && (va?.introStyle === "bouncy_warmup" || isHype))) {
+      return `[${s.name}: ${voice}] — 4 compases (🚫 PROHIBIDO ESCRIBIR VERSOS NARRATIVOS O LÍNEAS CANTADAS. Debe ser EXCLUSIVAMENTE 3 a 5 ad-libs y grunts entre paréntesis: ej: *(Yeah... turn me up)*, *(Hold up...)*, *(Let's get it! [Beat Drop])*)`;
+    }
+
     const bars = va?.bars ? `${va.bars} barras` : (s.type === "verse" ? "8-12 barras" : "4-8 barras");
     return `[${s.name}: ${voice}] — ${bars}`;
   }).join("\n");
@@ -1211,6 +1218,9 @@ ${callResponseSections.length > 0 ? `- Secciones con Call & Response obligatorio
 5. **LIMPIEZA QUIRÚRGICA DE ENCABEZADOS (SUNO NATIVE):**
    - Todos los encabezados de sección deben quedar limpios entre corchetes: ej: '[Verse 1: ${artist?.name ?? "Lead"}]', '[Chorus: ${artist?.name ?? "Lead"}, Hypnotic mantra]'.
    - Elimina cualquier texto residual de instrucciones como '— 8 barras → [REGLA...]'.
+
+6. **PRESERVACIÓN DE INTRO HYPE MAN:**
+   - Si la [Intro] contiene ad-libs o tiene asignado 'Hype Man', MANTENLA exclusivamente como grunts, shouts y ad-libs entre paréntesis preparando el beat drop. Queda PROHIBIDO agregar oraciones completas o versos narrativos cantados en la intro.
 
 # LETRA BORRADOR A TRANSFORMAR:
 ${fullLyrics}
