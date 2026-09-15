@@ -25,7 +25,8 @@ export interface RepairOperation {
     | "weak_hook"
     | "scene_stall"
     | "genericness"
-    | "rhythm";
+    | "rhythm"
+    | "language_drift";
   instruction: string;
   preserveWords?: string[];
 }

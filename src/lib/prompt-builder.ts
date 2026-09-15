@@ -5,6 +5,8 @@ import type { TrackAnalysis } from "./track-analyzer";
 import { getSceneById, type SituationalScene } from "./scene-engine";
 import { getMusicalDNAForArtist, getSectionModulatedTexture, type MusicalDNA } from "./musical-dna";
 import { HOOK_STRATEGIES, recommendHookStrategy, type HookStrategyType } from "./hook-engine";
+import type { SemanticAnchor } from "./motif-engine";
+import type { LanguageDNA } from "./language-dna";
 
 /**
  * Derives the rhyme tier from the artist's defaultRhymeScheme.
@@ -86,6 +88,8 @@ export interface PromptParams {
   adlibStyle?: "textured" | "classic" | "minimal";
   situationalPresetId?: string;
   flowPocketMode?: "auto" | "bouncy" | "triplets" | "heavy";
+  semanticAnchor?: SemanticAnchor;
+  languageDNA?: LanguageDNA;
 }
 
 export function getSunoSectionHint(
@@ -983,6 +987,14 @@ export function buildStage1ToplinePrompt(params: PromptParams): string {
     return `- Sección [${s.name}]: Cantada por ${voice}. Barras: ${va?.bars || 8} compases. Estilo: ${isChorus ? (hookStyleOpt?.label ?? strategyConfig.label) : (repPattern?.label ?? "Mantra")}${kw ? ` · Palabra/Frase clave obligatoria: "${kw}"` : ""}.`;
   }).join("\n");
 
+  const anchor = params.semanticAnchor;
+  const anchorBlock = anchor ? `
+# ⚓ ANCLA SEMÁNTICA DEL GANCHO (SEMANTIC ANCHOR — SHOW, DON'T TELL):
+- **Eje Sensorial / Imagen Físico-Conductual**: ${anchor.sensoryDescription}
+- **Tensión Emocional**: ${anchor.emotionalAxis}
+- **Acción / Comportamiento Concreto**: "${anchor.suggestedAction}"
+- 🚫 REGLA DE LITERALIZACIÓN: Queda PROHIBIDO listar mecánicamente la lista de sustantivos temáticos como un inventario de palabras en cada compás. Desarrolla el conflicto y la imagen física anterior.` : "";
+
   return `Eres el Topliner y Diseñador de Ganchos (Hook Architect) más cotizado del Trap y Rap contemporáneo.
 Tu misión en esta sesión de estudio es componer EXCLUSIVAMENTE el [Chorus / Hook] central y los patrones rítmicos de Mantra/Staccato de la canción. NO escribas versos ni intros todavía.
 
@@ -991,9 +1003,9 @@ Tu misión en esta sesión de estudio es componer EXCLUSIVAMENTE el [Chorus / Ho
 - Timbre & Entrega Vocal (Vocal DNA): ${mainDNA.vocal.sunoVocalTimbre} | Rango Melódico: ${mainDNA.vocal.melodicRange}
 ${featureArtist ? `- Feature: ${featureArtist.name} (${featureArtist.origin})` : ""}
 - Tempo: ${params.bpmVibe.range} BPM (${params.bpmVibe.label})
-- Temática Central: ${params.customTopic || params.topics.join(", ") || "Calle, ambición y estilo de vida"}
 - Nivel de Actitud: ${dirty.label} (${dirty.badge})
-${spanglish.prompt}
+${anchorBlock}
+${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 
 # 📋 SECCIONES REQUERIDAS DE ESTA PASADA:
 ${sectionDetails || "- [Chorus]: 8 compases pegadizos."}
@@ -1002,30 +1014,20 @@ ${sectionDetails || "- [Chorus]: 8 compases pegadizos."}
 - **Descripción**: ${strategyConfig.tagline}
 - **Instrucción de Estudio**: ${strategyConfig.instructionPrompt}
 
-# 🏀 REGLAS DE ARQUITECTURA TOPLINE DE ESTUDIO:
+# 🏀 REGLAS ESTRUCTURALES DE ARQUITECTURA TOPLINE:
 1. **ECONOMÍA ESTRICTA DE PALABRAS (POCKET AMERICAN BOUNCE):**
    - MÁXIMO **3 a 5 palabras por compás (4 a 6 sílabas)**.
-   - Queda TERMINANTEMENTE PROHIBIDO escribir frases largas de 10-15 palabras o párrafos narrativos. Menos palabras = más rebote de bajo 808.
+   - Frases cortas y contundentes. Menos palabras = más espacio para el bajo 808.
 2. **PUNTUACIÓN ELÁSTICA PARA SUNO AI:**
-   - Usa comas ',' y puntos suspensivos '...' en cada compás para que Suno alargue las notas con swing (*swung delay*): ej: *"Same squad... (same squad), los números en la mesa (clean)"*.
-3. **EL GANCHO COMO OBJETO ACÚSTICO Y RÍTMICO:**
-   - Un buen estribillo se define por su hook melódico, su mantra o su anáfora. Debe ser bailable, hipnótico e instantáneamente recordable tras la primera escucha.
-4. **🚫 PROHIBICIÓN RADICAL DEL CORO DE TRADUCCIÓN (ANTI-CORO ESCOLAR):**
-   - Queda TERMINANTEMENTE PROHIBIDO escribir compases de estribillo con el patrón "[Frase en español]... [(traducción literal en inglés)]" (ej: "Fumo loud... (loud), veo el futuro... (clear)"). Un estribillo es un objeto acústico, no una clase de idiomas. Los ad-libs deben aportar contratiempo rítmico, ecos melódicos o réplicas dialécticas con actitud *(¿cuándo?)*, *(facts)*, *(olvídalo)*, NUNCA la traducción de la palabra cantada.
-5. **ARQUITECTURA DE MANTRA / ANÁFORA / OSTINATO (SI APLICA):**
-   - Si la sección es Mantra, aplica **Anáfora de Anclaje** (la misma frase de 2 o 3 palabras al inicio de cada barra y el remate varía):
-     *Ejemplo real:*
-     [Chorus: ${artist?.name ?? "Lead"}, Hypnotic repetitive mantra, heavy 808 bounce]
-     Same squad... (same squad), los números en la mesa (clean)
-     Same squad... nunca cambié de cabeza (yeah)
-     Same squad... la presión nunca me pesa
-     Same squad... contando mientras tú rezas (facts)
-   - O aplica **Triplet Ostinato** (3 compases con la misma fórmula rítmica + 1 compás de remate payoff):
-     *Ejemplo real:*
-     Billetes azules, billetes azules en la mesa (sauce)
-     Billetes azules, billetes azules con destreza (wuh)
-     To' lo que toco se convierte en pieza
-     Billetes azules, hasta que me duela la cabeza (let's go)
+   - Usa comas ',' y puntos suspensivos '...' en cada compás para que Suno alargue las notas con swing elástico en contratiempo.
+3. **AUTONOMÍA RÍTMICA Y PROHIBICIÓN DE TRADUCCIÓN:**
+   - Cada línea debe funcionar de forma autónoma dentro del groove bailable e hipnótico.
+   - Queda TERMINANTEMENTE PROHIBIDO incluir equivalencias semánticas o traducciones entre idiomas (la misma palabra repetida en otro idioma entre paréntesis).
+   - Los ad-libs deben cumplir una función musical de contratiempo acústico, eco melódico o réplica dialéctica con personalidad callejera.
+4. **ARQUITECTURA DE MANTRA / ANÁFORA (SI APLICA):**
+   - Si la sección es Mantra, ancla la misma frase motriz breve al inicio de cada barra y varía el remate rítmico, o ejecuta un patrón de 3 compases continuos más 1 de resolución payoff.
+5. **🚫 HIGIENE DE PROMPT (CERO CONTAMINACIÓN LÉXICA):**
+   - Queda TERMINANTEMENTE PROHIBIDO reutilizar vocabulario o nombres procedentes de las instrucciones o diagnósticos del sistema. El estribillo debe ser 100% original y emanar del Ancla Semántica.
 
 # 📋 FORMATO DE SALIDA ESTRICTO:
 Devuelve EXCLUSIVAMENTE las secciones de gancho/mantra solicitadas con su encabezado entre corchetes limpios:
@@ -1117,11 +1119,11 @@ El Topliner de la sesión ya compuso y aprobó el siguiente estribillo/mantra ce
 ${lockedTopline}
 
 # 🎤 IDENTIDAD & CONTEXTO
-${spanglish.prompt}
+${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 - Artista Principal: ${artist?.name ?? "Lead"} (${artist?.origin}) — ${flowProfile?.cadenceInstruction ?? "Flow rítmico."}
 ${featureArtist ? `- Feature: ${featureArtist.name} (${featureArtist.origin}) — ${featureFlowProfile?.cadenceInstruction ?? "Flow feature."}` : ""}
 - BPM & Vibra: ${params.bpmVibe.range} BPM (${params.bpmVibe.label})
-- Temática: ${params.customTopic || params.topics.join(", ") || "Trap de estudio"}
+${params.semanticAnchor ? `- Ancla Semántica de la Sesión: ${params.semanticAnchor.sensoryDescription} (${params.semanticAnchor.emotionalAxis})` : ""}
 - Actitud / Dirty Level: ${dirty.label} (${dirty.badge}) — ${dirty.instruction}
 ${params.customDictionary?.trim() ? `- Diccionario de calle / Marcas: { ${params.customDictionary.trim()} }` : ""}
 ${sceneBlock}
@@ -1202,7 +1204,11 @@ ${callResponseSections.length > 0 ? `- Secciones con Call & Response obligatorio
    - En la barra final de cada verso antes de entrar al estribillo, inserta '[Vocal Cut]' al final de la línea para generar anticipación explosiva.
    - Si la intro prepara el beat, asegúrate de que termine con '[Beat Drop: Heavy 808 drop]' en su propia línea.
 
-4. **LIMPIEZA QUIRÚRGICA DE ENCABEZADOS (SUNO NATIVE):**
+4. **PRESERVACIÓN DEL RATIO DE IDIOMA (LANGUAGE DRIFT GUARD):**
+   - El borrador ya tiene el balance de inglés y español fijado. Los ad-libs y réplicas entre paréntesis DEBEN escribirse en el idioma predominante de la barra o canción (${params.languageDNA?.primaryLanguage === "en" ? "inglés con toques breves de actitud en español" : "español con toques en inglés"}).
+   - PROHIBIDO inundar la letra con ad-libs que cambien drásticamente el porcentaje de Spanglish.
+
+5. **LIMPIEZA QUIRÚRGICA DE ENCABEZADOS (SUNO NATIVE):**
    - Todos los encabezados de sección deben quedar limpios entre corchetes: ej: '[Verse 1: ${artist?.name ?? "Lead"}]', '[Chorus: ${artist?.name ?? "Lead"}, Hypnotic mantra]'.
    - Elimina cualquier texto residual de instrucciones como '— 8 barras → [REGLA...]'.
 

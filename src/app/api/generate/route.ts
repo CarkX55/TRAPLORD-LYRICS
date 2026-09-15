@@ -31,7 +31,12 @@ import { buildCorrectionInstruction, analyzeLanguageRatio, type LanguageAnalysis
 import { getArtistReference } from "@/lib/artist-references";
 import { generateArtistReference } from "@/lib/reference-generator";
 import { analyzeReferenceTrack } from "@/lib/track-analyzer";
-import { parseRawLyricsToAST } from "@/lib/song-document";
+import { parseRawLyricsToAST, stringifyASTToSunoLyrics } from "@/lib/song-document";
+import { synthesizeSemanticAnchor } from "@/lib/motif-engine";
+import { buildLanguageDNA, buildLanguageTarget, calculateSyllableLanguageRatio } from "@/lib/language-dna";
+import { auditPromptContamination, sanitizeUserInput } from "@/lib/prompt-hygiene";
+import { evaluateAndPlanLanguageRepair } from "@/lib/language-repair";
+import type { LanguageDriftStep } from "@/lib/generation-logger";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -187,12 +192,24 @@ export async function POST(req: NextRequest) {
         : Promise.resolve(null),
     ]);
 
+    const sanitizedCustomTopic = sanitizeUserInput(body.customTopic || "");
+    const resolvedTopics = resolveTopics(body.topics);
+    const semanticAnchor = synthesizeSemanticAnchor({
+      topics: resolvedTopics,
+      customTopic: sanitizedCustomTopic,
+      situationalPresetId: body.situationalPresetId,
+      artistId: body.artistId,
+      moodId: body.moodId,
+    });
+    const languageTarget = buildLanguageTarget(body.spanglishPercent);
+    const languageDNA = buildLanguageDNA(body.spanglishPercent, body.artistId, body.featureArtistId);
+
     const promptParams: PromptParams = {
       artistId: body.artistId,
       featureArtistId: body.featureArtistId ?? "",
       moodId,
-      topics: resolveTopics(body.topics),
-      customTopic: body.customTopic,
+      topics: resolvedTopics,
+      customTopic: sanitizedCustomTopic,
       spanglishPercent: body.spanglishPercent,
       bpmVibe,
       beatType,
@@ -229,6 +246,8 @@ export async function POST(req: NextRequest) {
       adlibStyle: body.adlibStyle,
       situationalPresetId: body.situationalPresetId,
       flowPocketMode: body.flowPocketMode,
+      semanticAnchor,
+      languageDNA,
     };
 
     const temperature = typeof body.temperature === "number" ? body.temperature : 0.72;
@@ -238,7 +257,20 @@ export async function POST(req: NextRequest) {
     let finalRaw = "";
     let pipelineStagesCompleted: string[] = [];
     const stageLogs: GenerationStageLog[] = [];
+    const driftHistory: LanguageDriftStep[] = [];
+    let repairDecisionData: GenerationProcessLog["repairDecision"] = undefined;
     let processMode: GenerationProcessLog["mode"] = "pipeline_3_pass";
+
+    // Register initial target drift point
+    driftHistory.push({
+      stage: "target",
+      stageLabel: "Objetivo Configurado",
+      englishPercent: Math.round(languageTarget.center * 100),
+      spanishPercent: Math.round((1 - languageTarget.center) * 100),
+      deviationFromTarget: 0,
+      confidence: 1.0,
+      decision: "soft_pass",
+    });
 
     // CASE 1: Single section regeneration
     if (body.regenerateSection) {
@@ -294,12 +326,23 @@ export async function POST(req: NextRequest) {
       stageLogs.push({
         stageId: "stage_1_topline",
         stageName: "Pasada 1: Topliner & Diseñador de Ganchos",
-        description: "Diseño melódico, mantras rítmicos, economía de palabras y anáforas de estribillo",
+        description: "Diseño melódico, mantras rítmicos, economía de palabras y anáforas de estribillo guiado por Ancla Semántica",
         model: modelUsed,
         temperature: 0.82,
         durationMs: d1Ms,
         prompt: stage1Prompt,
         rawResponse: stage1Topline,
+      });
+
+      const stage1Syllable = calculateSyllableLanguageRatio(stage1Topline, languageTarget);
+      driftHistory.push({
+        stage: "stage_1",
+        stageLabel: "Pasada 1 (Hook Topline)",
+        englishPercent: stage1Syllable.englishPercent,
+        spanishPercent: stage1Syllable.spanishPercent,
+        deviationFromTarget: stage1Syllable.deviationFromTarget,
+        confidence: stage1Syllable.confidence,
+        decision: stage1Syllable.bandDecision,
       });
 
       // --- PASADA 2: Ghostwriter & Verse Architect (Barras alrededor del Hook) ---
@@ -319,8 +362,53 @@ export async function POST(req: NextRequest) {
         rawResponse: stage2Lyrics,
       });
 
+      const stage2Syllable = calculateSyllableLanguageRatio(stage2Lyrics, languageTarget);
+      driftHistory.push({
+        stage: "stage_2",
+        stageLabel: "Pasada 2 (Versos & Historia)",
+        englishPercent: stage2Syllable.englishPercent,
+        spanishPercent: stage2Syllable.spanishPercent,
+        deviationFromTarget: stage2Syllable.deviationFromTarget,
+        confidence: stage2Syllable.confidence,
+        decision: stage2Syllable.bandDecision,
+      });
+
+      // --- EVALUACIÓN LINGÜÍSTICA Y REPARACIÓN CONTROLADA ---
+      const repairPlan = evaluateAndPlanLanguageRepair(stage2Lyrics, languageTarget);
+      repairDecisionData = {
+        action: repairPlan.action,
+        reason: repairPlan.reason,
+        netScore: repairPlan.netScore,
+        targetBarsCount: repairPlan.targetBarIds.length,
+      };
+
+      let lyricsForStage3 = stage2Lyrics;
+      // If hard patch needed and we have target bars, execute focused bar adjustment
+      if ((repairPlan.action === "hard_patch" || repairPlan.action === "eval_patch") && repairPlan.targetBarIds.length > 0) {
+        try {
+          const patchInstruction = `Ajusta estas barras específicas para cumplir el balance de idioma (${Math.round(languageTarget.center * 100)}% EN / ${Math.round((1 - languageTarget.center) * 100)}% ES) manteniendo exactamente la rima, métrica y flow de la canción:\n${stage2Lyrics}`;
+          const patchedText = await callLLM(patchInstruction, body, 0.65);
+          if (patchedText && patchedText.trim()) {
+            lyricsForStage3 = patchedText;
+            pipelineStagesCompleted.push("language_distribution_calibrated");
+            const repairedSyllable = calculateSyllableLanguageRatio(patchedText, languageTarget);
+            driftHistory.push({
+              stage: "repaired",
+              stageLabel: "Reparación Lingüística Quirúrgica",
+              englishPercent: repairedSyllable.englishPercent,
+              spanishPercent: repairedSyllable.spanishPercent,
+              deviationFromTarget: repairedSyllable.deviationFromTarget,
+              confidence: repairedSyllable.confidence,
+              decision: repairedSyllable.bandDecision,
+            });
+          }
+        } catch {
+          // If patch fails, preserve original stage2Lyrics to guarantee musical flow
+        }
+      }
+
       // --- PASADA 3: Vocal Director & Call & Response Engineer ---
-      const stage3Prompt = buildStage3VocalDirectorPrompt(promptParams, stage2Lyrics);
+      const stage3Prompt = buildStage3VocalDirectorPrompt(promptParams, lyricsForStage3);
       const t3 = Date.now();
       const stage3Lyrics = await callLLM(stage3Prompt, body, 0.75);
       const d3Ms = Date.now() - t3;
@@ -328,7 +416,7 @@ export async function POST(req: NextRequest) {
       stageLogs.push({
         stageId: "stage_3_vocal_director",
         stageName: "Pasada 3: Director Vocal & Mezcla de Efectos",
-        description: "Call & Response dialéctico, ad-libs con actitud, textura humana compás a compás y tags Suno v4.5",
+        description: "Call & Response dialéctico, ad-libs con actitud, textura humana compás a compás y tags Suno v4.5 con Language Drift Guard",
         model: modelUsed,
         temperature: 0.75,
         durationMs: d3Ms,
@@ -338,15 +426,30 @@ export async function POST(req: NextRequest) {
 
       finalRaw = stage3Lyrics;
       lyrics = cleanSunoBracketHeaders(stage3Lyrics);
+
+      const stage3Syllable = calculateSyllableLanguageRatio(lyrics, languageTarget);
+      driftHistory.push({
+        stage: "stage_3",
+        stageLabel: "Pasada 3 (Director Vocal & Ad-libs)",
+        englishPercent: stage3Syllable.englishPercent,
+        spanishPercent: stage3Syllable.spanishPercent,
+        deviationFromTarget: stage3Syllable.deviationFromTarget,
+        confidence: stage3Syllable.confidence,
+        decision: stage3Syllable.bandDecision,
+      });
     }
 
     if (!lyrics || !lyrics.trim()) {
       return NextResponse.json({ error: "El motor de estudio no devolvió contenido válido." }, { status: 502 });
     }
 
-    // Post-generation: analyze the language ratio
+    // Post-generation: final syllable-weighted and token-based language analysis
+    const syllableFinal = calculateSyllableLanguageRatio(lyrics, languageTarget);
     const analysis: LanguageAnalysis = analyzeLanguageRatio(lyrics, body.spanglishPercent);
     const spanglishInfo = buildSpanglishInstruction(body.spanglishPercent);
+
+    // Contamination Guard Audit
+    const hygieneReport = auditPromptContamination(lyrics, [sanitizedCustomTopic, ...resolvedTopics]);
 
     // Generate a beat prompt (Suno/Udio-style) from the config
     const beatPrompt = generateBeatPrompt(body.artistId, body.moodId, body.bpmVibeId, body.producerId ?? "none");
@@ -382,9 +485,24 @@ export async function POST(req: NextRequest) {
         bpm: `${bpmVibe.range} BPM (${bpmVibe.label})`,
         structure: structure.label,
         spanglishTarget: body.spanglishPercent,
-        spanglishActual: analysis.englishPercent,
+        spanglishActual: syllableFinal.englishPercent,
         rhymeTier: getRhymeTier(body.artistId),
         dirtyLevel: body.dirtyLevel ?? 2,
+      },
+      semanticAnchor: {
+        anchorType: semanticAnchor.anchorType,
+        title: semanticAnchor.title,
+        sensoryDescription: semanticAnchor.sensoryDescription,
+        emotionalAxis: semanticAnchor.emotionalAxis,
+      },
+      languageDriftHistory: driftHistory,
+      repairDecision: repairDecisionData,
+      promptHygieneReport: {
+        isClean: hygieneReport.isClean,
+        score: hygieneReport.score,
+        criticalCount: hygieneReport.criticalCount,
+        warningCount: hygieneReport.warningCount,
+        findingsSummary: hygieneReport.findings.map(f => `[${f.severity.toUpperCase()}] ${f.reason}`),
       },
     };
 

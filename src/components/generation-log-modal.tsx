@@ -23,6 +23,9 @@ import {
   Info,
   ChevronRight,
   FileCode2,
+  ShieldCheck,
+  AlertTriangle,
+  Anchor,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { GenerationProcessLog, GenerationStageLog } from "@/lib/generation-logger";
@@ -134,13 +137,19 @@ export function GenerationLogModal({ open, onOpenChange, log }: GenerationLogMod
                 value="stages"
                 className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-cyber data-[state=active]:text-cyber rounded-none px-2 h-11 text-xs"
               >
-                <Layers className="w-3.5 h-3.5 mr-1.5" /> Pasadas del Pipeline ({stages.length})
+                <Layers className="w-3.5 h-3.5 mr-1.5" /> Pasadas ({stages.length})
+              </TabsTrigger>
+              <TabsTrigger
+                value="telemetry"
+                className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-slime data-[state=active]:text-slime rounded-none px-2 h-11 text-xs"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 mr-1.5" /> Drift & Higiene (v5.1)
               </TabsTrigger>
               <TabsTrigger
                 value="raw"
                 className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-pink-400 data-[state=active]:text-pink-400 rounded-none px-2 h-11 text-xs"
               >
-                <FileCode2 className="w-3.5 h-3.5 mr-1.5" /> Salida Cruda vs Limpia
+                <FileCode2 className="w-3.5 h-3.5 mr-1.5" /> Cruda vs Limpia
               </TabsTrigger>
             </TabsList>
 
@@ -245,7 +254,116 @@ export function GenerationLogModal({ open, onOpenChange, log }: GenerationLogMod
             )}
           </TabsContent>
 
-          {/* TAB 2: Raw Output vs Clean Output */}
+          {/* TAB 2: Telemetría & Drift & Higiene (v5.1) */}
+          <TabsContent value="telemetry" className="flex-1 flex flex-col m-0 min-h-0 p-4 space-y-4 overflow-y-auto">
+            {/* Semantic Anchor Card */}
+            {log.semanticAnchor && (
+              <div className="p-3.5 rounded-lg border border-cyan-500/30 bg-cyan-950/20 space-y-2 text-xs">
+                <div className="flex items-center gap-2 text-cyan-400 font-semibold">
+                  <Anchor className="w-4 h-4" />
+                  <span>Ancla Semántica (Motif Anchor — Show, Don't Tell)</span>
+                  <Badge variant="outline" className="text-[10px] font-mono ml-auto border-cyan-500/40 text-cyan-300">
+                    {log.semanticAnchor.anchorType}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-muted-foreground">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider block text-cyan-300/70">Imagen / Atmósfera:</span>
+                    <p className="text-foreground">{log.semanticAnchor.sensoryDescription}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider block text-cyan-300/70">Eje de Tensión:</span>
+                    <p className="text-foreground">{log.semanticAnchor.emotionalAxis}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Language Drift History Table */}
+            {log.languageDriftHistory && log.languageDriftHistory.length > 0 && (
+              <div className="p-3.5 rounded-lg border border-border/50 bg-background/50 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-slime" />
+                    Curva de Calibración de Spanglish (Language Drift)
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">Referenciado al Target ({contextSummary.spanglishTarget}% EN)</span>
+                </div>
+                <div className="space-y-1.5">
+                  {log.languageDriftHistory.map((step, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 rounded bg-black/30 border border-border/30 text-xs font-mono">
+                      <span className="font-medium text-foreground">{step.stageLabel}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-muted-foreground">{step.englishPercent}% EN / {step.spanishPercent}% ES</span>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${
+                            step.decision === "soft_pass"
+                              ? "border-slime/50 text-slime bg-slime/10"
+                              : step.decision === "eval_band"
+                              ? "border-yellow-400/50 text-yellow-400 bg-yellow-400/10"
+                              : "border-red-400/50 text-red-400 bg-red-400/10"
+                          }`}
+                        >
+                          Δ {step.deviationFromTarget}% {step.decision === "soft_pass" ? "✓ Soft Pass" : step.decision === "eval_band" ? "⚠ Eval" : "✕ Hard"}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Repair Decision Audit */}
+            {log.repairDecision && (
+              <div className="p-3.5 rounded-lg border border-border/50 bg-background/50 space-y-1.5 text-xs">
+                <span className="font-semibold text-foreground block text-xs">
+                  Decisión de Reparación Automática (v5.1 Policy)
+                </span>
+                <p className="text-muted-foreground text-xs leading-relaxed font-mono">{log.repairDecision.reason}</p>
+                {typeof log.repairDecision.netScore === "number" && (
+                  <span className="text-[11px] text-slime font-mono block">
+                    Puntuación Neta de Reparación: {log.repairDecision.netScore > 0 ? `+${log.repairDecision.netScore}` : log.repairDecision.netScore} (Beneficio Lingüístico vs Daño Lírico)
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Prompt Hygiene & Contamination Report */}
+            {log.promptHygieneReport && (
+              <div className="p-3.5 rounded-lg border border-border/50 bg-background/50 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-cyber" />
+                    Higiene de Interfaz & Contamination Guard
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] font-mono ${
+                      log.promptHygieneReport.isClean
+                        ? "border-slime/50 text-slime bg-slime/10"
+                        : "border-amber-400/50 text-amber-400 bg-amber-400/10"
+                    }`}
+                  >
+                    {log.promptHygieneReport.isClean ? "100% Cero Contaminación" : "Advertencias"} (Score: {log.promptHygieneReport.score}/100)
+                  </Badge>
+                </div>
+                {log.promptHygieneReport.findingsSummary.length > 0 ? (
+                  <div className="space-y-1">
+                    {log.promptHygieneReport.findingsSummary.map((f, i) => (
+                      <p key={i} className="text-[11px] font-mono text-amber-300/90">{f}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-[11px]">
+                    Ningún token de instrucción, advertencia de prueba ni plantilla interna se filtró en la letra generada.
+                  </p>
+                )}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* TAB 3: Raw Output vs Clean Output */}
           <TabsContent value="raw" className="flex-1 flex flex-col m-0 min-h-0">
             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/40 min-h-0">
               {/* Salida en bruto final */}
