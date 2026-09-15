@@ -24,7 +24,7 @@ import {
   RefreshCw, Share2, Link2, Shuffle, BarChart3, Clock, TrendingUp,
   MessageSquare, Award, AlertCircle, Lightbulb, AudioLines, Music2,
   Image, Star, Quote, Instagram, Twitter, Video, ListMusic, Radio, Key,
-  Plus, ArrowUp, ArrowDown, X, Layers, Volume2, VolumeX, FileSpreadsheet
+  Plus, ArrowUp, ArrowDown, X, Layers, Volume2, VolumeX, FileSpreadsheet, Terminal
 } from "lucide-react";
 import {
   ARTISTS_DATA, MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, PRODUCERS, RHYME_SCHEMES,
@@ -72,6 +72,9 @@ import {
   getVersionLinearHistory,
 } from "@/lib/version-graph";
 
+import type { GenerationProcessLog } from "@/lib/generation-logger";
+import { GenerationLogModal } from "@/components/generation-log-modal";
+
 interface GenerateResponse {
   lyrics: string;
   songDocument?: SongDocument;
@@ -82,6 +85,7 @@ interface GenerateResponse {
   sunoStylePrompt?: string;
   sunoLayers?: SunoStyleLayers;
   refTrackSummary?: string;
+  generationLog?: GenerationProcessLog;
 }
 
 interface Preset {
@@ -109,6 +113,7 @@ interface HistoryEntry {
   lyricsPreview?: string;
   fullLyrics: string;
   analysis?: LanguageAnalysis | null;
+  generationLog?: GenerationProcessLog;
 }
 
 const MOOD_ICONS: Record<string, typeof Flame> = {
@@ -316,6 +321,8 @@ export default function TrapGhostPage() {
   const [patchingBarId, setPatchingBarId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<LanguageAnalysis | null>(null);
   const [spanglishLabel, setSpanglishLabel] = useState<string>("");
+  const [generationLog, setGenerationLog] = useState<GenerationProcessLog | null>(null);
+  const [logModalOpen, setLogModalOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [regenCount, setRegenCount] = useState<number>(0);
 
@@ -642,6 +649,7 @@ export default function TrapGhostPage() {
       if (data.beatPrompt) setBeatPrompt(data.beatPrompt);
       if (data.sunoStylePrompt) setSunoStylePrompt(data.sunoStylePrompt);
       if (data.sunoLayers) setSunoLayers(data.sunoLayers);
+      if (data.generationLog) setGenerationLog(data.generationLog);
       if (lockedSections.length > 0) setLockedSections([]);
 
       const moodLabel = MOODS.find(m => m.id === moodId)?.label ?? moodId;
@@ -657,6 +665,7 @@ export default function TrapGhostPage() {
         lyricsPreview: cleanLyrics.slice(0, 120).replace(/\n/g, " "),
         fullLyrics: cleanLyrics,
         analysis: data.analysis,
+        generationLog: data.generationLog,
       };
       setHistory(prev => [entry, ...prev].slice(0, 8));
 
@@ -1253,6 +1262,7 @@ export default function TrapGhostPage() {
       }
       setLyrics(updatedLyrics);
       setAnalysis(analyzeLanguageRatio(updatedLyrics, spanglishPercent));
+      if (data.generationLog) setGenerationLog(data.generationLog);
       toast.success(`Sección "${sectionName}" re-generada`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error desconocido");
@@ -3516,6 +3526,18 @@ export default function TrapGhostPage() {
                           {entry.actualEnglishPercent}% EN (Δ{entry.deviation}%)
                         </Badge>
                         <span className="text-muted-foreground truncate flex-1">{entry.lyricsPreview}...</span>
+                        {entry.generationLog && (
+                          <button
+                            onClick={() => {
+                              setGenerationLog(entry.generationLog ?? null);
+                              setLogModalOpen(true);
+                            }}
+                            className="shrink-0 p-1 rounded text-muted-foreground hover:text-cyber"
+                            title="Ver logs y prompts de esta generación"
+                          >
+                            <Terminal className="w-3 h-3" />
+                          </button>
+                        )}
                         {lyrics && (
                           <>
                             <button
@@ -3736,8 +3758,14 @@ export default function TrapGhostPage() {
                     <Button variant="ghost" size="sm" onClick={() => handleGenerateHookVariations()} disabled={hookVariationsLoading} className={`h-8 ${hookVariationsOpen ? "text-amber-400 bg-amber-400/10" : "text-muted-foreground hover:text-amber-400"}`} title="⚡ Variantes de Hook — Genera 3 enfoques de estribillo (Mantra, Melódico, Punchlines)">
                       <Sparkles className="w-3.5 h-3.5 mr-1 text-amber-400" />Hook Var
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={handleCritic} disabled={criticLoading} className="text-muted-foreground hover:text-yellow-400 h-8" title="Crítico de letra (feedback IA)">
-                      <MessageSquare className="w-3.5 h-3.5 mr-1" />Crítico
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setLogModalOpen(true)}
+                      className="text-muted-foreground hover:text-cyber h-8"
+                      title="Ver auditoría y logs del proceso de generación (Prompts exactos por pasada y métricas)"
+                    >
+                      <Terminal className="w-3.5 h-3.5 mr-1 text-cyber" />Logs
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setRefTrackOpen(!refTrackOpen)} className={`h-8 ${refTrackOpen ? "text-sky-400" : "text-muted-foreground hover:text-sky-400"}`} title="Reference Track Importer">
                       <Music2 className="w-3.5 h-3.5 mr-1" />Ref Track
@@ -5840,6 +5868,13 @@ export default function TrapGhostPage() {
           </p>
         </div>
       </footer>
+
+      {/* Generation Audit & Telemetry Modal */}
+      <GenerationLogModal
+        open={logModalOpen}
+        onOpenChange={setLogModalOpen}
+        log={generationLog}
+      />
     </div>
   );
 }

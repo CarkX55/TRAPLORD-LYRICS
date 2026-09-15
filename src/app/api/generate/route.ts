@@ -7,11 +7,13 @@ import {
   cleanSunoBracketHeaders,
   buildSpanglishInstruction,
   buildSunoStyleResult,
+  getRhymeTier,
   type LockedSection,
   type RegenerateSectionParams,
   type SectionVoiceAssignment,
   type PromptParams,
 } from "@/lib/prompt-builder";
+import type { GenerationProcessLog, GenerationStageLog } from "@/lib/generation-logger";
 
 import {
   MOODS,
@@ -230,40 +232,111 @@ export async function POST(req: NextRequest) {
     };
 
     const temperature = typeof body.temperature === "number" ? body.temperature : 0.72;
+    const modelUsed = (body.geminiApiKey && body.geminiApiKey.trim()) ? (body.geminiModel || "gemini-2.5-flash") : "sandbox-z-ai";
+    const pipelineStartTime = Date.now();
     let lyrics = "";
+    let finalRaw = "";
     let pipelineStagesCompleted: string[] = [];
+    const stageLogs: GenerationStageLog[] = [];
+    let processMode: GenerationProcessLog["mode"] = "pipeline_3_pass";
 
     // CASE 1: Single section regeneration
     if (body.regenerateSection) {
+      processMode = "regenerate_section";
       const singlePrompt = buildSystemPrompt(promptParams);
+      const t0 = Date.now();
       const rawLyrics = await callLLM(singlePrompt, body, temperature);
+      const dMs = Date.now() - t0;
+      finalRaw = rawLyrics;
       lyrics = cleanSunoBracketHeaders(rawLyrics);
       pipelineStagesCompleted = ["single_section_regenerated"];
+      stageLogs.push({
+        stageId: "regenerate_section",
+        stageName: `Regenerar Sección: ${body.regenerateSection.sectionName}`,
+        description: "Re-escritura aislada de una sección manteniendo el contexto de la canción",
+        model: modelUsed,
+        temperature,
+        durationMs: dMs,
+        prompt: singlePrompt,
+        rawResponse: rawLyrics,
+      });
     }
     // CASE 2: Legacy single-pass prompt (if explicitly requested)
     else if (body.useLegacySinglePass) {
+      processMode = "legacy_single_pass";
       const singlePrompt = buildSystemPrompt(promptParams);
+      const t0 = Date.now();
       const rawLyrics = await callLLM(singlePrompt, body, temperature);
+      const dMs = Date.now() - t0;
+      finalRaw = rawLyrics;
       lyrics = cleanSunoBracketHeaders(rawLyrics);
       pipelineStagesCompleted = ["legacy_single_pass"];
+      stageLogs.push({
+        stageId: "legacy_single_pass",
+        stageName: "Generación Monolítica (1 Pasada)",
+        description: "Generación clásica en un único prompt",
+        model: modelUsed,
+        temperature,
+        durationMs: dMs,
+        prompt: singlePrompt,
+        rawResponse: rawLyrics,
+      });
     }
     // CASE 3: STUDIO PIPELINE IN 3 PASSES (STANDARD)
     else {
+      processMode = "pipeline_3_pass";
       // --- PASADA 1: Topliner & Rhythmic Engine (Hooks & Mantras) ---
       const stage1Prompt = buildStage1ToplinePrompt(promptParams);
+      const t1 = Date.now();
       const stage1Topline = await callLLM(stage1Prompt, body, 0.82);
+      const d1Ms = Date.now() - t1;
       pipelineStagesCompleted.push("topline_and_mantras_locked");
+      stageLogs.push({
+        stageId: "stage_1_topline",
+        stageName: "Pasada 1: Topliner & Diseñador de Ganchos",
+        description: "Diseño melódico, mantras rítmicos, economía de palabras y anáforas de estribillo",
+        model: modelUsed,
+        temperature: 0.82,
+        durationMs: d1Ms,
+        prompt: stage1Prompt,
+        rawResponse: stage1Topline,
+      });
 
       // --- PASADA 2: Ghostwriter & Verse Architect (Barras alrededor del Hook) ---
       const stage2Prompt = buildStage2GhostwriterPrompt(promptParams, stage1Topline);
+      const t2 = Date.now();
       const stage2Lyrics = await callLLM(stage2Prompt, body, 0.72);
+      const d2Ms = Date.now() - t2;
       pipelineStagesCompleted.push("verses_and_storytelling_completed");
+      stageLogs.push({
+        stageId: "stage_2_ghostwriter",
+        stageName: "Pasada 2: Ghostwriter & Versos Cinemáticos",
+        description: "Estructura de la canción alrededor del Hook, ADN musical, rimas y giro dramático (Scene Engine)",
+        model: modelUsed,
+        temperature: 0.72,
+        durationMs: d2Ms,
+        prompt: stage2Prompt,
+        rawResponse: stage2Lyrics,
+      });
 
       // --- PASADA 3: Vocal Director & Call & Response Engineer ---
       const stage3Prompt = buildStage3VocalDirectorPrompt(promptParams, stage2Lyrics);
+      const t3 = Date.now();
       const stage3Lyrics = await callLLM(stage3Prompt, body, 0.75);
+      const d3Ms = Date.now() - t3;
       pipelineStagesCompleted.push("vocal_call_and_response_mastered");
+      stageLogs.push({
+        stageId: "stage_3_vocal_director",
+        stageName: "Pasada 3: Director Vocal & Mezcla de Efectos",
+        description: "Call & Response dialéctico, ad-libs con actitud, textura humana compás a compás y tags Suno v4.5",
+        model: modelUsed,
+        temperature: 0.75,
+        durationMs: d3Ms,
+        prompt: stage3Prompt,
+        rawResponse: stage3Lyrics,
+      });
 
+      finalRaw = stage3Lyrics;
       lyrics = cleanSunoBracketHeaders(stage3Lyrics);
     }
 
@@ -290,12 +363,37 @@ export async function POST(req: NextRequest) {
       dirtyLevel: body.dirtyLevel,
     });
 
+    const artistObj = getArtistById(body.artistId);
+    const featObj = body.featureArtistId ? getArtistById(body.featureArtistId) : undefined;
+    const totalDurationMs = Date.now() - pipelineStartTime;
+
+    const generationLog: GenerationProcessLog = {
+      timestamp: new Date().toISOString(),
+      mode: processMode,
+      modelUsed,
+      totalDurationMs,
+      stages: stageLogs,
+      finalRawLyrics: finalRaw,
+      cleanedLyrics: lyrics,
+      contextSummary: {
+        artistName: artistObj?.name ?? "Libre",
+        featureArtistName: featObj?.name,
+        mood: moodObj?.label ?? body.moodId,
+        bpm: `${bpmVibe.range} BPM (${bpmVibe.label})`,
+        structure: structure.label,
+        spanglishTarget: body.spanglishPercent,
+        spanglishActual: analysis.englishPercent,
+        rhymeTier: getRhymeTier(body.artistId),
+        dirtyLevel: body.dirtyLevel ?? 2,
+      },
+    };
+
     return NextResponse.json({
       lyrics,
       songDocument: parseRawLyricsToAST(lyrics),
       analysis,
       spanglishLabel: spanglishInfo.label,
-      promptPreview: `Pipeline de Estudio (3 Pasadas) completado con éxito: ${pipelineStagesCompleted.join(" ➔ ")}`,
+      promptPreview: `Pipeline de Estudio (${stageLogs.length} ${stageLogs.length === 1 ? "Pasada" : "Pasadas"}) completado con éxito: ${pipelineStagesCompleted.join(" ➔ ")}`,
       temperature,
       beatPrompt,
       sunoStylePrompt: sunoStyleResult.prompt,
@@ -303,6 +401,7 @@ export async function POST(req: NextRequest) {
       sunoCharCount: sunoStyleResult.charCount,
       refTrackSummary: refTrack?.summary ?? null,
       pipelineStages: pipelineStagesCompleted,
+      generationLog,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido en la generación de estudio.";
