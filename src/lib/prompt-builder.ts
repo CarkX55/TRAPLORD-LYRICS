@@ -934,6 +934,20 @@ export function cleanSunoBracketHeaders(lyrics: string): string {
     // Limpiar notas de intérprete tipo *Intérprete:*
     .replace(/^\*+(?:Int[ée]rprete?|Interpr[èe]te?):\s*([^*\n]+)\*+$/gim, "")
     .replace(/^(?:Int[ée]rprete?|Interpr[èe]te?):\s*.+$/gim, "")
+    // Limpiar descripciones de estilo, cómo cantar, o tags técnicos dentro del corchete:
+    // e.g. [Chorus: Takeoff (RIP), Hypnotic repetitive mantra, heavy 808 sub-bass, wide stereo autotune]
+    // -> [Chorus: Takeoff]
+    .replace(/\[([A-Za-z0-9_ \-]+)(?::\s*([^,\]\n]+))?(?:,[^\]\n]+)?\]/g, (match, sec, artistName) => {
+      const cleanSec = sec.trim();
+      if (artistName && artistName.trim()) {
+        const cleanArtist = artistName
+          .replace(/\s*\((?:RIP|QEPD)\)/gi, "")
+          .replace(/\s*\((?:Ad-libs only|Hype Man[^)]*)\)/gi, "")
+          .trim();
+        return `[${cleanSec}: ${cleanArtist}]`;
+      }
+      return `[${cleanSec}]`;
+    })
     // Limpiar saltos de línea triples
     .replace(/^\s*[\r\n]{2,}/gm, "\n\n")
     .trim();
@@ -1030,8 +1044,8 @@ ${sectionDetails || "- [Chorus]: 8 compases pegadizos."}
    - Queda TERMINANTEMENTE PROHIBIDO reutilizar vocabulario o nombres procedentes de las instrucciones o diagnósticos del sistema. El estribillo debe ser 100% original y emanar del Ancla Semántica.
 
 # 📋 FORMATO DE SALIDA ESTRICTO:
-Devuelve EXCLUSIVAMENTE las secciones de gancho/mantra solicitadas con su encabezado entre corchetes limpios:
-[Chorus: ${artist?.name ?? "Lead"}, ${strategyConfig.sunoAcousticTag}]
+Devuelve EXCLUSIVAMENTE las secciones de gancho/mantra solicitadas con su encabezado entre corchetes limpios (SOLO el nombre de la sección y del artista, SIN notas de estilo ni acústica dentro del corchete):
+[Chorus: ${artist?.name ?? "Lead"}]
 Línea 1...
 Línea 2...
 
@@ -1109,10 +1123,9 @@ ${featDNA ? `\n- **Feature DNA (${featureArtist?.name})**: Flow ${featDNA.flow.c
     const isHype = va?.voice === "hype";
     if (va?.voice === "feature" && featureArtist) voice = featureArtist.name;
     else if (va?.voice === "both") voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
-    else if (isHype) voice = `${artist?.name ?? "Lead"} (Hype Man / Ad-libs Only)`;
 
     if (isHype || (s.type === "intro" && (va?.introStyle === "bouncy_warmup" || isHype))) {
-      return `[${s.name}: ${voice}] — 4 compases (🚫 PROHIBIDO ESCRIBIR VERSOS NARRATIVOS O LÍNEAS CANTADAS. Debe ser EXCLUSIVAMENTE 3 a 5 ad-libs y grunts entre paréntesis: ej: *(Yeah... turn me up)*, *(Hold up...)*, *(Let's get it! [Beat Drop])*)`;
+      return `[${s.name}: ${voice}] — 4 compases (Modo Hype Man: 🚫 PROHIBIDO ESCRIBIR VERSOS NARRATIVOS O LÍNEAS CANTADAS. Debe ser EXCLUSIVAMENTE 3 a 5 ad-libs y grunts entre paréntesis: ej: *(Yeah... turn me up)*, *(Hold up...)*, *(Let's get it! [Beat Drop])*)`;
     }
 
     const bars = va?.bars ? `${va.bars} barras` : (s.type === "verse" ? "8-12 barras" : "4-8 barras");
@@ -1154,7 +1167,7 @@ ${rhymeLevelInstruction}
 ${structurePlan}
 
 # 📋 FORMATO DE SALIDA ESTRICTO:
-Devuelve ÚNICAMENTE la letra de la canción estructurada con encabezados entre corchetes limpios [Intro: Detail], [Verse 1: Artist], [Chorus: Artist], etc. Sin introducciones ni notas fuera de los corchetes.`;
+Devuelve ÚNICAMENTE la letra de la canción estructurada con encabezados limpios entre corchetes con SOLO el tipo de sección y el nombre del artista (ej: [Intro: ${artist?.name ?? "Lead"}], [Verse 1: ${artist?.name ?? "Lead"}], [Chorus: ${artist?.name ?? "Lead"}]). Queda TERMINANTEMENTE PROHIBIDO incluir cómo debe cantar el artista, estilos o notas acústicas dentro de los corchetes. Sin introducciones ni notas fuera de los corchetes.`;
 }
 
 /**
@@ -1215,9 +1228,9 @@ ${callResponseSections.length > 0 ? `- Secciones con Call & Response obligatorio
    - El borrador ya tiene el balance de inglés y español fijado. Los ad-libs y réplicas entre paréntesis DEBEN escribirse en el idioma predominante de la barra o canción (${params.languageDNA?.primaryLanguage === "en" ? "inglés con toques breves de actitud en español" : "español con toques en inglés"}).
    - PROHIBIDO inundar la letra con ad-libs que cambien drásticamente el porcentaje de Spanglish.
 
-5. **LIMPIEZA QUIRÚRGICA DE ENCABEZADOS (SUNO NATIVE):**
-   - Todos los encabezados de sección deben quedar limpios entre corchetes: ej: '[Verse 1: ${artist?.name ?? "Lead"}]', '[Chorus: ${artist?.name ?? "Lead"}, Hypnotic mantra]'.
-   - Elimina cualquier texto residual de instrucciones como '— 8 barras → [REGLA...]'.
+5. **LIMPIEZA TOTAL DE ENCABEZADOS (SOLO NOMBRE DEL ARTISTA):**
+   - Todos los encabezados de sección deben contener EXCLUSIVAMENTE el tipo de sección y el nombre del artista: ej: '[Verse 1: ${artist?.name ?? "Lead"}]', '[Chorus: ${artist?.name ?? "Lead"}]'.
+   - Queda PROHIBIDO incluir cómo debe cantar el artista, estilos o notas técnicas dentro de los corchetes. Elimina cualquier texto residual de instrucciones como '— 8 barras → [REGLA...]'.
 
 6. **PRESERVACIÓN DE INTRO HYPE MAN:**
    - Si la [Intro] contiene ad-libs o tiene asignado 'Hype Man', MANTENLA exclusivamente como grunts, shouts y ad-libs entre paréntesis preparando el beat drop. Queda PROHIBIDO agregar oraciones completas o versos narrativos cantados en la intro.

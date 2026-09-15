@@ -89,21 +89,17 @@ interface GenerateBody {
   useLegacySinglePass?: boolean;
 }
 
-// Unified LLM Caller with Multi-Model Fallback for high resilience
+// Unified LLM Caller honoring strictly the user's selected model with progressive retry
 async function callLLM(prompt: string, body: GenerateBody, temperature: number = 0.72): Promise<string> {
   if (body.geminiApiKey && body.geminiApiKey.trim()) {
-    const primaryModel = (body.geminiModel && body.geminiModel.trim()) ? body.geminiModel.trim() : "gemini-2.0-flash";
-    // Resilient fallback chain: user selected model -> gemini-2.0-flash -> gemini-1.5-flash
-    const fallbackList = [primaryModel, "gemini-2.0-flash", "gemini-1.5-flash"].filter(
-      (m, idx, arr) => arr.indexOf(m) === idx
-    );
-
+    const model = (body.geminiModel && body.geminiModel.trim()) ? body.geminiModel.trim() : "gemini-2.0-flash";
     let lastError: Error | null = null;
 
-    for (const model of fallbackList) {
+    // Up to 3 attempts on the chosen model with progressive delay
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s per model attempt
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s per attempt
 
         // Build generationConfig with optional thinkingConfig
         const generationConfig: Record<string, unknown> = {
@@ -140,28 +136,39 @@ async function callLLM(prompt: string, body: GenerateBody, temperature: number =
         const json = await res.json();
         if (json.error) {
           const errMsg = json.error.message || json.error.status || `Error ${json.error.code}`;
-          console.warn(`[callLLM] Model ${model} returned API error (${json.error.code}): ${errMsg}`);
+          console.warn(`[callLLM] Model ${model} returned API error (${json.error.code}, attempt ${attempt}): ${errMsg}`);
           lastError = new Error(`Gemini (${model}): ${errMsg}`);
-          // If capacity limit (503), rate limit (429), or missing model (404), immediately fall back to next model!
-          continue;
+          
+          if (attempt < 3 && (json.error.code === 503 || json.error.code === 429)) {
+            // Wait with backoff before retrying on the user's chosen model
+            await new Promise(r => setTimeout(r, attempt * 2000));
+            continue;
+          }
+          throw lastError;
         }
 
         const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text || !text.trim()) {
           console.warn(`[callLLM] Model ${model} returned empty candidates`);
           lastError = new Error(`Gemini (${model}) no devolvió contenido.`);
-          continue;
+          if (attempt < 3) {
+            await new Promise(r => setTimeout(r, 1500));
+            continue;
+          }
+          throw lastError;
         }
 
         return text.trim();
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(`[callLLM] Model ${model} fetch exception: ${lastError.message}`);
-        // Proceed to next fallback model
+        console.warn(`[callLLM] Model ${model} attempt ${attempt} failed: ${lastError.message}`);
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, attempt * 1500));
+        }
       }
     }
 
-    throw lastError || new Error("Gemini no pudo procesar la solicitud tras reintentos con modelos de respaldo.");
+    throw lastError || new Error(`No se pudo procesar la solicitud con el modelo ${model}.`);
   } else {
     // Sandbox z-ai with fallback
     const ZAI = (await import("z-ai-web-dev-sdk")).default;
