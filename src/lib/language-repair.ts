@@ -49,14 +49,14 @@ export function evaluateAndPlanLanguageRepair(
   const isTargetEnDominant = target.center >= 0.5;
 
   for (const sec of doc.sections) {
-    if (sec.type === "chorus" || sec.name.toLowerCase().includes("chorus") || sec.name.toLowerCase().includes("hook")) {
+    if (sec.type === "hook" || sec.name.toLowerCase().includes("chorus") || sec.name.toLowerCase().includes("hook")) {
       continue; // Never touch locked hook toplines
     }
     for (const bar of sec.bars) {
-      const barMeas = calculateSyllableLanguageRatio(bar.rawText, target);
-      if (isTargetEnDominant && barMeas.englishPercent < 35 && bar.rawText.trim().length > 10) {
+      const barMeas = calculateSyllableLanguageRatio(bar.lyricText, target);
+      if (isTargetEnDominant && barMeas.englishPercent < 35 && bar.lyricText.trim().length > 10) {
         targetBars.push(bar);
-      } else if (!isTargetEnDominant && barMeas.spanishPercent < 35 && bar.rawText.trim().length > 10) {
+      } else if (!isTargetEnDominant && barMeas.spanishPercent < 35 && bar.lyricText.trim().length > 10) {
         targetBars.push(bar);
       }
       if (targetBars.length >= 4) break;

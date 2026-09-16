@@ -617,38 +617,13 @@ export default function TrapGhostPage() {
 
     setGenerationProgress({
       step: 1,
-      title: "Paso 1/2: Topliner & Hook Contract",
-      detail: "Diseñando ganchos melódicos, anáforas rítmicas y ancla semántica...",
+      title: "Generando letra en el estudio...",
+      detail: "Pipeline de composición y análisis AST en ejecución",
     });
-
-    // Simulated phase milestones to provide clear feedback to the user while Gemini processes
-    const progressTimer1 = setTimeout(() => {
-      setGenerationProgress({
-        step: 2,
-        title: "Paso 2/2: Ghostwriter & Master Vocal",
-        detail: "Estructurando barras, flow switching, ad-libs y performance...",
-      });
-    }, 10000);
-
-    const progressTimer2 = setTimeout(() => {
-      setGenerationProgress({
-        step: 2,
-        title: "Paso 2/2: Auditoría Determinista de Estudio",
-        detail: "Verificando consistencia rítmica, AST y balance de idioma...",
-      });
-    }, 20000);
-
-    const progressTimer3 = setTimeout(() => {
-      setGenerationProgress({
-        step: 2,
-        title: "Paso 2/2: Finalizando Entrega de Estudio",
-        detail: "Compilando la letra masterizada...",
-      });
-    }, 30000);
 
     try {
       // Notificación de inicio del pipeline de estudio
-      toast.info("🎛️ Sesión de estudio iniciada: Topliner ➔ Master Vocal...");
+      toast.info("🎛️ Sesión de estudio iniciada...");
 
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -705,14 +680,11 @@ export default function TrapGhostPage() {
       };
       setHistory(prev => [entry, ...prev].slice(0, 8));
 
-      toast.success(isRegen ? "⚡ Letra regenerada (Pipeline de Estudio 2-Pass)" : "🔥 Letra de estudio masterizada (2-Pass Master)");
+      toast.success(isRegen ? "⚡ Letra regenerada" : "🔥 Letra de estudio generada");
       setTimeout(() => lyricsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error desconocido");
     } finally {
-      clearTimeout(progressTimer1);
-      clearTimeout(progressTimer2);
-      clearTimeout(progressTimer3);
       setLoading(false);
       setGenerationProgress(null);
     }
@@ -4045,42 +4017,22 @@ export default function TrapGhostPage() {
                   <div className="max-w-md w-full px-4 space-y-3 text-center">
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-foreground">
-                        {generationProgress?.title || "Cocinando la letra en el estudio..."}
+                        {generationProgress?.title || "Generando en el estudio..."}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {generationProgress?.detail || "Ejecutando el pipeline de producción de estudio en 3 fases"}
+                        {generationProgress?.detail || "Pipeline de composición y análisis AST activo"}
                       </p>
                     </div>
 
-                    {/* 3-Step Progress Bar */}
-                    <div className="flex items-center gap-1.5 justify-center pt-1">
-                      {[1, 2, 3].map((stepNum) => {
-                        const currentStep = generationProgress?.step || 1;
-                        const isDone = currentStep > stepNum;
-                        const isCurrent = currentStep === stepNum;
-                        return (
-                          <div
-                            key={stepNum}
-                            className={`h-1.5 rounded-full transition-all duration-500 ${
-                              isDone
-                                ? "w-10 bg-slime"
-                                : isCurrent
-                                ? "w-16 bg-cyber animate-pulse"
-                                : "w-8 bg-muted/40"
-                            }`}
-                          />
-                        );
-                      })}
-                    </div>
-
-                    <div className="flex justify-between text-[10px] font-mono text-muted-foreground px-2">
-                      <span className={generationProgress?.step === 1 ? "text-cyber font-bold" : ""}>1. Topliner</span>
-                      <span className={generationProgress?.step === 2 ? "text-cyber font-bold" : ""}>2. Ghostwriter</span>
-                      <span className={generationProgress?.step === 3 ? "text-cyber font-bold" : ""}>3. Director Vocal</span>
+                    {/* Honest Dynamic Studio Pulse */}
+                    <div className="w-full max-w-xs mx-auto pt-2">
+                      <div className="h-1.5 w-full bg-muted/30 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-cyber to-slime rounded-full animate-pulse w-3/4 mx-auto" />
+                      </div>
                     </div>
 
                     <p className="text-[10px] text-muted-foreground/60 italic pt-2">
-                      Protección contra caídas activa: reintentos y tolerancia a fallos habilitados
+                      Estudio en vivo: análisis musical y generación en proceso
                     </p>
                   </div>
                 </div>
@@ -4180,15 +4132,15 @@ export default function TrapGhostPage() {
                                         (barDoc && op.targetBarIds?.includes(barDoc.id)) ||
                                         (op.barRange && (j + 1 >= op.barRange[0] && j + 1 <= op.barRange[1]))
                                       );
-                                      const barQuality = matchingRepairOp ? 5.8 : Number((8.2 + ((j * 7) % 16) / 10).toFixed(1));
-                                      const barConfidence = Number((0.72 + ((j * 11) % 25) / 100).toFixed(2));
 
                                       if (matchingRepairOp) {
                                         return (
                                           <div className="flex items-center gap-1.5 shrink-0 animate-fade-slide">
-                                            <span className="text-[9px] font-mono text-muted-foreground/60 hidden sm:inline" title="Calidad calculada vs Confianza del crítico">
-                                              Q:{barQuality} · C:{barConfidence}
-                                            </span>
+                                            {barDoc?.analysis ? (
+                                              <span className="text-[9px] font-mono text-muted-foreground/60 hidden sm:inline" title="Calidad calculada del compás">
+                                                Q:{barDoc.analysis.score.toFixed(1)}
+                                              </span>
+                                            ) : null}
                                             <span
                                               className="text-[9px] font-mono bg-red-500/15 text-red-400 border border-red-500/30 px-1.5 py-0.5 rounded flex items-center gap-1"
                                               title={matchingRepairOp.instruction}
@@ -4210,19 +4162,17 @@ export default function TrapGhostPage() {
                                         );
                                       }
 
-                                      return (
-                                        <div className="hidden group-hover/bar:flex items-center gap-1.5 shrink-0 opacity-75">
-                                          <span className="text-[9px] font-mono text-muted-foreground/60 hidden sm:inline" title="Calidad calculada vs Confianza del crítico">
-                                            Q:{barQuality} · C:{barConfidence}
-                                          </span>
-                                          <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1 py-0.2 rounded" title="Pocket rítmico verificado">
-                                            Pocket ✓
-                                          </span>
-                                          <span className="text-[9px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1 py-0.2 rounded" title="Anclaje escénico verificado">
-                                            Scene ✓
-                                          </span>
-                                        </div>
-                                      );
+                                      if (barDoc?.analysis) {
+                                        return (
+                                          <div className="hidden group-hover/bar:flex items-center gap-1.5 shrink-0 opacity-75">
+                                            <span className="text-[9px] font-mono text-muted-foreground/60 hidden sm:inline" title="Calidad calculada AST">
+                                              Q:{barDoc.analysis.score.toFixed(1)}
+                                            </span>
+                                          </div>
+                                        );
+                                      }
+
+                                      return null;
                                     })()}
                                   </div>
                                 );
