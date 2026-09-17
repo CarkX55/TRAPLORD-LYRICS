@@ -31,12 +31,31 @@ import { buildCorrectionInstruction, analyzeLanguageRatio, type LanguageAnalysis
 import { getArtistReference } from "@/lib/artist-references";
 import { generateArtistReference } from "@/lib/reference-generator";
 import { analyzeReferenceTrack } from "@/lib/track-analyzer";
-import { parseRawLyricsToAST, stringifyASTToSunoLyrics } from "@/lib/song-document";
+import { parseRawLyricsToAST, stringifyASTToSunoLyrics, createHookContract, bindHookContractToAST, hashSongDocument, type HookContract } from "@/lib/song-document";
 import { synthesizeSemanticAnchor } from "@/lib/motif-engine";
 import { buildLanguageDNA, buildLanguageTarget, calculateSyllableLanguageRatio } from "@/lib/language-dna";
-import { auditPromptContamination, sanitizeUserInput } from "@/lib/prompt-hygiene";
-import { evaluateAndPlanLanguageRepair } from "@/lib/language-repair";
+import { auditPromptContamination, sanitizeUserInput, auditMetadataLeakage } from "@/lib/prompt-hygiene";
+import { auditSunoBudget, type SunoBudgetAudit } from "@/lib/suno-budget";
 import type { LanguageDriftStep } from "@/lib/generation-logger";
+import {
+  generatePerformanceArc,
+  generateFlowSkeleton,
+  formatFlowSkeletonForPrompt,
+  generateWritingCells,
+  formatWritingCellsForPrompt,
+} from "@/lib/composition-planner";
+import {
+  runInitialDeliveryAudit,
+  evaluateRepairability,
+  runReAudit,
+  evaluateFinalQualityGate,
+  type AnalysisSnapshot,
+  type InitialAuditContext,
+} from "@/lib/quality-gate";
+import { createInitialVersionGraph } from "@/lib/version-graph";
+import { getFlowProfile } from "@/lib/artist-flow-profiles";
+import { getMusicalDNAForArtist } from "@/lib/musical-dna";
+import type { SongDocument } from "@/lib/song-document";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -312,6 +331,9 @@ export async function POST(req: NextRequest) {
     const pipelineStartTime = Date.now();
     let lyrics = "";
     let finalRaw = "";
+    let finalAST: SongDocument | null = null;
+    let auditContext: InitialAuditContext | null = null;
+    let compositionPlanningInfo: { flowSkeletonSummary?: string; writingCellsCount?: number } | undefined = undefined;
     let pipelineStagesCompleted: string[] = [];
     const stageLogs: GenerationStageLog[] = [];
     const driftHistory: LanguageDriftStep[] = [];
@@ -375,16 +397,28 @@ export async function POST(req: NextRequest) {
     else {
       processMode = "pipeline_2_pass_primary";
 
+      // --- ETAPA PREVIA: PLANIFICACIÓN RÍTMICA BEAT-FIRST (Determinista Local <5ms) ---
+      const flowProfile = getFlowProfile(body.artistId) || undefined;
+      const mainDNA = getMusicalDNAForArtist(body.artistId);
+      const parsedBpm = parseInt((bpmVibe.range || "135").split("-")[0], 10) || 135;
+
+      const performanceArc = generatePerformanceArc(structure, body.moodId, mainDNA);
+      const flowSkeleton = generateFlowSkeleton(performanceArc, mainDNA, flowProfile, structure, body.flowPocketMode);
+
       // --- PASADA 1: Topliner & Contrato de Gancho (Hooks & Mantras) ---
-      const stage1Prompt = buildStage1ToplinePrompt(promptParams);
+      const stage1Prompt = buildStage1ToplinePrompt(promptParams, flowSkeleton.globalIntentionSummary);
       const t1 = Date.now();
       const stage1Topline = await callLLM(stage1Prompt, body, 0.82);
       const d1Ms = Date.now() - t1;
+      
+      // Invariant: Create canonical HookContract with contentHash
+      const hookContract = createHookContract(stage1Topline, { allowPerformanceVariation: true });
+
       pipelineStagesCompleted.push("hook_contract_locked");
       stageLogs.push({
         stageId: "stage_1_topline",
         stageName: "Pasada 1: Topliner & Contrato de Gancho",
-        description: "Diseño melódico, mantras rítmicos, economía de palabras y ancla semántica fijada",
+        description: `Diseño melódico y ancla semántica fijada (HookContract Hash: ${hookContract.contentHash})`,
         model: modelUsed,
         temperature: 0.82,
         durationMs: d1Ms,
@@ -403,8 +437,22 @@ export async function POST(req: NextRequest) {
         decision: stage1Syllable.bandDecision,
       });
 
-      // --- PASADA 2: Ghostwriter & Vocal Director Master (5 Modular Contracts) ---
-      const stage2Prompt = buildStage2GhostwriterPrompt(promptParams, stage1Topline);
+      // --- SCAFFOLDING DE CÉLULAS DE ESCRITURA PARA VERSOS (4-Bar Writing Cells) ---
+      const writingCellsV1 = generateWritingCells("verse_1", 16, semanticAnchor?.sensoryDescription, semanticAnchor?.title, false, body.moodId);
+      const writingCellsSnippet = formatWritingCellsForPrompt(writingCellsV1);
+      const flowSkeletonSnippet = formatFlowSkeletonForPrompt(flowSkeleton, "verse_1");
+      compositionPlanningInfo = {
+        flowSkeletonSummary: flowSkeleton.globalIntentionSummary,
+        writingCellsCount: writingCellsV1.length,
+      };
+
+      // --- PASADA 2: Ghostwriter & Vocal Director Master (con Células y Skeleton) ---
+      const stage2Prompt = buildStage2GhostwriterPrompt(
+        promptParams,
+        hookContract.approvedText,
+        writingCellsSnippet,
+        flowSkeletonSnippet
+      );
       const t2 = Date.now();
       const stage2Lyrics = await callLLM(stage2Prompt, body, 0.72);
       const d2Ms = Date.now() - t2;
@@ -412,7 +460,7 @@ export async function POST(req: NextRequest) {
       stageLogs.push({
         stageId: "stage_2_ghostwriter",
         stageName: "Pasada 2: Master de Estudio (Ghostwriter & Vocal)",
-        description: "Estructura completa, flow switching, ad-libs tridimensionales y tags acústicos Suno AI",
+        description: "Estructura completa con 4-Bar Writing Cells y Flow Skeleton interpretativo",
         model: modelUsed,
         temperature: 0.72,
         durationMs: d2Ms,
@@ -420,50 +468,42 @@ export async function POST(req: NextRequest) {
         rawResponse: stage2Lyrics,
       });
 
-      const candidateLyrics = cleanSunoBracketHeaders(stage2Lyrics);
-      const stage2Syllable = calculateSyllableLanguageRatio(candidateLyrics, languageTarget);
-      driftHistory.push({
-        stage: "stage_2",
-        stageLabel: "Pasada 2 (Master de Estudio)",
-        englishPercent: stage2Syllable.englishPercent,
-        spanishPercent: stage2Syllable.spanishPercent,
-        deviationFromTarget: stage2Syllable.deviationFromTarget,
-        confidence: stage2Syllable.confidence,
-        decision: stage2Syllable.bandDecision,
-      });
+      let candidateLyrics = cleanSunoBracketHeaders(stage2Lyrics);
+      let candidateAST = parseRawLyricsToAST(candidateLyrics);
 
-      // --- AUDITORÍA DETERMINISTA LOCAL & QUALITY GATE (0ms) ---
-      const candidateAST = parseRawLyricsToAST(candidateLyrics);
-      const repairPlan = evaluateAndPlanLanguageRepair(candidateLyrics, languageTarget);
-      const isHardFail = stage2Syllable.bandDecision === "hard_fail" || candidateAST.sections.length === 0;
-
-      repairDecisionData = {
-        action: isHardFail ? "exceptional_repair" : "direct_deliver",
-        reason: isHardFail ? (repairPlan.reason || "Hard drift detectado") : "Calidad y estructura verificadas en 2 pasadas",
-        netScore: repairPlan.netScore,
-        targetBarsCount: repairPlan.targetBarIds.length,
-      };
-
-      // --- RUTA 1: HAPPY PATH (95%+ de generaciones) ➔ Entrega Directa en 2 Pasadas (20-25s) ---
-      if (!isHardFail) {
-        finalRaw = stage2Lyrics;
-        lyrics = candidateLyrics;
+      // --- AUDITORÍA DE FUGA DE METADATOS (USER EXPLICIT PRECEDENCE) ---
+      const userExplicitTerms = [body.customTopic, body.customDictionary, ...(body.topics || [])].filter(Boolean) as string[];
+      const leakReport = auditMetadataLeakage(candidateLyrics, userExplicitTerms);
+      if (leakReport.hasLeak) {
+        candidateLyrics = leakReport.sanitizedLyrics;
+        candidateAST = parseRawLyricsToAST(candidateLyrics);
       }
-      // --- RUTA 2: REPARACIÓN EXCEPCIONAL QUIRÚRGICA (Solo ante Hard Fail comprobado) ---
-      else {
+
+      // --- FASE 1: INITIAL DELIVERY AUDIT & MULTI-CRITIC (Determinista en memoria) ---
+      auditContext = runInitialDeliveryAudit(candidateAST, parsedBpm, flowProfile, userExplicitTerms);
+      const repairPlan = evaluateRepairability(auditContext);
+
+      finalRaw = stage2Lyrics;
+      lyrics = candidateLyrics;
+      finalAST = candidateAST;
+
+      // --- RUTA DE REPARACIÓN EXCEPCIONAL QUIRÚRGICA (Solo ante ganancia neta justificada) ---
+      if (repairPlan.needsRepair && repairPlan.targetBars.length > 0) {
         try {
           const tRepair = Date.now();
-          const patchInstruction = `Ajusta estas barras específicas de la canción para cumplir el balance de idioma (${Math.round(languageTarget.center * 100)}% EN / ${Math.round((1 - languageTarget.center) * 100)}% ES) manteniendo exactamente la rima, métrica y flow:\n${candidateLyrics}`;
+          const target = repairPlan.targetBars[0];
+          const patchInstruction = `Ajusta estas barras específicas de la canción resolviendo este problema detectado ("${target.reason}") manteniendo rima, métrica y flow:\n${candidateLyrics}`;
           const patchedText = await callLLM(patchInstruction, body, 0.65);
           const dRepairMs = Date.now() - tRepair;
           if (patchedText && patchedText.trim()) {
             finalRaw = patchedText;
             lyrics = cleanSunoBracketHeaders(patchedText);
+            finalAST = parseRawLyricsToAST(lyrics);
             pipelineStagesCompleted.push("exceptional_repair_calibrated");
             stageLogs.push({
               stageId: "stage_exceptional_repair",
-              stageName: "🩺 Reparación Excepcional de Calibración",
-              description: "Calibración quirúrgica activada por fallo duro en balance de idioma o métrica",
+              stageName: "🩺 Reparación Excepcional Quirúrgica",
+              description: `Reparación atómica aplicada: ${target.reason}`,
               model: modelUsed,
               temperature: 0.65,
               durationMs: dRepairMs,
@@ -471,26 +511,29 @@ export async function POST(req: NextRequest) {
               rawResponse: patchedText,
             });
 
-            const repairedSyllable = calculateSyllableLanguageRatio(lyrics, languageTarget);
-            driftHistory.push({
-              stage: "repaired",
-              stageLabel: "Reparación Excepcional",
-              englishPercent: repairedSyllable.englishPercent,
-              spanishPercent: repairedSyllable.spanishPercent,
-              deviationFromTarget: repairedSyllable.deviationFromTarget,
-              confidence: repairedSyllable.confidence,
-              decision: repairedSyllable.bandDecision,
-            });
-          } else {
-            finalRaw = stage2Lyrics;
-            lyrics = candidateLyrics;
+            // Re-Audit tras la reparación quirúrgica
+            auditContext = runReAudit(finalAST, parsedBpm, flowProfile, userExplicitTerms);
           }
         } catch {
-          // Si la llamada de reparación excepcional falla por saturación, preservamos el Master de la Pasada 2
-          finalRaw = stage2Lyrics;
+          // Si falla la llamada quirúrgica, preservamos el Master de la Pasada 2
           lyrics = candidateLyrics;
+          finalAST = candidateAST;
         }
       }
+
+      // --- RECONCILIACIÓN DETERMINISTA DE ESTRIBILLO (HOOK INVARIANT) ---
+      finalAST = bindHookContractToAST(finalAST, hookContract);
+      lyrics = stringifyASTToSunoLyrics(finalAST);
+
+      // --- FINAL AUDIT: Auditoría completa de TODO el AST definitivo con Hook reconciliado ---
+      auditContext = runInitialDeliveryAudit(finalAST, parsedBpm, flowProfile, userExplicitTerms);
+
+      repairDecisionData = {
+        action: repairPlan.needsRepair ? "exceptional_repair" : "direct_deliver",
+        reason: repairPlan.needsRepair ? "Reparación quirúrgica atómica ejecutada" : "Calidad, HookContract y estructura verificadas en 2 pasadas",
+        netScore: auditContext.deliveryLoad.loadScore,
+        targetBarsCount: repairPlan.targetBars.length,
+      };
     }
 
     if (!lyrics || !lyrics.trim()) {
@@ -549,6 +592,7 @@ export async function POST(req: NextRequest) {
         sensoryDescription: semanticAnchor.sensoryDescription,
         emotionalAxis: semanticAnchor.emotionalAxis,
       },
+      compositionPlanning: compositionPlanningInfo,
       languageDriftHistory: driftHistory,
       repairDecision: repairDecisionData,
       promptHygieneReport: {
@@ -560,9 +604,34 @@ export async function POST(req: NextRequest) {
       },
     };
 
+    const parsedBpm = parseInt((bpmVibe.range || "135").split("-")[0], 10) || 135;
+    if (!finalAST) finalAST = parseRawLyricsToAST(lyrics);
+    if (!auditContext) auditContext = runInitialDeliveryAudit(finalAST, parsedBpm, getFlowProfile(body.artistId) || undefined);
+
+    const sunoBudget = auditSunoBudget(lyrics, parsedBpm);
+
+    // --- FASE 2: FINAL QUALITY GATE & ANALYSIS SNAPSHOT (Desacoplado del AST con Hash Canónico) ---
+    const docHash = hashSongDocument(finalAST);
+    const analysisSnapshot = evaluateFinalQualityGate(
+      finalAST,
+      auditContext,
+      sunoBudget,
+      finalAST.versionId || "v_1",
+      docHash
+    );
+
+    // --- VERSION GRAPH (Inmutable con AnalysisSnapshot adjunto) ---
+    const versionGraph = createInitialVersionGraph(
+      finalAST,
+      "Studio 2-Pass Generation (Beat-First)",
+      analysisSnapshot
+    );
+
     return NextResponse.json({
       lyrics,
-      songDocument: parseRawLyricsToAST(lyrics),
+      songDocument: finalAST,
+      analysisSnapshot,
+      versionGraph,
       analysis,
       spanglishLabel: spanglishInfo.label,
       promptPreview: `Pipeline de Estudio (${stageLogs.length} ${stageLogs.length === 1 ? "Pasada" : "Pasadas"}) completado con éxito: ${pipelineStagesCompleted.join(" ➔ ")}`,
@@ -571,6 +640,7 @@ export async function POST(req: NextRequest) {
       sunoStylePrompt: sunoStyleResult.prompt,
       sunoLayers: sunoStyleResult.layers,
       sunoCharCount: sunoStyleResult.charCount,
+      sunoBudget,
       refTrackSummary: refTrack?.summary ?? null,
       pipelineStages: pipelineStagesCompleted,
       generationLog,

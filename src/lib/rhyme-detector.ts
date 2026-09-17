@@ -23,6 +23,13 @@ export interface RhymeAnalysis {
   internalRhymes: InternalRhymeMatch[];
   internalRhymesCount: number;
   assonantRhymeCount: number;
+  // Enhanced Organic Rhyme Metrics
+  clichePenalty: number;          // 0 to 100
+  predictabilityScore: number;    // 1.0 (impredecible) a 10.0 (predecible/infantil)
+  forcedRhymeScore: number;       // 0.0 (orgánica) a 10.0 (forzada gobernando la frase)
+  rhymeContribution: number;      // 0 a 100 (contribución positiva a memoria y musicalidad)
+  rhymeDensityVariance: number;   // 0.0 a 1.0 (variación natural de densidad por bloque)
+  spokenBarsCount: number;        // compases hablados/punchlines sin rima forzada
 }
 
 // Color palette for rhyme groups (cycle through)
@@ -174,6 +181,7 @@ export function analyzeRhymes(lyrics: string): RhymeAnalysis {
   const internalRhymes: InternalRhymeMatch[] = [];
 
   const matchedLineIndices = new Set<number>();
+  const validLineIndices = new Set<number>();
 
   lines.forEach((line, idx) => {
     const trimmed = line.trim();
@@ -181,6 +189,8 @@ export function analyzeRhymes(lyrics: string): RhymeAnalysis {
     if (/^\[.*\]$/.test(trimmed)) return;
     if (/^Interpr[èe]te?:/i.test(trimmed) || /^Intérprete?:/i.test(trimmed)) return;
     if (/^[*#]/.test(trimmed)) return;
+
+    validLineIndices.add(idx);
 
     // Words in line
     const words = trimmed
@@ -281,12 +291,77 @@ export function analyzeRhymes(lyrics: string): RhymeAnalysis {
   groups.sort((a, b) => b.lineIndices.length - a.lineIndices.length);
   groups.forEach((g, i) => { g.id = i; });
 
+  // Cliche rhyme pairs detection
+  const CLICHE_PAIRS: Array<[string, string]> = [
+    ["suerte", "muerte"], ["pena", "vena"], ["dinero", "primero"],
+    ["fuego", "juego"], ["cielo", "suelo"], ["amor", "dolor"],
+    ["ratas", "plata"], ["perdón", "guión"], ["escuela", "candela"],
+    ["vida", "herida"], ["corazón", "razón"], ["camino", "destino"],
+    ["calle", "detalle"], ["hermano", "mano"], ["noche", "coche"]
+  ];
+
+  let clicheOccurrences = 0;
+  for (const group of groups) {
+    const groupWords = new Set(group.words.map(w => w.toLowerCase()));
+    for (const [w1, w2] of CLICHE_PAIRS) {
+      if (groupWords.has(w1) && groupWords.has(w2)) {
+        clicheOccurrences++;
+      }
+    }
+  }
+
+  const totalLinesCount = validLineIndices.size || 1;
+  const spokenBarsCount = Math.max(0, totalLinesCount - matchedLineIndices.size);
+  
+  // Predictability: base 2.5, grows if cliches occur or if all rhymes are strict AABB monosyllables
+  const clichePenalty = Math.min(100, clicheOccurrences * 20);
+  const rawPredictability = 2.5 + clicheOccurrences * 1.8;
+  const predictabilityScore = Number(Math.min(10.0, Math.max(1.0, rawPredictability)).toFixed(1));
+
+  // Forced Rhyme: if predictability is high and there are few internal rhymes
+  let forcedScore = 1.0;
+  if (clicheOccurrences > 0) forcedScore += clicheOccurrences * 2.0;
+  if (internalRhymes.length === 0 && groups.length > 3) forcedScore += 1.5;
+  const forcedRhymeScore = Number(Math.min(10.0, Math.max(0.0, forcedScore)).toFixed(1));
+
+  // Rhyme Contribution: positive score measuring musicality, memory & punchline payoff
+  let contribution = 65;
+  contribution += Math.min(20, internalRhymes.length * 4);
+  contribution += Math.min(15, assonantRhymeCount * 2);
+  contribution -= clichePenalty * 0.4;
+  const rhymeContribution = Math.min(98, Math.max(20, Math.round(contribution)));
+
+  // Rhyme density variance across 4-bar blocks (allows natural spoken/breathing bars)
+  const blockRhymeCounts: number[] = [];
+  const validIndicesArray = Array.from(validLineIndices);
+  for (let b = 0; b < validIndicesArray.length; b += 4) {
+    let countInBlock = 0;
+    for (let k = b; k < Math.min(validIndicesArray.length, b + 4); k++) {
+      if (matchedLineIndices.has(validIndicesArray[k])) countInBlock++;
+    }
+    blockRhymeCounts.push(countInBlock);
+  }
+
+  let variance = 0.35;
+  if (blockRhymeCounts.length > 1) {
+    const mean = blockRhymeCounts.reduce((a, b) => a + b, 0) / blockRhymeCounts.length;
+    const diffSq = blockRhymeCounts.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0);
+    const stdDev = Math.sqrt(diffSq / blockRhymeCounts.length);
+    variance = Number(Math.min(1.0, Math.max(0.1, stdDev / 2.0)).toFixed(2));
+  }
+
   return {
     groups,
     totalRhymes: groups.reduce((sum, g) => sum + g.lineIndices.length, 0),
     internalRhymes,
     internalRhymesCount: internalRhymes.length,
     assonantRhymeCount,
+    clichePenalty,
+    predictabilityScore,
+    forcedRhymeScore,
+    rhymeContribution,
+    rhymeDensityVariance: variance,
+    spokenBarsCount,
   };
 }
 
@@ -307,3 +382,5 @@ export function getInternalRhymeForLine(analysis: RhymeAnalysis, lineIdx: number
   if (!analysis.internalRhymes) return null;
   return analysis.internalRhymes.find(m => m.lineIndex === lineIdx) || null;
 }
+
+export const detectRhymes = analyzeRhymes;

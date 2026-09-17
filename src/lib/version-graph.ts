@@ -2,6 +2,7 @@
 // Every mutation or revert creates a new version node; past history is never destroyed.
 
 import { type SongDocument, cloneSongDocument } from "./song-document";
+import type { AnalysisSnapshot } from "./quality-gate";
 
 export interface SongVersionNode {
   id: string;                  // e.g. "v_1", "v_2"
@@ -11,6 +12,7 @@ export interface SongVersionNode {
   document: SongDocument;
   createdAt: number;
   changedBarIds: string[];
+  analysisSnapshot?: AnalysisSnapshot;
 }
 
 export interface SongVersionGraph {
@@ -25,7 +27,8 @@ export interface SongVersionGraph {
  */
 export function createInitialVersionGraph(
   doc: SongDocument,
-  reason: string = "Initial Studio Generation"
+  reason: string = "Initial Studio Generation",
+  analysisSnapshot?: AnalysisSnapshot
 ): SongVersionGraph {
   const versionId = doc.versionId || "v_1";
   const node: SongVersionNode = {
@@ -35,6 +38,7 @@ export function createInitialVersionGraph(
     document: cloneSongDocument(doc),
     createdAt: doc.createdAt || Date.now(),
     changedBarIds: doc.sections.flatMap(s => s.bars.map(b => b.id)),
+    analysisSnapshot,
   };
 
   return {
@@ -55,7 +59,8 @@ export function addVersionNode(
   graph: SongVersionGraph,
   newDoc: SongDocument,
   reason: string,
-  changedBarIds: string[] = []
+  changedBarIds: string[] = [],
+  analysisSnapshot?: AnalysisSnapshot
 ): SongVersionGraph {
   const newVersionId = newDoc.versionId || `v_${Date.now()}`;
   const parentId = graph.currentVersionId;
@@ -68,6 +73,7 @@ export function addVersionNode(
     document: cloneSongDocument(newDoc),
     createdAt: Date.now(),
     changedBarIds,
+    analysisSnapshot,
   };
 
   return {

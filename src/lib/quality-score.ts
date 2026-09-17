@@ -24,14 +24,17 @@ export function computeQualityScore(
   expectedSections: number,
   actualSections: number,
 ): QualityScore {
-  // 1. Rhyme density (consonant + assonant + internal rhyme bonus)
+  // 1. Rhyme density (consonant + assonant + internal rhyme bonus + organic contribution)
   const baseRhymes = rhymeAnalysis.totalRhymes;
   const internalBonus = Math.min(15, (rhymeAnalysis.internalRhymesCount ?? 0) * 3);
   const effectiveRhymes = baseRhymes + (internalBonus > 0 ? 2 : 0);
   const detectorRhymeRatio = nonEmptyLines > 0 ? (effectiveRhymes / nonEmptyLines) : 0;
-  // If detector found 30%+, assume real rhyme density is much higher
+  
   let rhymeDensity: number;
-  if (detectorRhymeRatio >= 0.5) {
+  if (typeof rhymeAnalysis.rhymeContribution === "number") {
+    // Reward natural variance, internal rhymes and organic musicality without penalizing spoken lines
+    rhymeDensity = Math.min(98, Math.max(35, Math.round(rhymeAnalysis.rhymeContribution * 0.7 + (detectorRhymeRatio * 30))));
+  } else if (detectorRhymeRatio >= 0.5) {
     rhymeDensity = Math.min(98, Math.round(detectorRhymeRatio * 100 + 20 + internalBonus));
   } else if (detectorRhymeRatio >= 0.2) {
     rhymeDensity = Math.min(85, Math.round(detectorRhymeRatio * 100 + 35 + internalBonus));

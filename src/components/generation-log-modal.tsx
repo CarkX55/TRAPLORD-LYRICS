@@ -81,7 +81,7 @@ export function GenerationLogModal({ open, onOpenChange, log }: GenerationLogMod
                 <DialogTitle className="text-base font-bold flex items-center gap-2">
                   Auditoría & Logs de Estudio
                   <Badge variant="outline" className="text-[10px] font-mono border-cyber/50 text-cyber bg-cyber/10">
-                    {log.mode === "pipeline_3_pass" ? "Pipeline 3 Pasadas" : log.mode === "regenerate_section" ? "Regeneración Parcial" : "Single Pass"}
+                    {log.mode === "pipeline_2_pass_primary" ? "Estudio 2 Pasadas (v2.2)" : log.mode === "pipeline_3_pass" ? "Pipeline 3 Pasadas" : log.mode === "regenerate_section" ? "Regeneración Parcial" : "Single Pass"}
                   </Badge>
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground mt-0.5">
@@ -128,6 +128,24 @@ export function GenerationLogModal({ open, onOpenChange, log }: GenerationLogMod
             </span>
           </div>
         </div>
+
+        {/* Banner de Planificación Rítmica Beat-First (v2.2) */}
+        {log.compositionPlanning && (
+          <div className="px-3.5 py-2 bg-purple-500/10 border-b border-purple-500/20 text-xs flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <span className="font-semibold text-purple-300 shrink-0">Beat-First Rhythmic Planning:</span>
+              <span className="text-muted-foreground text-[11px] truncate max-w-md">
+                {log.compositionPlanning.flowSkeletonSummary || "Hipótesis métrica activa"}
+              </span>
+            </div>
+            {log.compositionPlanning.writingCellsCount && (
+              <Badge variant="outline" className="text-[10px] border-purple-400/50 text-purple-300 bg-purple-400/10">
+                {log.compositionPlanning.writingCellsCount} Células de Escritura (4-Bar)
+              </Badge>
+            )}
+          </div>
+        )}
 
         {/* Contenedor de Pestañas */}
         <Tabs defaultValue="stages" className="flex-1 flex flex-col min-h-0">

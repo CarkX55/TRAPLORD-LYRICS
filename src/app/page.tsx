@@ -44,6 +44,7 @@ import type { HookVariationOption } from "@/app/api/hook-variations/route";
 import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, cleanSunoBracketHeaders, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
 import { ArtistSearchCombobox } from "@/components/artist-search-combobox";
 import { SectionVoiceCombobox } from "@/components/section-voice-combobox";
+import { SunoBudgetCard } from "@/components/suno-budget-card";
 import { generateLrcContent, generateStudioRecordingSheet, downloadClientFile } from "@/lib/export-helpers";
 import { getFlowProfile, getCadenceLabel, type FlowProfile } from "@/lib/artist-flow-profiles";
 import { analyzeLanguageRatio, analyzeSunoReadiness, type LanguageAnalysis, type SunoReadinessResult } from "@/lib/language-detector";
@@ -75,9 +76,13 @@ import {
 import type { GenerationProcessLog } from "@/lib/generation-logger";
 import { GenerationLogModal } from "@/components/generation-log-modal";
 
+import type { AnalysisSnapshot } from "@/lib/quality-gate";
+
 interface GenerateResponse {
   lyrics: string;
   songDocument?: SongDocument;
+  analysisSnapshot?: AnalysisSnapshot;
+  versionGraph?: SongVersionGraph;
   analysis: LanguageAnalysis;
   spanglishLabel: string;
   promptPreview: string;
@@ -653,7 +658,7 @@ export default function TrapGhostPage() {
       setLyrics(cleanLyrics);
       const doc = data.songDocument || parseRawLyricsToAST(cleanLyrics);
       setSongDocument(doc);
-      setVersionGraph(createInitialVersionGraph(doc, isRegen ? "Regeneración completa de estudio" : "Generación inicial de estudio"));
+      setVersionGraph(data.versionGraph || createInitialVersionGraph(doc, isRegen ? "Regeneración completa de estudio" : "Generación inicial de estudio"));
       setAnalysis(data.analysis);
       setSunoReadiness(readiness);
       setSpanglishLabel(data.spanglishLabel);
@@ -3917,6 +3922,15 @@ export default function TrapGhostPage() {
                   </div>
                 )}
               </div>
+
+              {/* Suno Budget Guardian Card (Tridimensional: Chars, Syllables, Runtime, Outro) */}
+              {lyrics && (
+                <SunoBudgetCard
+                  lyrics={lyrics}
+                  bpm={bpmVibe?.range ? parseInt(bpmVibe.range.split("-")[0], 10) : 135}
+                  className="mb-4"
+                />
+              )}
 
               {/* Suno Quick Style Prompt Banner v2 (4 Layers) */}
               {lyrics && (

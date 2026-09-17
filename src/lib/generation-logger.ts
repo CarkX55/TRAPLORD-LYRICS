@@ -58,4 +58,8 @@ export interface GenerationProcessLog {
     warningCount: number;
     findingsSummary: string[];
   };
+  compositionPlanning?: {
+    flowSkeletonSummary?: string;
+    writingCellsCount?: number;
+  };
 }

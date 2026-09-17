@@ -98,6 +98,96 @@ export function auditPromptContamination(
   };
 }
 
+export interface MetadataLeakFinding {
+  term: string;
+  source: "artist_bio" | "label_name" | "flow_descriptor";
+  isExemptedByUser: boolean;
+  reason: string;
+}
+
+export interface MetadataLeakReport {
+  hasLeak: boolean;
+  leaks: MetadataLeakFinding[];
+  sanitizedLyrics: string;
+}
+
+// Known internal artist bio descriptors and label terms that often leak into generation
+const INTERNAL_METADATA_TERMS: Array<{ term: string; source: MetadataLeakFinding["source"] }> = [
+  { term: "quality control", source: "label_name" },
+  { term: "qc the label", source: "label_name" },
+  { term: "rey del tresillo", source: "flow_descriptor" },
+  { term: "1017 thug", source: "label_name" },
+  { term: "brick squad", source: "label_name" },
+  { term: "murda beatz", source: "label_name" },
+  { term: "zaytoven piano", source: "flow_descriptor" },
+  { term: "grand hustle", source: "label_name" },
+  { term: "freebandz", source: "label_name" },
+  { term: "cactus jack label", source: "label_name" },
+  { term: "savage mode ii", source: "artist_bio" }
+];
+
+/**
+ * Audits lyrics for accidental prompt metadata leakage with strict precedence:
+ * User Explicit Input > Scene Facts > Internal Metadata.
+ * If user explicitly requested the term, it is exempted and preserved.
+ */
+export function auditMetadataLeakage(
+  lyrics: string,
+  userExplicitTokens: string[] = []
+): MetadataLeakReport {
+  const leaks: MetadataLeakFinding[] = [];
+  const lowerLyrics = lyrics.toLowerCase();
+
+  // Normalize user explicit tokens for comparison
+  const userAllowed = new Set(
+    userExplicitTokens.map(t => t.toLowerCase().trim()).filter(Boolean)
+  );
+
+  let sanitized = lyrics;
+
+  for (const item of INTERNAL_METADATA_TERMS) {
+    if (lowerLyrics.includes(item.term)) {
+      // Check if user explicitly provided this term
+      const isExempted = userAllowed.has(item.term) || 
+        Array.from(userAllowed).some(ut => ut.includes(item.term) || item.term.includes(ut));
+
+      if (isExempted) {
+        leaks.push({
+          term: item.term,
+          source: item.source,
+          isExemptedByUser: true,
+          reason: `Término "${item.term}" permitido porque fue solicitado explícitamente por el usuario`,
+        });
+      } else {
+        leaks.push({
+          term: item.term,
+          source: item.source,
+          isExemptedByUser: false,
+          reason: `Fuga de metadatos internos del sistema ("${item.term}") no solicitada por el usuario`,
+        });
+
+        // Clean out unintentional leaks from lyrics while preserving rhythm
+        const regex = new RegExp(item.term, "gi");
+        if (item.term === "quality control") {
+          sanitized = sanitized.replace(regex, "Real street motion");
+        } else if (item.term === "rey del tresillo") {
+          sanitized = sanitized.replace(regex, "el jefe del bloque");
+        } else {
+          sanitized = sanitized.replace(regex, "street business");
+        }
+      }
+    }
+  }
+
+  const hasLeak = leaks.some(l => !l.isExemptedByUser);
+
+  return {
+    hasLeak,
+    leaks,
+    sanitizedLyrics: sanitized,
+  };
+}
+
 /**
  * Sanitizes user input before entering prompt builder to prevent syntax breaks or accidental tokens.
  */

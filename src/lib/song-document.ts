@@ -34,12 +34,23 @@ export interface SongBar {
   analysis?: BarAnalysis;
 }
 
+export interface HookContract {
+  id: string;
+  approvedText: string;             // Texto lírico canónico estricto
+  bars: string[];                   // Líneas limpias de cada compás
+  contentHash: string;              // Hash de verificación de inmutabilidad
+  locked: boolean;
+  sourceVersionId?: string;
+  allowPerformanceVariation: boolean; // default true: lyricText canónico, performance (ad-libs, cortes) con variación
+}
+
 export interface SongSectionDoc {
   id: string;                  // e.g. "s_intro", "s_verse1", "s_hook"
   name: string;                // Display title: "Verse 1", "Chorus", etc.
   type: "intro" | "verse" | "hook" | "bridge" | "outro" | "beat_drop";
   voiceId: "lead" | "feature" | "adlib_layer" | "whisper_layer" | "both";
   performanceHint?: string;    // Suno acoustic hint: "Hypnotic repetitive mantra, heavy 808"
+  hookContractId?: string;     // Reference to HookContract if this section is a hook
   bars: SongBar[];
 }
 
@@ -59,6 +70,7 @@ export interface SongDocument {
   versionId: string;
   createdAt: number;
   updatedAt: number;
+  hookContracts?: Record<string, HookContract>;
   sections: SongSectionDoc[];
 }
 
@@ -75,6 +87,19 @@ export function cloneSongDocument(doc: SongDocument): SongDocument {
 export function hashBarContent(bar: SongBar): string {
   const perf = bar.performance ?? {};
   return `${bar.id}:${bar.lyricText.trim().toLowerCase()}:${bar.locked}:${JSON.stringify(perf)}`;
+}
+
+/**
+ * Calculates a deterministic content hash for an entire SongDocument AST.
+ * Guarantees that any bar text change, performance modification or structural
+ * alteration produces a distinct hash.
+ */
+export function hashSongDocument(doc: SongDocument): string {
+  const barStrings = doc.sections.map(s => `${s.id}:${s.name}:${s.bars.map(hashBarContent).join("|")}`).join("::");
+  const hash = Math.abs(
+    barStrings.split("").reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)
+  ).toString(36);
+  return `doc_${hash}_s${doc.sections.length}`;
 }
 
 /**
@@ -107,6 +132,99 @@ export function stringifyASTToSunoLyrics(doc: SongDocument): string {
       return `${header}\n${barLines.join("\n")}`;
     })
     .join("\n\n");
+}
+
+/**
+ * Creates an immutable HookContract from a raw or parsed hook topline.
+ */
+export function createHookContract(
+  approvedTopline: string,
+  options: { allowPerformanceVariation?: boolean; sourceVersionId?: string } = {}
+): HookContract {
+  const lines = approvedTopline
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l.length > 0 && !l.startsWith("["));
+
+  // Clean lines for canonical bars: strip bracket markup & ad-libs
+  const cleanBars = lines.map(line => {
+    return line
+      .replace(/\[[^\]]+\]/g, "")
+      .replace(/\([^)]+\)/g, "")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
+  }).filter(b => b.length > 0);
+
+  const cleanApprovedText = cleanBars.join("\n");
+  const contentHash = `hook_${Math.abs(
+    cleanApprovedText.split("").reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)
+  ).toString(36)}`;
+
+  return {
+    id: `hc_${Math.random().toString(36).substring(2, 9)}`,
+    approvedText: cleanApprovedText,
+    bars: cleanBars,
+    contentHash,
+    locked: true,
+    sourceVersionId: options.sourceVersionId,
+    allowPerformanceVariation: options.allowPerformanceVariation ?? true,
+  };
+}
+
+/**
+ * Deterministically binds and reconciles a HookContract to all Hook/Chorus sections in a SongDocument AST.
+ * Invariant: canonical lyricText is guaranteed 100% identical across all chorus instances.
+ * Performance (ad-libs, pauses, cuts) is preserved per section if allowPerformanceVariation is true.
+ */
+export function bindHookContractToAST(
+  doc: SongDocument,
+  contract: HookContract
+): SongDocument {
+  const cloned = cloneSongDocument(doc);
+  if (!cloned.hookContracts) {
+    cloned.hookContracts = {};
+  }
+  cloned.hookContracts[contract.id] = contract;
+
+  for (const section of cloned.sections) {
+    const isHook =
+      section.type === "hook" ||
+      section.name.toLowerCase().includes("chorus") ||
+      section.name.toLowerCase().includes("hook") ||
+      section.name.toLowerCase().includes("estribillo");
+
+    if (isHook) {
+      section.hookContractId = contract.id;
+
+      const targetBarCount = contract.bars.length;
+      if (targetBarCount === 0) continue;
+
+      // Reconcile each bar to canonical lyricText
+      for (let i = 0; i < targetBarCount; i++) {
+        const canonicalLyric = contract.bars[i];
+        if (section.bars[i]) {
+          section.bars[i].lyricText = canonicalLyric;
+          if (!contract.allowPerformanceVariation) {
+            section.bars[i].performance = undefined;
+          }
+        } else {
+          section.bars.push({
+            id: `b_hc_${Math.random().toString(36).substring(2, 8)}`,
+            position: i + 1,
+            lyricText: canonicalLyric,
+            locked: true,
+          });
+        }
+      }
+
+      // Trim any surplus bars beyond canonical hook
+      if (section.bars.length > targetBarCount) {
+        section.bars = section.bars.slice(0, targetBarCount);
+      }
+    }
+  }
+
+  return cloned;
 }
 
 /**

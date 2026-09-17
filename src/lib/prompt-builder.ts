@@ -3,7 +3,7 @@ import { getFlowProfile, getBreathInstruction, getCadenceLabel, type FlowProfile
 import { getArtistReference, type ArtistReference } from "./artist-references";
 import type { TrackAnalysis } from "./track-analyzer";
 import { getSceneById, type SituationalScene } from "./scene-engine";
-import { getMusicalDNAForArtist, getSectionModulatedTexture, type MusicalDNA } from "./musical-dna";
+import { getMusicalDNAForArtist, getSectionModulatedTexture, ARTIST_PRESETS, type MusicalDNA } from "./musical-dna";
 import { HOOK_STRATEGIES, recommendHookStrategy, type HookStrategyType } from "./hook-engine";
 import type { SemanticAnchor } from "./motif-engine";
 import type { LanguageDNA } from "./language-dna";
@@ -955,6 +955,51 @@ export function cleanSunoBracketHeaders(lyrics: string): string {
 }
 
 // ========================================================================
+// FEATURE CONTRAST PROFILE: CONTRASTE EQUILIBRADO MULTIDIMENSIONAL
+// ========================================================================
+
+export interface FeatureContrastProfile {
+  flowContrast: number;
+  lexicalContrast: number;
+  perspectiveContrast: number;
+  densityContrast: number;
+  vocalContrast: number;
+  contrastScore: number;
+  instruction: string;
+}
+
+export function buildFeatureContrastProfile(leadArtistId: string, featureArtistId: string): FeatureContrastProfile {
+  const leadDNA = getMusicalDNAForArtist(leadArtistId);
+  const featDNA = getMusicalDNAForArtist(featureArtistId);
+  const leadProfile = getFlowProfile(leadArtistId);
+  const featProfile = getFlowProfile(featureArtistId);
+
+  const flowDiff = leadProfile?.cadence !== featProfile?.cadence ? 0.8 : 0.2;
+  const leadSyllables = leadProfile?.syllablesPerBar ?? 10;
+  const featSyllables = featProfile?.syllablesPerBar ?? 10;
+  const densityDiff = Math.min(1.0, Math.abs(leadSyllables - featSyllables) / 6);
+  const vocalDiff = leadDNA.vocal.sunoVocalTimbre !== featDNA.vocal.sunoVocalTimbre ? 0.75 : 0.25;
+  const leadPreset = ARTIST_PRESETS[leadArtistId];
+  const featPreset = ARTIST_PRESETS[featureArtistId];
+  const originDiff = (leadPreset?.origin && featPreset?.origin && leadPreset.origin !== featPreset.origin) ? 0.7 : 0.3;
+  const lexicalDiff = (leadProfile?.wordplayTier !== featProfile?.wordplayTier) ? 0.6 : 0.3;
+
+  const contrastScore = Number(((flowDiff * 0.3) + (densityDiff * 0.25) + (vocalDiff * 0.25) + (originDiff * 0.2)).toFixed(2));
+
+  const instruction = `- **Contraste de Feature Equilibrado (Score: ${contrastScore})**: El artista invitado debe aportar contraste orgánico en 2-3 dimensiones clave (cadencia: ${featProfile?.cadence ?? "variable"}, entrega vocal: ${featDNA.vocal.sunoVocalTimbre}), manteniendo el pulso rítmico general pero sin clonar el fraseo del artista principal.`;
+
+  return {
+    flowContrast: flowDiff,
+    lexicalContrast: lexicalDiff,
+    perspectiveContrast: originDiff,
+    densityContrast: densityDiff,
+    vocalContrast: vocalDiff,
+    contrastScore,
+    instruction,
+  };
+}
+
+// ========================================================================
 // PIPELINE DE ESTUDIO SNAPPY: 2-PASS PRIMARY + EXCEPTION-ONLY REPAIR
 // ========================================================================
 
@@ -963,7 +1008,7 @@ export function cleanSunoBracketHeaders(lyrics: string): string {
  * Diseña el estribillo / hook central con musicalidad, fraseo completo y el estilo auténtico del artista.
  * Prohíbe las restricciones telegráficas artificiales y los atrezzos inyectados.
  */
-export function buildStage1ToplinePrompt(params: PromptParams): string {
+export function buildStage1ToplinePrompt(params: PromptParams, flowSkeletonSummary?: string): string {
   const artist = getArtistById(params.artistId);
   const featureArtist = params.featureArtistId ? getArtistById(params.featureArtistId) : null;
   const flowProfile = getFlowProfile(params.artistId);
@@ -1044,11 +1089,14 @@ ${hookInstructionBlock}
 2. **VOCABULARIO ORGÁNICO (CERO PALABRAS INYECTADAS):**
    - Desarrolla el gancho basándote ÚNICAMENTE en las temáticas elegidas por el usuario y el vocabulario callejero característico de ${artist?.name ?? "el artista"}.
    - Queda TERMINANTEMENTE PROHIBIDO inventar o forzar objetos de atrezzo artificiales no pedidos (como OLED, mármol, etc.).
-3. **AUTONOMÍA Y AD-LIBS:**
+   - Higiene de Metadatos: Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la ficha bio del artista (ej: 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
+3. **AUTONOMÍA Y PRESUPUESTO DE AD-LIBS:**
    - Cada compás debe tener fuerza propia dentro del groove.
+   - En el Estribillo/Chorus mantén los ad-libs en nivel moderado o bajo (máximo 1-2 compases seguidos con ad-lib) para que el gancho respire y la melodía central sea el foco.
    - Queda PROHIBIDO incluir traducciones literales entre idiomas entre paréntesis.
    - Los ad-libs entre paréntesis *(Ad-lib)* cumplen función musical en contratiempo: réplicas de actitud, colas melódicas o acentos rítmicos: *(Yeah)*, *(Facts)*, *(Uh)*.
 
+${flowSkeletonSummary ? `\n# 📐 GUÍA DE RITMO Y CADENCIA GLOBAL (BEAT-FIRST):\n${flowSkeletonSummary}\n` : ""}
 # 📋 FORMATO DE SALIDA ESTRICTO:
 Devuelve EXCLUSIVAMENTE las secciones de gancho solicitadas con su encabezado entre corchetes limpios (SOLO el nombre de la sección y del artista, SIN notas de estilo ni acústica dentro del corchete):
 [Chorus: ${artist?.name ?? "Lead"}]
@@ -1064,7 +1112,12 @@ NO escribas notas de producción, introducciones ni explicaciones fuera de los c
  * guiado por 5 contratos desacoplados que abarcan narrativa, flow switching, y la capa vocal completa
  * (ad-libs tridimensionales, réplicas dialécticas y tags acústicos de Suno AI).
  */
-export function buildStage2GhostwriterPrompt(params: PromptParams, lockedTopline: string): string {
+export function buildStage2GhostwriterPrompt(
+  params: PromptParams,
+  lockedTopline: string,
+  writingCellsSnippet?: string,
+  flowSkeletonSnippet?: string
+): string {
   const artist = getArtistById(params.artistId);
   const featureArtist = params.featureArtistId ? getArtistById(params.featureArtistId) : null;
   const flowProfile = getFlowProfile(params.artistId);
@@ -1105,6 +1158,9 @@ export function buildStage2GhostwriterPrompt(params: PromptParams, lockedTopline
     }
   }
 
+  // Feature Contrast Profile (si hay feature artist)
+  const featureContrast = featureArtist ? buildFeatureContrastProfile(params.artistId, featureArtist.id) : null;
+
   // Estructura limpia
   const structurePlan = params.structure.sections.map(s => {
     const va = params.sectionVoices?.find(v => v.sectionName === s.name);
@@ -1113,11 +1169,15 @@ export function buildStage2GhostwriterPrompt(params: PromptParams, lockedTopline
     if (va?.voice === "feature" && featureArtist) voice = featureArtist.name;
     else if (va?.voice === "both") voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
 
+    if (s.type === "chorus" || s.type === "hook") {
+      return `[${s.name}: ${voice}] — (REPETICIÓN OBLIGATORIA: Copia textualmente el GANCHO APROBADO oficial; la letra cantada debe ser idéntica al 100%, admitiendo variación interpretativa en ad-libs)`;
+    }
+
     if (isHype || (s.type === "intro" && (va?.introStyle === "bouncy_warmup" || isHype))) {
       return `[${s.name}: ${voice}] — 4 compases (Modo Hype Man: 🚫 PROHIBIDO ESCRIBIR VERSOS NARRATIVOS O LÍNEAS CANTADAS. Debe ser EXCLUSIVAMENTE 3 a 5 ad-libs y grunts entre paréntesis: ej: *(Yeah... turn me up)*, *(Hold up...)*, *(Let's get it! [Beat Drop])*)`;
     }
 
-    const bars = va?.bars ? `${va.bars} barras` : (s.type === "verse" ? "8-12 barras" : "4-8 barras");
+    const bars = va?.bars ? `${va.bars} barras` : (s.type === "verse" ? "8-10 barras" : "4-8 barras");
     return `[${s.name}: ${voice}] — ${bars}`;
   }).join("\n");
 
@@ -1126,8 +1186,10 @@ export function buildStage2GhostwriterPrompt(params: PromptParams, lockedTopline
   return `Eres un Ghostwriter de élite y Director Vocal de cabina en el Trap y Rap contemporáneo.
 Tu misión es componer la canción definitiva masterizada con el máximo calibre lírico, flow elástico y dimensión vocal tridimensional para Suno AI v4.5.
 
-# 🔒 GANCHO APROBADO DE LA SESIÓN (INMUTABLE)
-El Topliner ya fijó el estribillo de la sesión. DEBES incluirlo EXACTAMENTE en cada aparición de [Chorus / Hook] dentro de la canción:
+# 🔒 GANCHO APROBADO DE LA SESIÓN (INMUTABLE - HOOK CONTRACT)
+El Topliner ya fijó el estribillo oficial de la sesión. DEBES incluirlo en cada aparición de [Chorus / Hook] dentro de la canción:
+- La letra central cantada (lyricText) debe ser EXACTAMENTE IDÉNTICA en cada estribillo.
+- Puedes aportar ligeras variaciones interpretativas en ad-libs secundarios o cortes entre compases:
 ${lockedTopline}
 
 ================================================================================
@@ -1144,8 +1206,9 @@ ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 🚫 REGLAS DE VOCABULARIO Y AUTENTICIDAD:
 1. **Cero Palabras Inyectadas / Cero Atrezzo Artificial:** Desarrolla la narrativa y metáforas ÚNICAMENTE a través de las temáticas elegidas por el usuario y el vocabulario natural de ${artist?.name ?? "el artista"}. Queda terminantemente prohibido meter objetos no pedidos.
 2. **Memoria Negativa Inter-Estrofas:** Si usas un concepto o metáfora en el Verso 1, no lo repitas en el Verso 2. Haz que la historia avance con consecuencias.
-3. **Cero Clichés Baratos de IA:** Prohibido "el asfalto no perdona", "fuego/juego/cielo", "haciendo money sin parar". Escribe barras reales con peso callejero y actitud genuina.
+3. **Cero Clichés Baratos de IA:** Evita rimas escolares automáticas (suerte/muerte, pena/vena, etc.) y frases gastadas como "el asfalto no perdona" o "haciendo money sin parar". Prioriza la escena física y el peso de calle real.
 4. **Higiene de Privacidad:** NUNCA calques biografía personal íntima, familiares fallecidos ni nombres de pandillas reales concretas de la infancia del artista.
+5. **Higiene de Metadatos de Sistema:** Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la bio del artista (como 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
 
 ================================================================================
 # 📜 CONTRATO 2: NARRATIVA, ESTRUCTURA & HYPE MAN (NARRATIVE CONTRACT)
@@ -1162,21 +1225,27 @@ Si la [Intro] está en modo Hype Man o tiene asignado 'Hype', queda TERMINANTEME
 ================================================================================
 - Flow DNA (${artist?.name}): Cadencia ${mainDNA.flow.cadenceType} (${mainDNA.flow.avgSyllablesPerBar.join("-")} sílabas por compás). Síncopa: ${Math.round(mainDNA.flow.syncopation * 100)}%. ${flowProfile?.cadenceInstruction ?? ""}
 ${featDNA ? `- Flow Feature (${featureArtist?.name}): Cadencia ${featDNA.flow.cadenceType}. ${featureFlowProfile?.cadenceInstruction ?? ""}` : ""}
-- ${rhymeLevelInstruction}
+${featureContrast ? `${featureContrast.instruction}\n` : ""}- ${rhymeLevelInstruction}
 
-🔄 FLOW SWITCHING DINÁMICO EN CADA VERSO:
-En cada verso de 8 a 16 barras, ejecuta una progresión dinámica en 3 movimientos para evitar monotonía:
-1. **Barras 1 a 4 (Pacing & Atmósfera):** Entrada espaciosa, ritmo pausado, establece la escena con detalles visuales concretos.
-2. **Barras 5 a 8 (Shift Rítmico & Aceleración):** Introduce tresillos (triplets), rimas internas continuas o síncopa rápida para inyectar adrenalina.
-3. **Barras 9 a 12/16 (Tensión & Punchline Payoff):** Vuelve a abrir espacio con golpes secos y remata con el punchline más pesado que catapulte directamente al [Chorus].
+🔄 RIMA Y DENSIDAD VARIABLE:
+Se permiten compases hablados (spoken bars), silencios rítmicos y rimas internas asonantes. La rima nunca debe forzar o gobernar la frase de forma artificial.
 
+${flowSkeletonSnippet ? `${flowSkeletonSnippet}\n\n` : ""}${writingCellsSnippet ? `${writingCellsSnippet}\n\n` : `🔄 FLOW SWITCHING DINÁMICO EN CADA VERSO:
+En cada verso, ejecuta una progresión dinámica para evitar monotonía:
+1. Pacing & Atmósfera: Entrada espaciosa, ritmo pausado, establece la escena con detalles visuales concretos.
+2. Shift Rítmico: Introduce rimas internas continuas o síncopa rápida para inyectar adrenalina.
+3. Tensión & Punchline Payoff: Vuelve a abrir espacio con golpes secos y remata con punchline contundente.
+`}
 ================================================================================
 # 📜 CONTRATO 4: CAPA VOCAL, PERFORMANCE & AD-LIBS MASTER (VOCAL CONTRACT)
 ================================================================================
-Como Director Vocal, incorpora la capa de performance completa DIRECTAMENTE en esta letra:
-1. **Ad-libs Tridimensionales en Contratiempo:**
-   - Cada compás debe incluir ad-libs con personalidad entre paréntesis en cursiva: colas melódicas *(no me busques...)*, réplicas cínicas *(¿quién si no?)*, *(facts)*, o grunts callejeros.
-   - PROHIBIDO muletillas vacías repetitivas como (Yeah) en todas las líneas.
+Como Director Vocal, incorpora la capa de performance con criterio musical:
+1. **Ad-libs con Significación & Espacio Rítmico:**
+   - Distribuye los ad-libs de forma musical en contratiempo: NUNCA en cada compás continuo.
+   - LÍMITE DE CONSECUTIVIDAD: Máximo 2 compases seguidos con ad-lib (maxConsecutiveAdlibBars = 2).
+   - Deja compases limpios para que la voz principal y el beat respiren con fuerza.
+   - Presupuesto por sección: En Versos: moderado (~40-50% de las barras con ad-lib); en Coros: bajo/moderado; en Outro: sutil/sparse.
+   - Prioriza réplicas con personalidad: colas melódicas *(no me busques...)*, réplicas cínicas *(¿quién si no?)*, *(facts)*. PROHIBIDO muletillas vacías repetitivas en bucle.
 2. **Call & Response Dialéctico:**
    ${callResponseSections.length > 0 ? `- En las secciones ${callResponseSections.join(", ")}, las líneas líderes deben recibir réplicas dialécticas directas en contratiempo: Voz: "Hablan de lealtad pero no los vi..." ➔ Ad-lib: *(nunca)*.` : "- Si hay diálogos o respuestas, hazlos dialécticos con personalidad."}
 3. **Dinámica Acústica Suno AI:**

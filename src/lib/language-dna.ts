@@ -64,11 +64,11 @@ export function buildLanguageDNA(spanglishPercent: number, artistId: string, fea
   // Continuous prompt instruction
   let instruction = "";
   if (ratio >= 0.70) {
-    instruction = `LENGUAJE CONTINUO: Dominio anglosajón prioritario (~${Math.round(ratio * 100)}% EN). El cuerpo melódico y las barras métricas se escriben predominantemente en inglés callejero (Atlanta/US Trap). El español entra de forma quirúrgica (${Math.round((1 - ratio) * 100)}% ES) como remate de barra, punchline final o frase de peso callejero. Queda PROHIBIDO redactar estrofas enteras en español.`;
+    instruction = `LENGUAJE CONTINUO: Dominio anglosajón prioritario (~${Math.round(ratio * 100)}% EN). El cuerpo melódico y las barras métricas se escriben predominantemente en inglés callejero (Atlanta/US Trap). El español entra de forma orgánica (${Math.round((1 - ratio) * 100)}% ES) como remate de barra, punchline final o frase de peso callejero. EVITA cortar cada compás rígidamente por la mitad; deja fluir el idioma en bloques naturales.`;
   } else if (ratio <= 0.30) {
-    instruction = `LENGUAJE CONTINUO: Dominio español prioritario (~${Math.round((1 - ratio) * 100)}% ES). El peso narrativo, rimas y barras métricas se componen en español callejero/latino. El inglés (~${Math.round(ratio * 100)}% EN) actúa como inserción de jerga, marcas, flex y ad-libs de contratiempo.`;
+    instruction = `LENGUAJE CONTINUO: Dominio español prioritario (~${Math.round((1 - ratio) * 100)}% ES). El peso narrativo, rimas y barras métricas se componen en español callejero/latino. El inglés (~${Math.round(ratio * 100)}% EN) entra como jerga urbana, marcas, flex y ad-libs de contratiempo con naturalidad, sin forzar cambios artificiales en cada línea.`;
   } else {
-    instruction = `LENGUAJE CONTINUO: Code-switching equilibrado (~${Math.round(ratio * 100)}% EN / ~${Math.round((1 - ratio) * 100)}% ES). Alternancia fluida y bilingüe compás a compás con naturalidad caribeña/urbana, evitando patrones mecánicos.`;
+    instruction = `LENGUAJE CONTINUO: Code-switching orgánico y musical (~${Math.round(ratio * 100)}% EN / ~${Math.round((1 - ratio) * 100)}% ES). Alternancia derivada del discurso callejero real: trabaja bloques de compases fluidos, barras enteras en un idioma seguidas de barras en otro, o español con jerga de hip-hop auténtica. Queda TERMINANTEMENTE DESACONSEJADA la alternancia matemática o partir artificialmente cada línea en 50% inglés y 50% español.`;
   }
 
   return {
@@ -103,6 +103,13 @@ export interface LanguageRatioResult {
   confidence: number;
   bandDecision: "soft_pass" | "eval_band" | "hard_fail";
   tokenBreakdownSample: LanguageTokenAnalysis[];
+  // Organic Code-Switching & Mechanicity metrics
+  switchDensity: number;            // Total language switches / bars count
+  switchPositionVariance: number;   // Variance of switch positions
+  switchEntropy: number;            // Entropy of transitions
+  mechanicityScore: number;         // 0.0 (discurso natural) a 1.0 (algoritmo rígido 50/50)
+  adlibEnglishPercent?: number;     // Secondary adlib language tracking
+  adlibSpanishPercent?: number;
 }
 
 // Curated high-frequency bilingual Trap & Slang dictionaries
@@ -135,24 +142,40 @@ const AMBIGUOUS_TRAP_SLANG = new Set([
 ]);
 
 /**
- * Calculates the Syllable-Weighted Language Ratio with confidence & ambiguity tracking.
+ * Calculates the Syllable-Weighted Language Ratio with confidence & organic mechanicity tracking.
+ * Separates primary lyricText from secondary ad-libs to avoid ratio skew.
  */
 export function calculateSyllableLanguageRatio(lyrics: string, target: LanguageTarget): LanguageRatioResult {
   const lines = lyrics.split("\n").filter(l => l.trim() && !l.trim().startsWith("["));
   let enSyllables = 0;
   let esSyllables = 0;
   let ambSyllables = 0;
+  let adlibEnSyllables = 0;
+  let adlibEsSyllables = 0;
   const tokenSamples: LanguageTokenAnalysis[] = [];
 
+  const barClassifications: Array<"en" | "es" | "mixed" | "neutral"> = [];
+  let mixedBarsCount = 0;
+
   for (const line of lines) {
-    const words = line
+    // Separate secondary adlibs from primary sung lyric
+    const adlibMatches = line.match(/\(([^)]+)\)/g) || [];
+    const lyricOnly = line
+      .replace(/\[[^\]]+\]/g, " ")
+      .replace(/\(([^)]+)\)/g, " ")
+      .trim();
+
+    let barEnSyllables = 0;
+    let barEsSyllables = 0;
+
+    // Process primary lyric words
+    const words = lyricOnly
       .replace(/[()[\]*.,!?:;"'~]/g, " ")
       .split(/\s+/)
       .map(w => w.toLowerCase().trim())
       .filter(w => w.length > 0);
 
     for (const word of words) {
-      // Estimate syllable count using existing syllable counter
       const sylInfo = analyzeSyllables(word);
       const sylCount = Math.max(1, sylInfo.totalSyllables);
 
@@ -167,16 +190,18 @@ export function calculateSyllableLanguageRatio(lyrics: string, target: LanguageT
         classification = "es";
         tokenConfidence = 0.95;
         esSyllables += sylCount;
+        barEsSyllables += sylCount;
       } else if (ENGLISH_MARKERS.has(word) || /(ing$|tion$|ed$|ness$|ight$)/i.test(word)) {
         classification = "en";
         tokenConfidence = 0.95;
         enSyllables += sylCount;
+        barEnSyllables += sylCount;
       } else {
-        // Fallback: Latin phonetics bias vs Anglo consonants
         if (/[bcdfghjklmnpqrstvwxyz]{3,}/i.test(word)) {
           classification = "en";
           tokenConfidence = 0.65;
           enSyllables += sylCount;
+          barEnSyllables += sylCount;
         } else {
           classification = "ambiguous";
           tokenConfidence = 0.4;
@@ -188,12 +213,37 @@ export function calculateSyllableLanguageRatio(lyrics: string, target: LanguageT
         tokenSamples.push({ token: word, syllables: sylCount, classification, confidence: tokenConfidence });
       }
     }
+
+    // Process secondary adlibs
+    for (const adMatch of adlibMatches) {
+      const adWords = adMatch.replace(/[()]/g, "").split(/\s+/).filter(Boolean);
+      for (const aw of adWords) {
+        const sylCount = Math.max(1, analyzeSyllables(aw).totalSyllables);
+        const low = aw.toLowerCase();
+        if (ENGLISH_MARKERS.has(low) || /(yeah|facts|hold|up|look|wrist|let's|get|it|money)/i.test(low)) {
+          adlibEnSyllables += sylCount;
+        } else if (SPANISH_MARKERS.has(low) || /(dime|claro|nunca|siempre|pablo|oro)/i.test(low)) {
+          adlibEsSyllables += sylCount;
+        }
+      }
+    }
+
+    // Classify bar nature
+    if (barEnSyllables > 0 && barEsSyllables > 0) {
+      barClassifications.push("mixed");
+      mixedBarsCount++;
+    } else if (barEnSyllables > barEsSyllables) {
+      barClassifications.push("en");
+    } else if (barEsSyllables > barEnSyllables) {
+      barClassifications.push("es");
+    } else {
+      barClassifications.push("neutral");
+    }
   }
 
   const totalSyllables = enSyllables + esSyllables + ambSyllables || 1;
   const classifiedSyllables = enSyllables + esSyllables || 1;
   
-  // Normalized ratios: ambiguous syllables split according to target lean
   const rawEnPercent = Math.round((enSyllables / classifiedSyllables) * 100);
   const rawEsPercent = Math.round((esSyllables / classifiedSyllables) * 100);
   const ambPercent = Math.round((ambSyllables / totalSyllables) * 100);
@@ -201,7 +251,48 @@ export function calculateSyllableLanguageRatio(lyrics: string, target: LanguageT
   const deviation = Math.abs(rawEnPercent - Math.round(target.center * 100));
   const confidence = Math.max(0.3, Number((1 - (ambPercent / 100) * 0.7).toFixed(2)));
 
-  // Determine band decision
+  // Compute code-switching mechanicity and entropy
+  const totalBars = Math.max(1, barClassifications.length);
+  let switchesCount = 0;
+  let rigidAlternations = 0; // count of A -> B -> A -> B patterns
+
+  for (let i = 1; i < barClassifications.length; i++) {
+    const prev = barClassifications[i - 1];
+    const curr = barClassifications[i];
+    if (prev !== curr && prev !== "neutral" && curr !== "neutral") {
+      switchesCount++;
+    }
+    if (i >= 2) {
+      const prev2 = barClassifications[i - 2];
+      if (prev2 === curr && prev !== curr && curr !== "neutral") {
+        rigidAlternations++;
+      }
+    }
+  }
+
+  const switchDensity = Number((switchesCount / totalBars).toFixed(2));
+  const midBarRatio = mixedBarsCount / totalBars;
+  
+  // Mechanicity: high if either almost every line is cut mid-bar (>65%) OR alternating strictly every bar
+  let mechanicity = 0.15;
+  if (midBarRatio > 0.65) {
+    mechanicity += 0.55 * ((midBarRatio - 0.65) / 0.35);
+  }
+  if (rigidAlternations > totalBars * 0.40) {
+    mechanicity += 0.30;
+  }
+  const mechanicityScore = Number(Math.min(1.0, Math.max(0.0, mechanicity)).toFixed(2));
+
+  // Switch entropy: higher is healthier / less robotic
+  const switchEntropy = Number((1.0 - mechanicityScore * 0.7).toFixed(2));
+  const switchPositionVariance = Number((1.0 - midBarRatio * 0.5).toFixed(2));
+
+  // Adlib language breakdown
+  const totalAdlibSyllables = adlibEnSyllables + adlibEsSyllables || 1;
+  const adlibEnglishPercent = Math.round((adlibEnSyllables / totalAdlibSyllables) * 100);
+  const adlibSpanishPercent = Math.round((adlibEsSyllables / totalAdlibSyllables) * 100);
+
+  // Band decision
   let bandDecision: LanguageRatioResult["bandDecision"] = "soft_pass";
   const enRatio = rawEnPercent / 100;
   if (enRatio >= target.softMin && enRatio <= target.softMax) {
@@ -224,5 +315,11 @@ export function calculateSyllableLanguageRatio(lyrics: string, target: LanguageT
     confidence,
     bandDecision,
     tokenBreakdownSample: tokenSamples,
+    switchDensity,
+    switchPositionVariance,
+    switchEntropy,
+    mechanicityScore,
+    adlibEnglishPercent,
+    adlibSpanishPercent,
   };
 }
