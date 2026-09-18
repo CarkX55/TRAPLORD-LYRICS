@@ -7,6 +7,7 @@ import { getMusicalDNAForArtist, getSectionModulatedTexture, ARTIST_PRESETS, typ
 import { HOOK_STRATEGIES, recommendHookStrategy, type HookStrategyType } from "./hook-engine";
 import type { SemanticAnchor } from "./motif-engine";
 import type { LanguageDNA } from "./language-dna";
+import { formatSectionHeader, resolveSectionSpec } from "./song-document";
 
 /**
  * Derives the rhyme tier from the artist's defaultRhymeScheme.
@@ -923,20 +924,18 @@ export function cleanSunoBracketHeaders(lyrics: string): string {
   if (!lyrics) return "";
   return lyrics
     // Eliminar Markdown headers: ### [Section] -> [Section] o ### Section
-    .replace(/^#{1,6}\s*(\[[^\]]+\])/gm, "$1")
-    .replace(/^#{1,6}\s+/gm, "")
-    // Eliminar Markdown bold/italic envolviendo corchetes: **[Section]** o *[Section]* -> [Section]
-    .replace(/^[*_]{1,3}\s*(\[[^\]]+\])\s*[*_]{0,3}/gm, "$1")
-    .replace(/(\[[^\]]+\])\s*[*_]{1,3}/gm, "$1")
+    .replace(/^#{1,6}[ \t]*(\[[^\]]+\])/gm, "$1")
+    .replace(/^#{1,6}[ \t]+/gm, "")
+    // Eliminar Markdown bold/italic envolviendo corchetes SOLO en la misma línea (sin consumir saltos de línea \n):
+    .replace(/^[ \t]*[*_]{1,3}[ \t]*(\[[^\]]+\])[ \t]*[*_]{0,3}/gm, "$1")
+    .replace(/(\[[^\]]+\])[ \t]*[*_]{1,3}/g, "$1")
     // Limpiar notas residuales pegadas al corchete: e.g. [Chorus: ...] — 8 barras → [REGLA...]
     .replace(/^(\[[^\]]+\])[ \t]*[—–-][ \t]*.*$/gm, "$1")
     .replace(/^(\[[^\]]+\])[ \t]*→.*$/gm, "$1")
     // Limpiar notas de intérprete tipo *Intérprete:*
     .replace(/^\*+(?:Int[ée]rprete?|Interpr[èe]te?):\s*([^*\n]+)\*+$/gim, "")
     .replace(/^(?:Int[ée]rprete?|Interpr[èe]te?):\s*.+$/gim, "")
-    // Limpiar descripciones de estilo, cómo cantar, o tags técnicos dentro del corchete:
-    // e.g. [Chorus: Takeoff (RIP), Hypnotic repetitive mantra, heavy 808 sub-bass, wide stereo autotune]
-    // -> [Chorus: Takeoff]
+    // Limpiar descripciones de estilo, cómo cantar, o tags técnicos dentro del corchete
     .replace(/\[([A-Za-z0-9_ \-]+)(?::\s*([^,\]\n]+))?(?:,[^\]\n]*)*\]/g, (match, sec, artistName) => {
       const cleanSec = sec.trim();
       if (artistName && artistName.trim()) {
@@ -945,10 +944,20 @@ export function cleanSunoBracketHeaders(lyrics: string): string {
           .replace(/\s*\((?:RIP|QEPD)\)/gi, "")
           .replace(/\s*\((?:Ad-libs only|Hype Man[^)]*)\)/gi, "")
           .trim();
-        return `[${cleanSec}: ${cleanArtist}]`;
+        return formatSectionHeader(cleanSec, cleanArtist);
       }
-      return `[${cleanSec}]`;
+      return formatSectionHeader(cleanSec);
     })
+    // Limpiar backticks de código markdown
+    .replace(/`{1,3}/g, "")
+    // Limpiar asteriscos markdown envolviendo ad-libs: *(adlib)* -> (adlib)
+    .replace(/\*[ \t]*\(([^)]+)\)[ \t]*\*/g, "($1)")
+    // Limpiar asteriscos huérfanos antes de ad-libs: ** (adlib) -> (adlib)
+    .replace(/[*_]{1,3}[ \t]*\(([^)]+)\)/g, "($1)")
+    // Limpiar asteriscos huérfanos al final de línea
+    .replace(/[ \t]*[*_]{1,3}[ \t]*$/gm, "")
+    // Limpiar asteriscos huérfanos al inicio de línea
+    .replace(/^[ \t]*[*_]{1,3}[ \t]*/gm, "")
     // Limpiar saltos de línea triples
     .replace(/^\s*[\r\n]{2,}/gm, "\n\n")
     .trim();
@@ -1040,23 +1049,14 @@ export function buildStage1ToplinePrompt(params: PromptParams, flowSkeletonSumma
 - Escribe barras musicales completas y pegadizas con la actitud y slang natural del artista, sin sonar telegráfico ni forzar palabras mecánicas.`;
   }
 
-  // Identificar secciones de Hook / Chorus y secciones con Mantra/Staccato
-  const targetSections = params.structure.sections.filter(s => {
-    const isChorus = s.type === "chorus" || s.name.toLowerCase().includes("chorus") || s.name.toLowerCase().includes("hook") || s.name.toLowerCase().includes("estribillo");
-    const va = params.sectionVoices?.find(v => v.sectionName === s.name);
-    const isMantraOrStaccato = va?.repetitionPattern === "mantra" || va?.repetitionPattern === "staccato" || va?.hookStyle === "mantra";
-    return isChorus || isMantraOrStaccato;
-  });
+  // Resolver especificación canónica del Hook desde la estructura
+  const hookSpec = resolveSectionSpec(params.structure.sections, params.sectionVoices, "hook");
+  const targetBars = hookSpec.targetBars || 8;
+  let hookVoice = artist?.name ?? "Lead";
+  if (hookSpec.voiceId === "feature" && featureArtist) hookVoice = featureArtist.name;
+  else if (hookSpec.voiceId === "both") hookVoice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
 
-  const sectionDetails = targetSections.map(s => {
-    const va = params.sectionVoices?.find(v => v.sectionName === s.name);
-    let voice = artist?.name ?? "Lead";
-    if (va?.voice === "feature" && featureArtist) voice = featureArtist.name;
-    else if (va?.voice === "both") voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
-
-    const kw = va?.customKeyword?.trim();
-    return `- Sección [${s.name}]: Cantada por ${voice}. Barras: ${va?.bars || 8} compases.${kw ? ` · Palabra/Frase clave obligatoria: "${kw}"` : ""}.`;
-  }).join("\n");
+  const kw = hookVa?.customKeyword?.trim();
 
   const userTopicsList = [params.customTopic, ...params.topics].filter(Boolean);
   const topicsBlock = userTopicsList.length > 0
@@ -1064,7 +1064,7 @@ export function buildStage1ToplinePrompt(params: PromptParams, flowSkeletonSumma
     : "- **Temática**: Estilo libre de trap y calle.";
 
   return `Eres el Topliner y Diseñador de Ganchos (Hook Architect) más cotizado del Trap y Rap contemporáneo.
-Tu misión en esta sesión de estudio es componer EXCLUSIVAMENTE el [Chorus / Hook] central de la canción con total musicalidad y autenticidad callejera. NO escribas versos ni intros todavía.
+Tu misión en esta sesión de estudio es componer EXCLUSIVAMENTE UN ÚNICO [Chorus / Hook] canónico para la canción con total musicalidad y autenticidad callejera. NO escribas versos, intros ni repeticiones todavía.
 
 # 🎯 PROYECTO & ADN DEL ARTISTA
 - Artista Principal: ${artist?.name ?? "Lead"} (${artist?.origin ?? "Trap"})
@@ -1077,8 +1077,11 @@ ${topicsBlock}
 ${params.customDictionary?.trim() ? `- Diccionario de calle del usuario: { ${params.customDictionary.trim()} }` : ""}
 ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 
-# 📋 SECCIONES REQUERIDAS DE ESTA PASADA:
-${sectionDetails || "- [Chorus]: 8 compases pegadizos."}
+# 🎯 TAREA: DISEÑO DE UN ÚNICO HOOK CANÓNICO (SINGLE CANONICAL UNIT)
+- Objetivo: Diseña EXACTAMENTE UN ÚNICO bloque [Chorus: ${hookVoice}] de ${targetBars} compases.
+- Cardinalidad canónica: EXACTAMENTE ${targetBars} compases / líneas de texto cantado.${kw ? ` · Palabra/Frase clave obligatoria: "${kw}"` : ""}
+- 🚫 PROHIBIDO generar repeticiones del estribillo (Chorus 2, Chorus 3, etc.) ni duplicar el bloque de texto. El motor de estudio se encargará de instanciarlo a lo largo de la canción.
+- 🚫 PROHIBIDO usar asteriscos * o ** ni formato Markdown en los ad-libs. Usa ÚNICAMENTE paréntesis planos normales: (Yeah), (Facts), (Uh).
 
 ${hookInstructionBlock}
 
@@ -1094,16 +1097,17 @@ ${hookInstructionBlock}
    - Cada compás debe tener fuerza propia dentro del groove.
    - En el Estribillo/Chorus mantén los ad-libs en nivel moderado o bajo (máximo 1-2 compases seguidos con ad-lib) para que el gancho respire y la melodía central sea el foco.
    - Queda PROHIBIDO incluir traducciones literales entre idiomas entre paréntesis.
-   - Los ad-libs entre paréntesis *(Ad-lib)* cumplen función musical en contratiempo: réplicas de actitud, colas melódicas o acentos rítmicos: *(Yeah)*, *(Facts)*, *(Uh)*.
+   - Los ad-libs entre paréntesis (Ad-lib) cumplen función musical en contratiempo: réplicas de actitud, colas melódicas o acentos rítmicos: (Yeah), (Facts), (Uh).
 
 ${flowSkeletonSummary ? `\n# 📐 GUÍA DE RITMO Y CADENCIA GLOBAL (BEAT-FIRST):\n${flowSkeletonSummary}\n` : ""}
 # 📋 FORMATO DE SALIDA ESTRICTO:
-Devuelve EXCLUSIVAMENTE las secciones de gancho solicitadas con su encabezado entre corchetes limpios (SOLO el nombre de la sección y del artista, SIN notas de estilo ni acústica dentro del corchete):
-[Chorus: ${artist?.name ?? "Lead"}]
-Línea 1 *(Ad-lib)*
-Línea 2 *(Ad-lib)*
+Devuelve EXCLUSIVAMENTE UN ÚNICO bloque [Chorus: ${hookVoice}] de exactamente ${targetBars} compases limpios (SOLO el nombre de la sección y del artista, SIN notas de estilo ni acústica dentro del corchete):
+[Chorus: ${hookVoice}]
+Línea 1 (Ad-lib)
+Línea 2 (Ad-lib)
+... hasta ${targetBars} líneas en total
 
-NO escribas notas de producción, introducciones ni explicaciones fuera de los corchetes.`;
+NO escribas notas de producción, repeticiones ni explicaciones fuera de los corchetes.`;
 }
 
 /**
@@ -1161,7 +1165,7 @@ export function buildStage2GhostwriterPrompt(
   // Feature Contrast Profile (si hay feature artist)
   const featureContrast = featureArtist ? buildFeatureContrastProfile(params.artistId, featureArtist.id) : null;
 
-  // Estructura limpia
+  // Estructura limpia y autoridad de voces
   const structurePlan = params.structure.sections.map(s => {
     const va = params.sectionVoices?.find(v => v.sectionName === s.name);
     let voice = artist?.name ?? "Lead";
@@ -1174,11 +1178,11 @@ export function buildStage2GhostwriterPrompt(
     }
 
     if (isHype || (s.type === "intro" && (va?.introStyle === "bouncy_warmup" || isHype))) {
-      return `[${s.name}: ${voice}] — 4 compases (Modo Hype Man: 🚫 PROHIBIDO ESCRIBIR VERSOS NARRATIVOS O LÍNEAS CANTADAS. Debe ser EXCLUSIVAMENTE 3 a 5 ad-libs y grunts entre paréntesis: ej: *(Yeah... turn me up)*, *(Hold up...)*, *(Let's get it! [Beat Drop])*)`;
+      return `[${s.name}: ${voice}] — 4 compases (Modo Hype Man: 🚫 PROHIBIDO ESCRIBIR VERSOS NARRATIVOS O LÍNEAS CANTADAS. Debe ser EXCLUSIVAMENTE 3 a 5 ad-libs y grunts entre paréntesis: ej: (Yeah... turn me up), (Hold up...), rematando con ([Beat Drop]))`;
     }
 
     const bars = va?.bars ? `${va.bars} barras` : (s.type === "verse" ? "8-10 barras" : "4-8 barras");
-    return `[${s.name}: ${voice}] — ${bars}`;
+    return `[${s.name}: ${voice}] — ${bars} [VOZ AUTORIZADA: ${voice}]`;
   }).join("\n");
 
   const userTopicsList = [params.customTopic, ...params.topics].filter(Boolean);
@@ -1187,7 +1191,8 @@ export function buildStage2GhostwriterPrompt(
 Tu misión es componer la canción definitiva masterizada con el máximo calibre lírico, flow elástico y dimensión vocal tridimensional para Suno AI v4.5.
 
 # 🔒 GANCHO APROBADO DE LA SESIÓN (INMUTABLE - HOOK CONTRACT)
-El Topliner ya fijó el estribillo oficial de la sesión. DEBES incluirlo en cada aparición de [Chorus / Hook] dentro de la canción:
+El Topliner ya fijó el estribillo oficial canónico de la sesión.
+DEBES incluirlo en cada aparición de [Chorus / Hook] dentro de la canción:
 - La letra central cantada (lyricText) debe ser EXACTAMENTE IDÉNTICA en cada estribillo.
 - Puedes aportar ligeras variaciones interpretativas en ad-libs secundarios o cortes entre compases:
 ${lockedTopline}
@@ -1217,8 +1222,11 @@ ${sceneBlock}
 - Plan de Estructura de la Canción:
 ${structurePlan}
 
+⚠️ AUTORIDAD ESTRUCTURAL DE VOCES (ESTRICTA):
+Cada sección DEBE ser interpretada estrictamente por la voz indicada en el encabezado (ej: si la sección indica [Verse 2: ${artist?.name ?? "Lead"}], DEBE ser interpretada por ${artist?.name ?? "Lead"}, NO por el artista invitado). Queda TERMINANTEMENTE PROHIBIDO alterar la voz asignada de una sección a menos que el encabezado indique explícitamente el nombre del artista invitado.
+
 ⚠️ REGLA CRÍTICA DE INTRO / HYPE MAN:
-Si la [Intro] está en modo Hype Man o tiene asignado 'Hype', queda TERMINANTEMENTE PROHIBIDO escribir oraciones completas o versos narrativos cantados. La intro debe consistir EXCLUSIVAMENTE en 3 a 5 grunts, shouts y ad-libs de calentamiento entre paréntesis: *(Yeah... turn me up)*, *(Hold up...)*, rematando con *([Beat Drop])*.
+Si la [Intro] está en modo Hype Man o tiene asignado 'Hype', queda TERMINANTEMENTE PROHIBIDO escribir oraciones completas o versos narrativos cantados. La intro debe consistir EXCLUSIVAMENTE en 3 a 5 grunts, shouts y ad-libs de calentamiento entre paréntesis: (Yeah... turn me up), (Hold up...), rematando con ([Beat Drop]).
 
 ================================================================================
 # 📜 CONTRATO 3: FLOW & MOTOR RÍTMICO (FLOW & RHYTHM CONTRACT)

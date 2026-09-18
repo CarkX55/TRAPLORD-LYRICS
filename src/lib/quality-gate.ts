@@ -23,6 +23,23 @@ import type { SunoBudgetAudit } from "./suno-budget";
 // 1. TYPES & CONTRACTS
 // ========================================================================
 
+export interface SectionCardinalityExpectation {
+  exact?: number;
+  min?: number;
+  max?: number;
+}
+
+export interface StructuralCardinalityAudit {
+  sectionId: string;
+  sectionName: string;
+  expected: SectionCardinalityExpectation;
+  actualBars: number;
+  delta: number;
+  repeatedBlockFactor?: number;
+  status: "pass" | "safe-collapse" | "below-range" | "above-range" | "mismatch";
+  confidence?: number;
+}
+
 export type GateDecision = "PASS" | "PASS_WITH_REPAIR" | "REPAIR" | "REGENERATE";
 
 export interface QualityGateResult {
@@ -52,6 +69,7 @@ export interface AnalysisSnapshot {
   phoneticFit: PhoneticPocketFit;
   deliveryLoad: DeliveryLoadAudit;
   adlibs: AdlibAnalysis;
+  structuralCardinality: StructuralCardinalityAudit[];
   language: {
     englishRatio: number;
     mechanicityScore: number;
@@ -80,21 +98,29 @@ export interface InitialAuditContext {
   languageAnalysis: LanguageRatioResult;
   rhymeAnalysis: RhymeAnalysis;
   leakageAudit: MetadataLeakReport;
+  structuralCardinality: StructuralCardinalityAudit[];
 }
 
 // ========================================================================
 // 2. PHASE 1: INITIAL DELIVERY & MULTI-CRITIC AUDIT
 // ========================================================================
 
+export type ExternalExpectationsInput =
+  | Record<string, SectionCardinalityExpectation>
+  | Array<{ name: string; type?: string; bars?: number; targetBars?: number; minBars?: number; maxBars?: number }>;
+
 /**
  * Runs the initial local audit immediately after Pass 2 Ghostwriter generation.
  * Operates purely in-memory on the raw AST without mutating it.
+ * Evaluates structural cardinality against external domain expectations (structure plan/specs)
+ * to avoid circular derivation from generated AST.
  */
 export function runInitialDeliveryAudit(
   doc: SongDocument,
   bpm: number = 135,
   flowProfile?: FlowProfile,
-  userExplicitInputs: string[] = []
+  userExplicitInputs: string[] = [],
+  externalExpectations?: ExternalExpectationsInput
 ): InitialAuditContext {
   const allBars = doc.sections.flatMap(s => s.bars);
 
@@ -104,6 +130,120 @@ export function runInitialDeliveryAudit(
 
   // 2. Adlib Analysis
   const adlibAnalysis = analyzeAdlibs(doc.sections);
+
+  // 3. Structural Cardinality Audit (Evaluates exact / min / max expectations per section from external authority)
+  const structuralCardinality: StructuralCardinalityAudit[] = doc.sections.map(s => {
+    let expected: SectionCardinalityExpectation | undefined;
+
+    // Check external expectations first (authoritative structure plan / SectionSpecs)
+    if (externalExpectations) {
+      if (Array.isArray(externalExpectations)) {
+        const sNameLower = s.name.toLowerCase();
+        const sTypeLower = s.type.toLowerCase();
+        const match = externalExpectations.find(
+          e => e.name.toLowerCase() === sNameLower || (e.type && e.type.toLowerCase() === sTypeLower)
+        );
+        if (match) {
+          if (match.bars !== undefined || match.targetBars !== undefined) {
+            expected = { exact: match.bars ?? match.targetBars };
+          } else if (match.minBars !== undefined || match.maxBars !== undefined) {
+            expected = { min: match.minBars, max: match.maxBars };
+          }
+        }
+      } else {
+        expected = externalExpectations[s.name] || externalExpectations[s.type];
+        if (!expected) {
+          const sNameLower = s.name.toLowerCase();
+          const sTypeLower = s.type.toLowerCase();
+          for (const [k, v] of Object.entries(externalExpectations)) {
+            const kLower = k.toLowerCase();
+            if (kLower === sNameLower || kLower === sTypeLower) {
+              expected = v;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Deterministic domain fallback when not explicitly provided (NEVER infer from AST bar count)
+    if (!expected) {
+      const lower = s.name.toLowerCase();
+      if (s.type === "beat_drop" || lower.includes("fade") || lower.includes("end") || lower.includes("drop") || lower.includes("instrumental") || lower.includes("silence")) {
+        expected = { min: 0, max: 4 };
+      } else if (s.type === "hook" || lower.includes("chorus") || lower.includes("hook") || lower.includes("estribillo")) {
+        const contract = (s.hookContractId && doc.hookContracts ? doc.hookContracts[s.hookContractId] : undefined) ||
+          (doc.hookContracts ? Object.values(doc.hookContracts)[0] : undefined);
+        if (contract) {
+          expected = { exact: contract.expectedBars || contract.bars.length };
+        } else {
+          expected = { min: 4, max: 16 };
+        }
+      } else if (s.type === "verse" || lower.includes("verse") || lower.includes("verso")) {
+        expected = { min: 1, max: 24 };
+      } else if (s.type === "intro" || s.type === "outro" || lower.includes("intro") || lower.includes("outro")) {
+        expected = { min: 1, max: 12 };
+      } else if (s.type === "bridge" || lower.includes("bridge") || lower.includes("puente")) {
+        expected = { min: 1, max: 12 };
+      } else {
+        expected = { min: 0, max: 24 };
+      }
+    }
+
+    const actual = s.bars.length;
+    let status: StructuralCardinalityAudit["status"] = "pass";
+    let delta = 0;
+    let repeatedBlockFactor: number | undefined;
+
+    if (expected.exact !== undefined) {
+      delta = actual - expected.exact;
+      if (delta === 0) {
+        status = "pass";
+      } else if (actual > expected.exact && actual % expected.exact === 0) {
+        const factor = actual / expected.exact;
+        let identical = true;
+        for (let f = 1; f < factor; f++) {
+          for (let i = 0; i < expected.exact; i++) {
+            if (s.bars[f * expected.exact + i]?.lyricText.toLowerCase() !== s.bars[i]?.lyricText.toLowerCase()) {
+              identical = false;
+              break;
+            }
+          }
+          if (!identical) break;
+        }
+        if (identical) {
+          status = "safe-collapse";
+          repeatedBlockFactor = factor;
+        } else {
+          status = "mismatch";
+        }
+      } else {
+        status = "mismatch";
+      }
+    } else if (expected.min !== undefined && expected.max !== undefined) {
+      if (actual < expected.min) {
+        delta = actual - expected.min;
+        status = "below-range";
+      } else if (actual > expected.max) {
+        delta = actual - expected.max;
+        status = "above-range";
+      } else {
+        delta = 0;
+        status = "pass";
+      }
+    }
+
+    return {
+      sectionId: s.id,
+      sectionName: s.name,
+      expected,
+      actualBars: actual,
+      delta,
+      repeatedBlockFactor,
+      status,
+      confidence: 1.0,
+    };
+  });
 
   // 3. Serialized text for language, rhyme and prompt hygiene
   const lyricsText = doc.sections
@@ -132,6 +272,7 @@ export function runInitialDeliveryAudit(
     languageAnalysis,
     rhymeAnalysis,
     leakageAudit,
+    structuralCardinality,
   };
 }
 
@@ -145,6 +286,16 @@ export function evaluateRepairability(audit: InitialAuditContext): {
   targetBars: Array<{ sectionId: string; barIndices: number[]; reason: string }>;
 } {
   const targets: Array<{ sectionId: string; barIndices: number[]; reason: string }> = [];
+
+  // Structural Cardinality Mismatches or Anomalies (Chorus overflow, verse below/above range)
+  const cardinalityIssues = audit.structuralCardinality?.filter(c => c.status !== "pass" && c.status !== "safe-collapse") || [];
+  for (const issue of cardinalityIssues) {
+    targets.push({
+      sectionId: issue.sectionName,
+      barIndices: [1, Math.min(issue.actualBars, 8)],
+      reason: `Desajuste de cardinalidad estructural en [${issue.sectionName}]: ${issue.actualBars} compases recibidos (${issue.status}, delta: ${issue.delta > 0 ? "+" : ""}${issue.delta})`,
+    });
+  }
 
   // High confidence crowded bars
   if (audit.deliveryLoad.confidence >= 0.70 && audit.deliveryLoad.crowdedBars.length > 0 && audit.deliveryLoad.loadScore < 60) {
@@ -174,8 +325,8 @@ export function evaluateRepairability(audit: InitialAuditContext): {
   }
 
   return {
-    needsRepair: targets.length > 0 && targets.length <= 2,
-    targetBars: targets.slice(0, 2),
+    needsRepair: targets.length > 0 && targets.length <= 3,
+    targetBars: targets.slice(0, 3),
   };
 }
 
@@ -191,9 +342,10 @@ export function runReAudit(
   repairedDoc: SongDocument,
   bpm: number = 135,
   flowProfile?: FlowProfile,
-  userExplicitInputs: string[] = []
+  userExplicitInputs: string[] = [],
+  externalExpectations?: ExternalExpectationsInput
 ): InitialAuditContext {
-  return runInitialDeliveryAudit(repairedDoc, bpm, flowProfile, userExplicitInputs);
+  return runInitialDeliveryAudit(repairedDoc, bpm, flowProfile, userExplicitInputs, externalExpectations);
 }
 
 /**
@@ -211,14 +363,19 @@ export function evaluateFinalQualityGate(
   const musicalPassed = audit.phoneticFit.overallComfort >= 60 && audit.deliveryLoad.loadScore >= 55;
   const narrativePassed = true; // Scene anchors verified during generation
   const linguisticPassed = audit.languageAnalysis.mechanicityScore <= 7.5;
-  const structuralPassed = !audit.adlibAnalysis.clusterWarning && !audit.adlibAnalysis.leadOccupancyCollision;
+
+  // Invariant: Structural layer requires adlib hygiene AND zero unresolved structural cardinality mismatches!
+  const hasStructuralMismatch = audit.structuralCardinality?.some(c => c.status === "mismatch" || c.status === "below-range" || c.status === "above-range");
+  const structuralPassed = !audit.adlibAnalysis.clusterWarning && !audit.adlibAnalysis.leadOccupancyCollision && !hasStructuralMismatch;
   const technicalPassed = sunoBudget.outroPresent && sunoBudget.outroComplete && sunoBudget.status !== "critical";
 
   const allPassed = musicalPassed && linguisticPassed && structuralPassed && technicalPassed;
 
   let decision: GateDecision = "PASS";
   if (!allPassed) {
-    if (!technicalPassed) {
+    if (hasStructuralMismatch) {
+      decision = "REPAIR"; // Structural cardinality mismatch cannot PASS
+    } else if (!technicalPassed) {
       decision = "REPAIR"; // Budget truncation or Outro missing
     } else if (!musicalPassed && audit.deliveryLoad.loadScore < 50) {
       decision = "PASS_WITH_REPAIR";
@@ -251,6 +408,7 @@ export function evaluateFinalQualityGate(
     phoneticFit: audit.phoneticFit,
     deliveryLoad: audit.deliveryLoad,
     adlibs: audit.adlibAnalysis,
+    structuralCardinality: audit.structuralCardinality,
     language: {
       englishRatio: audit.languageAnalysis.englishPercent / 100,
       mechanicityScore: audit.languageAnalysis.mechanicityScore,

@@ -31,7 +31,7 @@ import { buildCorrectionInstruction, analyzeLanguageRatio, type LanguageAnalysis
 import { getArtistReference } from "@/lib/artist-references";
 import { generateArtistReference } from "@/lib/reference-generator";
 import { analyzeReferenceTrack } from "@/lib/track-analyzer";
-import { parseRawLyricsToAST, stringifyASTToSunoLyrics, createHookContract, bindHookContractToAST, hashSongDocument, type HookContract } from "@/lib/song-document";
+import { parseRawLyricsToAST, stringifyASTToSunoLyrics, createHookContract, bindHookContractToAST, hashSongDocument, resolveSectionSpec, type HookContract } from "@/lib/song-document";
 import { synthesizeSemanticAnchor } from "@/lib/motif-engine";
 import { buildLanguageDNA, buildLanguageTarget, calculateSyllableLanguageRatio } from "@/lib/language-dna";
 import { auditPromptContamination, sanitizeUserInput, auditMetadataLeakage } from "@/lib/prompt-hygiene";
@@ -51,6 +51,7 @@ import {
   evaluateFinalQualityGate,
   type AnalysisSnapshot,
   type InitialAuditContext,
+  type SectionCardinalityExpectation,
 } from "@/lib/quality-gate";
 import { createInitialVersionGraph } from "@/lib/version-graph";
 import { getFlowProfile } from "@/lib/artist-flow-profiles";
@@ -411,14 +412,21 @@ export async function POST(req: NextRequest) {
       const stage1Topline = await callLLM(stage1Prompt, body, 0.82);
       const d1Ms = Date.now() - t1;
       
-      // Invariant: Create canonical HookContract with contentHash
-      const hookContract = createHookContract(stage1Topline, { allowPerformanceVariation: true });
+      // Resolve canonical Hook specification dynamically from structure & voice assignments
+      const hookSpec = resolveSectionSpec(structure.sections, body.sectionVoices, "hook");
+
+      // Invariant: Create canonical HookContract with expectedBars, occurrenceCount, and provable safe collapse
+      const hookContract = createHookContract(stage1Topline, {
+        allowPerformanceVariation: true,
+        expectedBars: hookSpec.targetBars || 8,
+        occurrenceCount: hookSpec.occurrenceCount,
+      });
 
       pipelineStagesCompleted.push("hook_contract_locked");
       stageLogs.push({
         stageId: "stage_1_topline",
         stageName: "Pasada 1: Topliner & Contrato de Gancho",
-        description: `Diseño melódico y ancla semántica fijada (HookContract Hash: ${hookContract.contentHash})`,
+        description: `Diseño melódico canónico fijado (${hookContract.bars.length} barras, status: ${hookContract.cardinalityStatus}, factor: ${hookContract.repetitionFactor}x, Hash: ${hookContract.contentHash})`,
         model: modelUsed,
         temperature: 0.82,
         durationMs: d1Ms,
@@ -479,8 +487,22 @@ export async function POST(req: NextRequest) {
         candidateAST = parseRawLyricsToAST(candidateLyrics);
       }
 
+      // --- ESPECIFICACIÓN Y EXPECTATIVAS DE CARDINALIDAD ESTRUCTURAL ---
+      const structuralExpectations: Record<string, SectionCardinalityExpectation> = {};
+      for (const sec of structure.sections) {
+        const spec = resolveSectionSpec(structure.sections, body.sectionVoices, sec.type);
+        const sectionVa = body.sectionVoices?.find(v => v.sectionName === sec.name);
+        if (sec.type === "hook") {
+          structuralExpectations[sec.name] = { exact: hookContract.expectedBars || sectionVa?.bars || spec.targetBars || 8 };
+        } else if (sectionVa?.bars) {
+          structuralExpectations[sec.name] = { exact: sectionVa.bars };
+        } else {
+          structuralExpectations[sec.name] = { min: spec.minBars, max: spec.maxBars };
+        }
+      }
+
       // --- FASE 1: INITIAL DELIVERY AUDIT & MULTI-CRITIC (Determinista en memoria) ---
-      auditContext = runInitialDeliveryAudit(candidateAST, parsedBpm, flowProfile, userExplicitTerms);
+      auditContext = runInitialDeliveryAudit(candidateAST, parsedBpm, flowProfile, userExplicitTerms, structuralExpectations);
       const repairPlan = evaluateRepairability(auditContext);
 
       finalRaw = stage2Lyrics;
@@ -512,7 +534,7 @@ export async function POST(req: NextRequest) {
             });
 
             // Re-Audit tras la reparación quirúrgica
-            auditContext = runReAudit(finalAST, parsedBpm, flowProfile, userExplicitTerms);
+            auditContext = runReAudit(finalAST, parsedBpm, flowProfile, userExplicitTerms, structuralExpectations);
           }
         } catch {
           // Si falla la llamada quirúrgica, preservamos el Master de la Pasada 2
@@ -526,11 +548,13 @@ export async function POST(req: NextRequest) {
       lyrics = stringifyASTToSunoLyrics(finalAST);
 
       // --- FINAL AUDIT: Auditoría completa de TODO el AST definitivo con Hook reconciliado ---
-      auditContext = runInitialDeliveryAudit(finalAST, parsedBpm, flowProfile, userExplicitTerms);
+      auditContext = runInitialDeliveryAudit(finalAST, parsedBpm, flowProfile, userExplicitTerms, structuralExpectations);
 
       repairDecisionData = {
         action: repairPlan.needsRepair ? "exceptional_repair" : "direct_deliver",
-        reason: repairPlan.needsRepair ? "Reparación quirúrgica atómica ejecutada" : "Calidad, HookContract y estructura verificadas en 2 pasadas",
+        reason: repairPlan.needsRepair
+          ? `Reparación quirúrgica ejecutada (${repairPlan.targetBars.map(t => t.reason).join("; ")})`
+          : `Calidad, HookContract (${hookContract.cardinalityStatus}, factor: ${hookContract.repetitionFactor}x) y estructura verificadas en 2 pasadas`,
         netScore: auditContext.deliveryLoad.loadScore,
         targetBarsCount: repairPlan.targetBars.length,
       };
@@ -606,7 +630,7 @@ export async function POST(req: NextRequest) {
 
     const parsedBpm = parseInt((bpmVibe.range || "135").split("-")[0], 10) || 135;
     if (!finalAST) finalAST = parseRawLyricsToAST(lyrics);
-    if (!auditContext) auditContext = runInitialDeliveryAudit(finalAST, parsedBpm, getFlowProfile(body.artistId) || undefined);
+    if (!auditContext) auditContext = runInitialDeliveryAudit(finalAST, parsedBpm, getFlowProfile(body.artistId) || undefined, [], structure.sections);
 
     const sunoBudget = auditSunoBudget(lyrics, parsedBpm);
 

@@ -28,6 +28,7 @@ import {
   runInitialDeliveryAudit,
   evaluateRepairability,
   evaluateFinalQualityGate,
+  type SectionCardinalityExpectation,
 } from "../src/lib/quality-gate";
 import {
   parseRawLyricsToAST,
@@ -35,9 +36,17 @@ import {
   createHookContract,
   bindHookContractToAST,
   hashSongDocument,
+  formatSectionHeader,
+  resolveSectionSpec,
   type SongDocument,
   type SongBar,
 } from "../src/lib/song-document";
+import {
+  cleanSunoBracketHeaders,
+  buildStage1ToplinePrompt,
+  buildStage2GhostwriterPrompt,
+  type PromptParams,
+} from "../src/lib/prompt-builder";
 import { createInitialVersionGraph } from "../src/lib/version-graph";
 import { calculateSyllableLanguageRatio } from "../src/lib/language-dna";
 import { auditSunoBudget } from "../src/lib/suno-budget";
@@ -325,6 +334,533 @@ We out.
   const vGraph = createInitialVersionGraph(fullSongAST, "Initial Generation", snapshot);
   assert(vGraph.versions["v_1"]?.analysisSnapshot !== undefined, "VersionGraph version node contains decoupled AnalysisSnapshot");
   totalPassed += 9;
+
+  // -------------------------------------------------------------
+  // TEST 11: HookContract Safe-Collapse & Periodic Mismatch Guards
+  // -------------------------------------------------------------
+  console.log("\n--- TEST 11: HookContract Safe-Collapse & Periodic Mismatch Guards ---");
+  const eightBarUnit = `[Chorus: Future]
+I'm counting these bodies, I'm dodging the system *(Yeah)*
+Cuidando mi espalda, no firmo contrato
+I'm counting these bodies, I'm dodging the system
+Vendiendo la grasa, cobrando al aparato *(Facts)*
+Me tiran la mala pero no me alcanzan *(No)*
+I'm dripping in codeine, me cuida la banda
+I'm counting these bodies, I'm dodging the system
+Negocios de mafia, firmando el retrato *(Uh)*`;
+
+  // Case A: 32 bars where 4 blocks of 8 are identical -> Safe Collapse
+  const thirtyTwoBars4x = `${eightBarUnit}\n\n${eightBarUnit}\n\n${eightBarUnit}\n\n${eightBarUnit}`;
+  const contract32 = createHookContract(thirtyTwoBars4x, { expectedBars: 8, occurrenceCount: 4 });
+  assert(contract32.cardinalityStatus === "safe-collapse", `Identical 4x8 repetition correctly classified as safe-collapse (${contract32.cardinalityStatus})`);
+  assert(contract32.repetitionFactor === 4, `Repetition factor 4 detected (${contract32.repetitionFactor})`);
+  assert(contract32.bars.length === 8, `Collapsed deterministically to exactly 8 canonical bars (${contract32.bars.length})`);
+  assert(contract32.performanceTemplate?.length === 8, `Preserved performanceTemplate for all 8 bars`);
+
+  // Case B: Partial repetition (8 + 8 + 4 = 20 bars, expected 8) -> Genuine mismatch, DO NOT collapse!
+  const partialRepetition = `${eightBarUnit}\n\n${eightBarUnit}\n\nLínea A\nLínea B\nLínea C\nLínea D`;
+  const contractPartial = createHookContract(partialRepetition, { expectedBars: 8 });
+  assert(contractPartial.cardinalityStatus === "mismatch", "Partial repetition (8+8+4) correctly rejected as mismatch, not collapsed");
+  assert(contractPartial.bars.length === 20, "Contract bars not mutilated or truncated on mismatch");
+
+  // Case C: Non-periodic overflow (12 unique bars when expected 8) -> Genuine mismatch, DO NOT truncate!
+  const twelveUniqueBars = `[Chorus: Future]\nBar 1\nBar 2\nBar 3\nBar 4\nBar 5\nBar 6\nBar 7\nBar 8\nBar 9\nBar 10\nBar 11\nBar 12`;
+  const contractOverflow = createHookContract(twelveUniqueBars, { expectedBars: 8 });
+  assert(contractOverflow.cardinalityStatus === "mismatch", "12 unique bars rejected as mismatch, not silently truncated");
+  assert(contractOverflow.bars.length === 12, "Full 12 bars preserved on mismatch for quality gate inspection");
+  totalPassed += 7;
+
+  // -------------------------------------------------------------
+  // TEST 12: Lyric/Performance Separation & Zero-Asterisk Hygiene
+  // -------------------------------------------------------------
+  console.log("\n--- TEST 12: Lyric/Performance Separation & Zero-Asterisk Hygiene ---");
+  const dirtyMarkdownInput = `[Intro: Future]
+*(Yeah... turn me up)*
+*(Hold up...)*
+*(Pluto...)*
+*(Freebandz, check)*
+[Beat Drop]
+
+[Verse 1: Future]
+Moving mud in the cup, codeína pura
+Ella quiere que la muerda a oscuras *(skrrt)*
+Te dejamos frío en el piso si rompes \`[Vocal Cut]\`
+
+[Chorus: Future]
+I'm counting these bodies, I'm dodging the system **
+Cuidando mi espalda, no firmo contrato *(Facts)*`;
+
+  const cleanedMarkdown = cleanSunoBracketHeaders(dirtyMarkdownInput);
+  // Assert cleanSunoBracketHeaders did NOT weld [Intro: Future] with the first line
+  assert(cleanedMarkdown.includes("[Intro: Future]\n("), "Header newline preserved, no bracket/ad-lib welding");
+  assert(!cleanedMarkdown.includes("**"), "Cleaned lyrics contains zero orphan double asterisks (**)");
+  assert(!cleanedMarkdown.includes("`"), "Cleaned lyrics contains zero backticks (`)");
+
+  const parsedCleanAST = parseRawLyricsToAST(cleanedMarkdown);
+  assert(parsedCleanAST.sections[0].name.toLowerCase().includes("intro"), `First section is Intro, no ghost Verse 1 (got: ${parsedCleanAST.sections[0].name})`);
+  assert(parsedCleanAST.sections[0].bars.length === 4, `Intro contains 4 ad-lib bars (got: ${parsedCleanAST.sections[0].bars.length})`);
+  assert(parsedCleanAST.sections[0].bars[0].lyricText === "", "Empty sung lyricText for pure ad-lib bar (no ** or phantom text)");
+  assert(parsedCleanAST.sections[0].bars[0].performance?.adlibs?.[0] === "Yeah... turn me up", "Ad-lib content cleanly extracted without parentheses or asterisks");
+
+  const stringifiedOutput = stringifyASTToSunoLyrics(parsedCleanAST);
+  assert(!stringifiedOutput.includes("[Verse 1, Future]"), "No comma-formatted section headers in stringified output");
+  assert(stringifiedOutput.includes("[Verse 1: Future]") || stringifiedOutput.includes("[Verse 1]"), "Canonical colon formatting preserved");
+  assert(!stringifiedOutput.includes("**"), "Stringified Suno output is 100% free of orphan asterisks");
+  totalPassed += 9;
+
+  // -------------------------------------------------------------
+  // TEST 13: Structural Cardinality Audit in Quality Gate
+  // -------------------------------------------------------------
+  console.log("\n--- TEST 13: Structural Cardinality Audit in Quality Gate ---");
+  // Song with abnormal chorus of 32 bars (mismatch)
+  const abnormalSong = `[Intro: Future]
+(Yeah)
+(Turn me up)
+
+[Chorus: Future]
+${Array.from({ length: 32 }, (_, i) => `Different line ${i + 1}`).join("\n")}
+
+[Outro: Future]
+(Outro line 1)
+(Outro line 2)`;
+
+  const abnormalAST = parseRawLyricsToAST(abnormalSong);
+  const abnormalAudit = runInitialDeliveryAudit(abnormalAST, 135, profile, [], { Chorus: { exact: 8 } });
+
+  assert(abnormalAudit.structuralCardinality !== undefined, "Initial audit produces structuralCardinality audit");
+  const chorusAudit = abnormalAudit.structuralCardinality.find(c => c.sectionName.toLowerCase().includes("chorus"));
+  assert(chorusAudit !== undefined && chorusAudit.status === "mismatch", `Detected chorus cardinality mismatch against external expectation 8 (status: ${chorusAudit?.status})`);
+
+  const abnormalRepair = evaluateRepairability(abnormalAudit);
+  assert(abnormalRepair.needsRepair === true, "Cardinality mismatch triggers repair requirement in Quality Gate");
+  assert(abnormalRepair.targetBars.length > 0, `targetBars is NOT 0 when structural mismatch exists (got: ${abnormalRepair.targetBars.length})`);
+
+  const abnormalDocHash = hashSongDocument(abnormalAST);
+  const abnormalSnapshot = evaluateFinalQualityGate(abnormalAST, abnormalAudit, budget, "v_abnormal", abnormalDocHash);
+  assert(abnormalSnapshot.qualityGate.layersPassed.structural === false, "Structural layer FAILS when cardinality mismatch is present");
+  assert(abnormalSnapshot.qualityGate.decision === "REPAIR", `Quality gate emits REPAIR instead of PASS on structural mismatch (decision: ${abnormalSnapshot.qualityGate.decision})`);
+  totalPassed += 6;
+
+  // -------------------------------------------------------------
+  // TEST 14: Canonical formatSectionHeader & resolveSectionSpec
+  // -------------------------------------------------------------
+  console.log("\n--- TEST 14: Canonical formatSectionHeader & resolveSectionSpec ---");
+  assert(formatSectionHeader("Verse 1", "Future") === "[Verse 1: Future]", "formatSectionHeader generates canonical [Name: Hint]");
+  assert(formatSectionHeader("Chorus") === "[Chorus]", "formatSectionHeader generates clean [Name] when no hint");
+
+  const spec = resolveSectionSpec(
+    [
+      { name: "Intro", type: "intro" },
+      { name: "Verse 1", type: "verse" },
+      { name: "Chorus", type: "chorus" },
+      { name: "Verse 2", type: "verse" },
+      { name: "Chorus", type: "chorus" },
+    ],
+    [{ sectionName: "Chorus", bars: 8, voice: "lead" }],
+    "hook"
+  );
+  assert(spec.targetBars === 8, "resolveSectionSpec resolved targetBars 8 for hook");
+  assert(spec.occurrenceCount === 2, "resolveSectionSpec resolved 2 occurrences of hook");
+  totalPassed += 4;
+
+  // -------------------------------------------------------------
+  // TEST 15: External Authority Cardinality Audit (Anti-Circularity Verification)
+  // -------------------------------------------------------------
+  console.log("\n--- TEST 15: External Authority Cardinality Audit (Anti-Circularity) ---");
+  const testDocForAudit: SongDocument = {
+    versionId: "v_circ_test",
+    title: "Anti-Circularity Verification",
+    artistId: "future",
+    sections: [
+      {
+        id: "s_chorus_test",
+        name: "Chorus",
+        type: "hook",
+        bars: Array.from({ length: 12 }, (_, i) => ({
+          id: `b_${i}`,
+          position: i + 1,
+          lyricText: `Bar ${i + 1}`,
+          locked: false,
+        })),
+      },
+    ],
+    hookContracts: {
+      hc_fixed: {
+        id: "hc_fixed",
+        approvedText: "Canonical line 1\nCanonical line 2",
+        bars: ["Canonical line 1", "Canonical line 2"],
+        expectedBars: 8,
+        contentHash: "hash_fixed",
+        locked: true,
+      },
+    },
+  };
+
+  // When external expectations are provided, audit compares against authoritative spec
+  const auditWithExternal = runInitialDeliveryAudit(testDocForAudit, 135, undefined, [], {
+    Chorus: { exact: 8 },
+  });
+  const chorusAuditExternal = auditWithExternal.structuralCardinality.find(c => c.sectionName === "Chorus");
+  assert(chorusAuditExternal?.expected.exact === 8, "Authoritative external expectation 8 received by audit");
+  assert(chorusAuditExternal?.actualBars === 12, "AST actual bars 12 accurately audited");
+  assert(chorusAuditExternal?.delta === 4, "Accurately calculated delta +4 without circular self-validation");
+  assert(chorusAuditExternal?.status === "mismatch", "Cardinality mismatch declared against external authority");
+
+  // When external expectations are absent, uses contract.expectedBars (NEVER AST bar count)
+  testDocForAudit.sections[0].hookContractId = "hc_fixed";
+  const auditFromContract = runInitialDeliveryAudit(testDocForAudit, 135, undefined, []);
+  const chorusAuditContract = auditFromContract.structuralCardinality.find(c => c.sectionName === "Chorus");
+  assert(chorusAuditContract?.expected.exact === 8, "Derived expectation from HookContract.expectedBars (8), NOT AST length (12)");
+  assert(chorusAuditContract?.status === "mismatch", "Non-circular: Contract expected 8 vs AST 12 triggers mismatch");
+  totalPassed += 6;
+
+  // -------------------------------------------------------------
+  // TEST 16: Lyric Identity + Performance Variation Across Instances
+  // -------------------------------------------------------------
+  console.log("\n--- TEST 16: Lyric Identity + Performance Variation Across Instances ---");
+  const canonical8Bars = [
+    "I'm counting these bodies, I'm dodging the system",
+    "Cuidando mi espalda, no firmo contrato",
+    "I'm counting these bodies, I'm dodging the system",
+    "Vendiendo la grasa, cobrando al aparato",
+    "Me tiran la mala pero no me alcanzan",
+    "I'm dripping in codeine, me cuida la banda",
+    "I'm counting these bodies, I'm dodging the system",
+    "Negocios de mafia, mi sangre no cambia",
+  ];
+
+  const contractWithTemplate = createHookContract(
+    canonical8Bars.map((b, i) => i % 2 === 0 ? `${b} *(Default)*` : b).join("\n"),
+    { expectedBars: 8, occurrenceCount: 4, allowPerformanceVariation: true }
+  );
+
+  // Construct a song with 4 distinct choruses having unique performance ad-libs:
+  // Chorus 1: adlibs A (Yeah, Facts)
+  // Chorus 2: adlibs B (Drop it, Check)
+  // Chorus 3: sparse (no ad-libs)
+  // Chorus 4: accent adlibs (Let's go, Pluto)
+  const songWith4Choruses: SongDocument = {
+    versionId: "v_perf_test",
+    title: "Performance Variation Test",
+    artistId: "future",
+    sections: [
+      {
+        id: "c1",
+        name: "Chorus",
+        type: "hook",
+        bars: canonical8Bars.map((b, i) => ({
+          id: `c1_b${i}`,
+          position: i + 1,
+          lyricText: i === 0 ? "Mutated lyric in c1" : b,
+          locked: false,
+          performance: i === 0 ? { adlibs: ["Yeah"] } : (i === 3 ? { adlibs: ["Facts"] } : undefined),
+        })),
+      },
+      {
+        id: "c2",
+        name: "Chorus",
+        type: "hook",
+        bars: canonical8Bars.map((b, i) => ({
+          id: `c2_b${i}`,
+          position: i + 1,
+          lyricText: i === 1 ? "Mutated lyric in c2" : b,
+          locked: false,
+          performance: i === 0 ? { adlibs: ["Drop it"] } : (i === 3 ? { adlibs: ["Check"] } : undefined),
+        })),
+      },
+      {
+        id: "c3",
+        name: "Chorus",
+        type: "hook",
+        bars: canonical8Bars.map((b, i) => ({
+          id: `c3_b${i}`,
+          position: i + 1,
+          lyricText: b,
+          locked: false,
+          performance: undefined, // Sparse chorus: zero adlibs
+        })),
+      },
+      {
+        id: "c4",
+        name: "Chorus",
+        type: "hook",
+        bars: canonical8Bars.map((b, i) => ({
+          id: `c4_b${i}`,
+          position: i + 1,
+          lyricText: b,
+          locked: false,
+          performance: i === 0 ? { adlibs: ["Let's go"] } : (i === 7 ? { adlibs: ["Pluto"] } : undefined),
+        })),
+      },
+    ],
+  };
+
+  const boundVariationAST = bindHookContractToAST(songWith4Choruses, contractWithTemplate);
+
+  // Verify: All 4 choruses have 100% canonical lyricText
+  for (let c = 0; c < 4; c++) {
+    const sec = boundVariationAST.sections[c];
+    assert(sec.bars.length === 8, `Chorus #${c + 1} has exactly 8 bars`);
+    assert(
+      sec.bars.every((b, i) => b.lyricText === canonical8Bars[i]),
+      `Chorus #${c + 1} lyricText is 100% canonical and matches contract`
+    );
+  }
+
+  // Verify: Performance variations are NOT clobbered by the contract template
+  assert(boundVariationAST.sections[0].bars[0].performance?.adlibs?.[0] === "Yeah", "Chorus #1 preserved unique adlib 'Yeah'");
+  assert(boundVariationAST.sections[1].bars[0].performance?.adlibs?.[0] === "Drop it", "Chorus #2 preserved unique adlib 'Drop it'");
+  assert(boundVariationAST.sections[2].bars[0].performance === undefined, "Chorus #3 remained sparse without performance injection");
+  assert(boundVariationAST.sections[3].bars[7].performance?.adlibs?.[0] === "Pluto", "Chorus #4 preserved accent adlib 'Pluto'");
+  totalPassed += 12;
+
+  // -------------------------------------------------------------
+  // TEST 17: Full End-to-End Orchestration Regression (Exact User Log Reproducer)
+  // -------------------------------------------------------------
+  console.log("\n--- TEST 17: Full End-to-End Pipeline Orchestration Regression ---");
+  const e2eStructure: SongStructure = {
+    id: "classic_trap",
+    label: "Classic Trap (Intro - V1 - C - V2 - C - Bridge - C - C - Outro)",
+    sections: [
+      { name: "Intro", type: "intro" },
+      { name: "Verse 1", type: "verse" },
+      { name: "Chorus", type: "hook" },
+      { name: "Verse 2", type: "verse" },
+      { name: "Chorus", type: "hook" },
+      { name: "Bridge", type: "bridge" },
+      { name: "Chorus", type: "hook" },
+      { name: "Chorus", type: "hook" },
+      { name: "Outro", type: "outro" },
+    ],
+  };
+
+  const e2ePromptParams: PromptParams = {
+    artistId: "future",
+    moodId: "dark-trap",
+    bpmVibe: { id: "atlanta-slow", label: "Atlanta Dark Trap", range: "135-142", description: "BPM" },
+    structure: e2eStructure,
+    spanglishPercent: 40,
+    topics: ["calle", "negocios"],
+    customTopic: "Moving mud in the cup",
+    flowPocketMode: "classic",
+    rhymeSchemeId: "rs_free",
+    sectionVoices: [
+      { sectionName: "Intro", voice: "lead" },
+      { sectionName: "Verse 1", voice: "lead" },
+      { sectionName: "Chorus", voice: "lead", bars: 8 },
+      { sectionName: "Verse 2", voice: "lead" },
+      { sectionName: "Bridge", voice: "lead" },
+      { sectionName: "Outro", voice: "lead" },
+    ],
+  };
+
+  // 1. Stage 1 Topliner Prompt Generation
+  const stage1Prompt = buildStage1ToplinePrompt(e2ePromptParams, "Global rhythm pocket intention");
+  assert(stage1Prompt.includes("EXCLUSIVAMENTE"), "Stage 1 prompt instructs exclusive hook composition");
+  assert(stage1Prompt.includes("8 compases") || stage1Prompt.includes("8 barras"), "Stage 1 prompt specifies 8 bars for hook");
+
+  // 2. Exact Raw Stage 1 Output from Gemini (The 4x repeated 8-bar chorus that caused the original bug)
+  const simulatedStage1Output = `[Chorus]
+I'm counting these bodies, I'm dodging the system *(Yeah)*
+Cuidando mi espalda, no firmo contrato
+I'm counting these bodies, I'm dodging the system
+Vendiendo la grasa, cobrando al aparato *(Facts)*
+Me tiran la mala pero no me alcanzan *(No)*
+I'm dripping in codeine, me cuida la banda
+I'm counting these bodies, I'm dodging the system
+Negocios de mafia, mi sangre no cambia *(Uh)*
+
+[Chorus]
+I'm counting these bodies, I'm dodging the system *(Yeah)*
+Cuidando mi espalda, no firmo contrato
+I'm counting these bodies, I'm dodging the system
+Vendiendo la grasa, cobrando al aparato *(Facts)*
+Me tiran la mala pero no me alcanzan *(No)*
+I'm dripping in codeine, me cuida la banda
+I'm counting these bodies, I'm dodging the system
+Negocios de mafia, mi sangre no cambia *(Uh)*
+
+[Chorus]
+I'm counting these bodies, I'm dodging the system *(Yeah)*
+Cuidando mi espalda, no firmo contrato
+I'm counting these bodies, I'm dodging the system
+Vendiendo la grasa, cobrando al aparato *(Facts)*
+Me tiran la mala pero no me alcanzan *(No)*
+I'm dripping in codeine, me cuida la banda
+I'm counting these bodies, I'm dodging the system
+Negocios de mafia, mi sangre no cambia *(Uh)*
+
+[Chorus]
+I'm counting these bodies, I'm dodging the system *(Yeah)*
+Cuidando mi espalda, no firmo contrato
+I'm counting these bodies, I'm dodging the system
+Vendiendo la grasa, cobrando al aparato *(Facts)*
+Me tiran la mala pero no me alcanzan *(No)*
+I'm dripping in codeine, me cuida la banda
+I'm counting these bodies, I'm dodging the system
+Negocios de mafia, mi sangre no cambia *(Uh)*`;
+
+  // 3. Resolve spec & create HookContract (Demonstrates safe-collapse)
+  const hookSpec = resolveSectionSpec(e2eStructure.sections, e2ePromptParams.sectionVoices, "hook");
+  assert(hookSpec.targetBars === 8, "Resolved hook targetBars 8");
+  assert(hookSpec.occurrenceCount === 4, "Resolved 4 occurrences of chorus in structure");
+
+  const e2eHookContract = createHookContract(simulatedStage1Output, {
+    expectedBars: hookSpec.targetBars || 8,
+    occurrenceCount: hookSpec.occurrenceCount,
+    allowPerformanceVariation: true,
+  });
+
+  assert(e2eHookContract.bars.length === 8, `HookContract collapsed 32 bars to exactly 8 bars (got: ${e2eHookContract.bars.length})`);
+  assert(e2eHookContract.cardinalityStatus === "safe-collapse", `Contract cardinalityStatus is safe-collapse (got: ${e2eHookContract.cardinalityStatus})`);
+  assert(e2eHookContract.repetitionFactor === 4, `Contract repetitionFactor is 4 (got: ${e2eHookContract.repetitionFactor})`);
+  assert(e2eHookContract.performanceTemplate?.length === 8, "Preserved 8-bar performanceTemplate");
+
+  // 4. Stage 2 Ghostwriter Prompt Generation
+  const stage2Prompt = buildStage2GhostwriterPrompt(
+    e2ePromptParams,
+    e2eHookContract.approvedText,
+    "Writing cells snippet",
+    "Flow skeleton snippet"
+  );
+  assert(stage2Prompt.includes("HOOK CONTRACT") && stage2Prompt.includes("GANCHO APROBADO"), "Stage 2 prompt contains immutable hook contract block");
+  assert(!stage2Prompt.includes("32 barras"), "Stage 2 prompt does not transmit inflated 32 bars");
+
+  // 5. Simulated Raw Stage 2 Output from Gemini (reproducing original raw anomalies: welded header, **, backticks)
+  const simulatedStage2Output = `[Intro: Future] *(Yeah... turn me up)*
+** (Hold up...)
+** (Pluto...)
+** (street business, check)
+
+[Beat Drop]
+
+[Verse 1: Future]
+Moving mud in the cup, codeína pura
+Ella quiere que la muerda a oscuras ** (skrrt)
+Shooters in the lobby watching for the opps
+No te cruces en mi zona, llamamos al block ** (on god)
+Sixty racks on my wrist, look at how it shines
+Esa puta me lo mama, she don't waste time ** (facts)
+Millonarios firmando bajo la mesa
+Lealtad sobre dinero, esa es mi promesa
+No business with no undercover cops
+Te dejamos frío en el piso si rompes \`[Vocal Cut]\`
+
+[Chorus: Future]
+I'm counting these bodies, I'm dodging the system *(Yeah)*
+Cuidando mi espalda, no firmo contrato
+I'm counting these bodies, I'm dodging the system
+Vendiendo la grasa, cobrando al aparato *(Facts)*
+Me tiran la mala pero no me alcanzan *(No)*
+I'm dripping in codeine, me cuida la banda
+I'm counting these bodies, I'm dodging the system
+Negocios de mafia, mi sangre no cambia *(Uh)*
+
+[Verse 2: Future]
+Coronamos la vuelta, subieron los ceros
+Conocen mi nombre los pistoleros
+No confío en sonrisas ni en falsos abrazos
+Caminando con plomo, esquivando balazos
+Trap de verdad, no vendemos mentiras
+Diamantes brillando mientras ella me mira
+La calle me llama, el dinero responde
+El diablo persigue pero no me escondo
+
+[Chorus: Future]
+I'm counting these bodies, I'm dodging the system *(Drop it)*
+Cuidando mi espalda, no firmo contrato
+I'm counting these bodies, I'm dodging the system
+Vendiendo la grasa, cobrando al aparato *(Check)*
+Me tiran la mala pero no me alcanzan
+I'm dripping in codeine, me cuida la banda
+I'm counting these bodies, I'm dodging the system
+Negocios de mafia, mi sangre no cambia *(Yeah)*
+
+[Bridge: Future]
+*(Whispering)*
+Nadie vio nada en la esquina
+El humo sube y la mente domina
+Dos pasos al frente, sin marcha atrás
+
+[Chorus: Future]
+I'm counting these bodies, I'm dodging the system
+Cuidando mi espalda, no firmo contrato
+I'm counting these bodies, I'm dodging the system
+Vendiendo la grasa, cobrando al aparato
+Me tiran la mala pero no me alcanzan
+I'm dripping in codeine, me cuida la banda
+I'm counting these bodies, I'm dodging the system
+Negocios de mafia, mi sangre no cambia
+
+[Chorus: Future]
+I'm counting these bodies, I'm dodging the system *(Let's go)*
+Cuidando mi espalda, no firmo contrato
+I'm counting these bodies, I'm dodging the system
+Vendiendo la grasa, cobrando al aparato *(Ha)*
+Me tiran la mala pero no me alcanzan *(Never)*
+I'm dripping in codeine, me cuida la banda
+I'm counting these bodies, I'm dodging the system
+Negocios de mafia, mi sangre no cambia *(Pluto)*
+
+[Outro: Future]
+Turn off the lights.
+Pluto out.
+[Fade to End]`;
+
+  // 6. Pipeline Execution: Sanitization -> AST -> Hook Binding -> Cardinality Audit -> Serialization
+  const sanitizedLyrics = cleanSunoBracketHeaders(simulatedStage2Output);
+  assert(!sanitizedLyrics.includes("**"), "Sanitized lyrics has 0 orphan double asterisks (**)");
+  assert(!sanitizedLyrics.includes("`"), "Sanitized lyrics has 0 backticks (`)");
+
+  let e2eAST = parseRawLyricsToAST(sanitizedLyrics);
+  assert(e2eAST.sections[0].name.toLowerCase().includes("intro"), `No ghost Verse 1: first section is ${e2eAST.sections[0].name}`);
+
+  // Reconcile HookContract to AST
+  e2eAST = bindHookContractToAST(e2eAST, e2eHookContract);
+
+  // Authoritative external structural expectations
+  const e2eStructuralExpectations: Record<string, SectionCardinalityExpectation> = {};
+  for (const sec of e2eStructure.sections) {
+    const spec = resolveSectionSpec(e2eStructure.sections, e2ePromptParams.sectionVoices, sec.type);
+    if (sec.type === "hook") {
+      e2eStructuralExpectations[sec.name] = { exact: e2eHookContract.expectedBars || spec.targetBars || 8 };
+    } else {
+      e2eStructuralExpectations[sec.name] = { min: spec.minBars, max: spec.maxBars };
+    }
+  }
+
+  const e2eAudit = runInitialDeliveryAudit(
+    e2eAST,
+    138,
+    getFlowProfile("future") || undefined,
+    [],
+    e2eStructuralExpectations
+  );
+
+  const e2eRepairPlan = evaluateRepairability(e2eAudit);
+  assert(e2eRepairPlan.needsRepair === false, "Zero structural repair needed on reconciled song document");
+
+  const e2eFinalSunoLyrics = stringifyASTToSunoLyrics(e2eAST);
+
+  // 7. Core Invariant Assertions Demanded by User
+  const allChoruses = e2eAST.sections.filter(s => s.type === "hook" || s.name.toLowerCase().includes("chorus"));
+  assert(allChoruses.length === 4, `Song AST contains exactly 4 chorus sections (got: ${allChoruses.length})`);
+  assert(allChoruses[0].bars.length === 8, "Chorus #1 = exactly 8 bars");
+  assert(allChoruses[1].bars.length === 8, "Chorus #2 = exactly 8 bars");
+  assert(allChoruses[2].bars.length === 8, "Chorus #3 = exactly 8 bars");
+  assert(allChoruses[3].bars.length === 8, "Chorus #4 = exactly 8 bars");
+
+  const totalChorusBars = allChoruses.reduce((acc, c) => acc + c.bars.length, 0);
+  assert(totalChorusBars === 32, `Total chorus bars across song = 32 (8 + 8 + 8 + 8), NOT 128 (got: ${totalChorusBars})`);
+
+  // Section Headers formatting
+  assert(!e2eFinalSunoLyrics.includes(", Future]"), "No comma section headers in Suno lyrics");
+  assert(e2eFinalSunoLyrics.includes("[Chorus: Future]"), "Canonical colon header [Chorus: Future] preserved");
+  assert(e2eFinalSunoLyrics.includes("[Verse 1: Future]"), "Canonical colon header [Verse 1: Future] preserved");
+  assert(!e2eFinalSunoLyrics.startsWith("[Verse 1"), "Song does not start with ghost Verse 1");
+  assert(!e2eFinalSunoLyrics.includes("**"), "Final Suno lyrics contains zero orphan asterisks (**)");
+  assert(!e2eFinalSunoLyrics.includes("`"), "Final Suno lyrics contains zero backticks (`)");
+  totalPassed += 21;
 
   console.log("\n=======================================================");
   console.log(`📊 ALL COMPOSITION ENGINE v2.2 AUDITS PASSED: ${totalPassed} ASSERTS VERIFIED | 0 FAILED`);

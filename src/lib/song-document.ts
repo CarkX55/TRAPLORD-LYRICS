@@ -36,12 +36,96 @@ export interface SongBar {
 
 export interface HookContract {
   id: string;
-  approvedText: string;             // Texto lírico canónico estricto
+  approvedText: string;             // Texto lírico canónico estricto (sin marcadores ni adlibs)
   bars: string[];                   // Líneas limpias de cada compás
+  expectedBars?: number;            // Cardinalidad canónica esperada (ej: 8)
+  occurrenceCount?: number;         // Número de apariciones en la estructura de la canción
+  performanceTemplate?: BarPerformanceMarkup[]; // Plantilla de interpretación vocal original (adlibs, pausas, cortes)
+  repetitionFactor?: number;        // Factor de repetición detectado (ej: 4 si vino x4 y colapsó a 1)
+  cardinalityStatus?: "pass" | "safe-collapse" | "mismatch";
   contentHash: string;              // Hash de verificación de inmutabilidad
   locked: boolean;
   sourceVersionId?: string;
   allowPerformanceVariation: boolean; // default true: lyricText canónico, performance (ad-libs, cortes) con variación
+}
+
+/**
+ * Single canonical formatter for Suno AI section headers: [Section: Voice/Hint] or [Section].
+ * Eliminates any rogue commas or inconsistencies across the codebase.
+ */
+export function formatSectionHeader(name: string, voiceOrHint?: string): string {
+  const cleanName = name.trim();
+  if (voiceOrHint && voiceOrHint.trim()) {
+    return `[${cleanName}: ${voiceOrHint.trim()}]`;
+  }
+  return `[${cleanName}]`;
+}
+
+export interface SectionSpec {
+  id: string;
+  name: string;
+  type: "intro" | "verse" | "hook" | "bridge" | "outro" | "beat_drop";
+  voiceId: string;
+  targetBars?: number;
+  minBars?: number;
+  maxBars?: number;
+  occurrenceCount: number;
+}
+
+/**
+ * Resolves a canonical SectionSpec for a given section type from a song structure and voice assignments.
+ */
+export function resolveSectionSpec(
+  structureSections: Array<{ name: string; type: string }>,
+  sectionVoices: Array<{ sectionName: string; bars?: number; voice?: string }> | undefined,
+  targetType: "hook" | "verse" | "intro" | "bridge" | "outro"
+): SectionSpec {
+  const matchingSections = structureSections.filter(s => {
+    const lower = s.name.toLowerCase();
+    if (targetType === "hook") return s.type === "chorus" || s.type === "hook" || lower.includes("chorus") || lower.includes("hook") || lower.includes("estribillo");
+    if (targetType === "verse") return s.type === "verse" || lower.includes("verse") || lower.includes("verso");
+    if (targetType === "intro") return s.type === "intro" || lower.includes("intro");
+    if (targetType === "bridge") return s.type === "bridge" || lower.includes("bridge") || lower.includes("puente");
+    if (targetType === "outro") return s.type === "outro" || lower.includes("outro") || lower.includes("final");
+    return false;
+  });
+
+  const occurrenceCount = matchingSections.length;
+  const firstMatch = matchingSections[0];
+  const va = sectionVoices?.find(v => firstMatch && v.sectionName === firstMatch.name);
+
+  let targetBars = va?.bars;
+  let minBars = 4;
+  let maxBars = 16;
+
+  if (targetType === "hook") {
+    targetBars = targetBars || 8;
+    minBars = 4;
+    maxBars = 16;
+  } else if (targetType === "verse") {
+    targetBars = targetBars || 16;
+    minBars = 8;
+    maxBars = 16;
+  } else if (targetType === "intro" || targetType === "outro") {
+    targetBars = targetBars || 4;
+    minBars = 2;
+    maxBars = 8;
+  } else if (targetType === "bridge") {
+    targetBars = targetBars || 6;
+    minBars = 4;
+    maxBars = 8;
+  }
+
+  return {
+    id: `spec_${targetType}`,
+    name: firstMatch?.name || targetType,
+    type: targetType,
+    voiceId: va?.voice || "lead",
+    targetBars,
+    minBars,
+    maxBars,
+    occurrenceCount,
+  };
 }
 
 export interface SongSectionDoc {
@@ -126,8 +210,7 @@ export function stringifyBar(bar: SongBar): string {
 export function stringifyASTToSunoLyrics(doc: SongDocument): string {
   return doc.sections
     .map(section => {
-      const hint = section.performanceHint ? `, ${section.performanceHint}` : "";
-      const header = `[${section.name}${hint}]`;
+      const header = formatSectionHeader(section.name, section.performanceHint);
       const barLines = section.bars.map(stringifyBar);
       return `${header}\n${barLines.join("\n")}`;
     })
@@ -136,26 +219,112 @@ export function stringifyASTToSunoLyrics(doc: SongDocument): string {
 
 /**
  * Creates an immutable HookContract from a raw or parsed hook topline.
+ * Preserves performanceTemplate without losing ad-lib metadata.
+ * Safely collapses periodic identical repetitions (e.g. 32 bars -> 8 bars with repetitionFactor: 4).
+ * Declares structural mismatch without blind truncation if repetition is not provably identical.
  */
 export function createHookContract(
   approvedTopline: string,
-  options: { allowPerformanceVariation?: boolean; sourceVersionId?: string } = {}
+  options: {
+    allowPerformanceVariation?: boolean;
+    sourceVersionId?: string;
+    expectedBars?: number;
+    occurrenceCount?: number;
+  } = {}
 ): HookContract {
   const lines = approvedTopline
     .split(/\r?\n/)
     .map(l => l.trim())
     .filter(l => l.length > 0 && !l.startsWith("["));
 
-  // Clean lines for canonical bars: strip bracket markup & ad-libs
-  const cleanBars = lines.map(line => {
-    return line
+  // 1. Extract performance metadata template per bar before cleaning text
+  const performanceTemplate: BarPerformanceMarkup[] = [];
+  const rawCleanLines: string[] = [];
+
+  for (const line of lines) {
+    const pauseBefore = line.startsWith("[Pause]");
+    const vocalCut = line.includes("[Vocal Cut]");
+    const pauseAfter = line.endsWith("[Pause]");
+
+    const adlibs: string[] = [];
+    const adlibMatches = line.match(/\(([^)]+)\)/g);
+    if (adlibMatches) {
+      for (const m of adlibMatches) {
+        // Strip any residual asterisks around/inside the adlib
+        const cleanAdlib = m.replace(/[()]/g, "").replace(/[*_]/g, "").trim();
+        if (cleanAdlib) adlibs.push(cleanAdlib);
+      }
+    }
+
+    if (pauseBefore || vocalCut || pauseAfter || adlibs.length > 0) {
+      performanceTemplate.push({
+        pauseBefore: pauseBefore || undefined,
+        pauseAfter: pauseAfter || undefined,
+        adlibs: adlibs.length > 0 ? adlibs : undefined,
+        vocalCut: vocalCut || undefined,
+      });
+    } else {
+      performanceTemplate.push({});
+    }
+
+    // Clean lines for canonical bars: strip bracket markup, ad-libs, and any markdown asterisks/backticks
+    let clean = line
       .replace(/\[[^\]]+\]/g, "")
+      .replace(/\*[ \t]*\([^)]+\)[ \t]*\*/g, "")
       .replace(/\([^)]+\)/g, "")
+      .replace(/[*_`]/g, "")
       .replace(/[ \t]{2,}/g, " ")
       .trim();
-  }).filter(b => b.length > 0);
 
-  const cleanApprovedText = cleanBars.join("\n");
+    if (clean.length > 0) {
+      rawCleanLines.push(clean);
+    }
+  }
+
+  let canonicalBars = rawCleanLines;
+  let template = performanceTemplate.slice(0, canonicalBars.length);
+  let cardinalityStatus: "pass" | "safe-collapse" | "mismatch" = "pass";
+  let repetitionFactor = 1;
+
+  // 2. Strict Cardinality Verification & Provable Safe Collapse
+  if (options.expectedBars && options.expectedBars > 0) {
+    const exp = options.expectedBars;
+    if (canonicalBars.length === exp) {
+      cardinalityStatus = "pass";
+      repetitionFactor = 1;
+    } else if (canonicalBars.length > exp && canonicalBars.length % exp === 0) {
+      const factor = canonicalBars.length / exp;
+      let allBlocksIdentical = true;
+
+      for (let f = 1; f < factor; f++) {
+        for (let i = 0; i < exp; i++) {
+          if (canonicalBars[f * exp + i].toLowerCase() !== canonicalBars[i].toLowerCase()) {
+            allBlocksIdentical = false;
+            break;
+          }
+        }
+        if (!allBlocksIdentical) break;
+      }
+
+      if (allBlocksIdentical) {
+        // Safe Collapse: provably identical periodic repetitions (e.g. 4x8 -> 8)
+        canonicalBars = canonicalBars.slice(0, exp);
+        template = template.slice(0, exp);
+        cardinalityStatus = "safe-collapse";
+        repetitionFactor = factor;
+      } else {
+        // Genuine mismatch: distinct bars beyond target. DO NOT SILENTLY TRUNCATE!
+        cardinalityStatus = "mismatch";
+        repetitionFactor = 1;
+      }
+    } else {
+      // Below target or partial non-periodic repetition (e.g. 8 + 8 + 4). Mismatch!
+      cardinalityStatus = "mismatch";
+      repetitionFactor = 1;
+    }
+  }
+
+  const cleanApprovedText = canonicalBars.join("\n");
   const contentHash = `hook_${Math.abs(
     cleanApprovedText.split("").reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)
   ).toString(36)}`;
@@ -163,7 +332,12 @@ export function createHookContract(
   return {
     id: `hc_${Math.random().toString(36).substring(2, 9)}`,
     approvedText: cleanApprovedText,
-    bars: cleanBars,
+    bars: canonicalBars,
+    expectedBars: options.expectedBars,
+    occurrenceCount: options.occurrenceCount,
+    performanceTemplate: template,
+    repetitionFactor,
+    cardinalityStatus,
     contentHash,
     locked: true,
     sourceVersionId: options.sourceVersionId,
@@ -205,7 +379,7 @@ export function bindHookContractToAST(
         if (section.bars[i]) {
           section.bars[i].lyricText = canonicalLyric;
           if (!contract.allowPerformanceVariation) {
-            section.bars[i].performance = undefined;
+            section.bars[i].performance = contract.performanceTemplate?.[i] || undefined;
           }
         } else {
           section.bars.push({
@@ -213,6 +387,7 @@ export function bindHookContractToAST(
             position: i + 1,
             lyricText: canonicalLyric,
             locked: true,
+            performance: contract.performanceTemplate?.[i] || undefined,
           });
         }
       }
@@ -251,13 +426,14 @@ export function parseRawLyricsToAST(rawLyrics: string, existingDoc?: SongDocumen
     const trimmed = rawLine.trim();
     if (!trimmed) continue;
 
-    // Check for section header [Section Name: Details]
-    const headerMatch = trimmed.match(/^\[([^\]]+)\]$/);
+    // Check for section header [Section Name: Details] with optional trailing bar text
+    const headerMatch = trimmed.match(/^\[([^\]]+)\](?:\s*(.*))?$/);
     if (headerMatch) {
       const inner = headerMatch[1].trim();
       const parts = inner.split(":");
       const rawName = parts[0].trim();
       const afterColon = parts.slice(1).join(":").trim();
+      const trailingBarText = headerMatch[2] ? headerMatch[2].trim() : "";
 
       let type: SongSectionDoc["type"] = "verse";
       const lowerName = rawName.toLowerCase();
@@ -281,7 +457,11 @@ export function parseRawLyricsToAST(rawLyrics: string, existingDoc?: SongDocumen
       };
       sections.push(currentSection);
       barPos = 1;
-      continue;
+
+      // If there was trailing bar text on the same line as the header (e.g. [Intro: Future] (Yeah)), parse it as the first bar
+      if (!trailingBarText) {
+        continue;
+      }
     }
 
     // It's a sung bar line
@@ -298,7 +478,11 @@ export function parseRawLyricsToAST(rawLyrics: string, existingDoc?: SongDocumen
     }
 
     // Extract performance tags: [Pause], [Vocal Cut], (ad-lib)
-    let lineText = trimmed;
+    let lineText = (headerMatch && headerMatch[2] ? headerMatch[2].trim() : trimmed)
+      .replace(/`{1,3}/g, "")
+      .replace(/\*[ \t]*\(([^)]+)\)[ \t]*\*/g, "($1)")
+      .replace(/[*_]{1,3}[ \t]*\(([^)]+)\)/g, "($1)");
+
     const pauseBefore = lineText.startsWith("[Pause]");
     if (pauseBefore) lineText = lineText.replace(/^\[Pause\]\s*/, "");
 
@@ -313,12 +497,22 @@ export function parseRawLyricsToAST(rawLyrics: string, existingDoc?: SongDocumen
     const adlibMatches = lineText.match(/\(([^)]+)\)/g);
     if (adlibMatches) {
       for (const m of adlibMatches) {
-        adlibs.push(m.replace(/[()]/g, "").trim());
+        const cleanAdlib = m.replace(/[()]/g, "").replace(/[*_]/g, "").trim();
+        if (cleanAdlib) adlibs.push(cleanAdlib);
       }
       lineText = lineText.replace(/\(([^)]+)\)/g, "").trim();
     }
 
-    const cleanLyric = lineText.replace(/\s{2,}/g, " ").trim();
+    let cleanLyric = lineText
+      .replace(/[*_]/g, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+
+    // If cleanLyric contains no sung text (only punctuation, asterisks, or whitespace), set to empty string
+    if (!/[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]/.test(cleanLyric)) {
+      cleanLyric = "";
+    }
+
     const existing = existingBarsMap.get(cleanLyric.toLowerCase());
 
     const bar: SongBar = {
