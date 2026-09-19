@@ -66,15 +66,27 @@ async function runDialectEngineTests() {
   totalPassed += 9;
 
   // -------------------------------------------------------------
-  // TEST 2: SpanishFlavor Resolution (Explicit & Auto)
+  // TEST 2: SpanishFlavor Resolution (Explicit, Speaker & Universal Fallback)
   // -------------------------------------------------------------
   console.log("\n--- TEST 2: SpanishFlavor Resolution ---");
-  const autoOffset = resolveSpanishFlavor("auto", offsetProfile);
-  assert(autoOffset.flavor === "puerto_rico", "Auto flavor for Offset resolves to Puerto Rico urban trap");
+  // Offset solo (both English native) -> Universal fallback to neutral_latam
+  const autoOffsetSolo = resolveSpanishFlavor("auto", offsetProfile);
+  assert(autoOffsetSolo.flavor === "neutral_latam", "Auto flavor for Offset solo resolves to universal neutral_latam");
 
+  // Offset + Future (both English native) -> Universal fallback to neutral_latam
+  const futureProfile = resolveSpeakerDialectProfile("future");
+  const autoEnDuet = resolveSpanishFlavor("auto", offsetProfile, futureProfile);
+  assert(autoEnDuet.flavor === "neutral_latam", "Auto flavor for Offset + Future resolves to universal neutral_latam");
+
+  // Offset + Yovngchimi -> Feature is native PR Drill -> resolves to puerto_rico
+  const autoCollab = resolveSpanishFlavor("auto", offsetProfile, chimiProfile);
+  assert(autoCollab.flavor === "puerto_rico", "Auto flavor for Offset + Yovngchimi resolves to feature's Puerto Rico");
+
+  // Morad solo -> Lead is native Spanish (Spain) -> resolves to spain
   const autoMorad = resolveSpanishFlavor("auto", moradProfile);
   assert(autoMorad.flavor === "spain", "Auto flavor for Morad resolves to Spain peninsular");
 
+  // Explicit flavors
   const explicitMexico = resolveSpanishFlavor("mexico");
   assert(explicitMexico.flavor === "mexico", "Explicit 'mexico' resolves Mexico flavor profile");
   assert(explicitMexico.flag === "🇲🇽", "Mexico flag is 🇲🇽");
@@ -94,45 +106,54 @@ async function runDialectEngineTests() {
   const projectWins = resolveSpanishFlavor("auto", offsetProfile, chimiProfile, "spain");
   assert(projectWins.flavor === "spain", "Cascading P2: Project default wins when user selects 'auto'");
 
-  // 3. Speaker feature wins if Lead is EN and Feature is ES
+  // 3. Spanish-native feature resolves when Lead is English
   const speakerFeatureWins = resolveSpanishFlavor("auto", offsetProfile, chimiProfile, "auto");
   assert(speakerFeatureWins.flavor === "puerto_rico", "Cascading P3: Feature native Spanish resolves when Lead is English");
 
-  totalPassed += 9;
+  // 4. Primary Spanish-native speaker resolves
+  const speakerLeadWins = resolveSpanishFlavor("auto", chimiProfile, offsetProfile, "auto");
+  assert(speakerLeadWins.flavor === "puerto_rico", "Cascading P4: Lead native Spanish resolves");
+
+  totalPassed += 12;
 
   // -------------------------------------------------------------
-  // TEST 2.1: LanguageAllocationPlan (Deterministic Voice Weighting & Elasticity)
+  // TEST 2.1: LanguageAllocationPlan (Weighted Syllable Solver & Soft/Hard Bands)
   // -------------------------------------------------------------
   console.log("\n--- TEST 2.1: LanguageAllocationPlan ---");
   const testSections = [
-    { id: "sec_intro", name: "Intro", type: "intro", voiceArtistId: "offset" },
-    { id: "sec_v1", name: "Verse 1", type: "verse", voiceArtistId: "offset" },
-    { id: "sec_v2", name: "Verse 2", type: "verse", voiceArtistId: "yovngchimi" },
-    { id: "sec_hook", name: "Chorus", type: "hook", voiceArtistId: "offset" },
+    { id: "sec_intro", name: "Intro", type: "intro", voiceArtistId: "offset", bars: 4 },
+    { id: "sec_v1", name: "Verse 1", type: "verse", voiceArtistId: "offset", bars: 16 },
+    { id: "sec_hook", name: "Chorus", type: "hook", voiceArtistId: "offset", bars: 8 },
+    { id: "sec_v2", name: "Verse 2", type: "verse", voiceArtistId: "yovngchimi", bars: 16 },
   ];
 
   const allocPlan = buildLanguageAllocationPlan(0.70, offsetProfile, chimiProfile, testSections);
   assert(allocPlan.targetEnglishRatio === 0.70, "AllocPlan reflects targetEnglishRatio 0.70");
-  assert(allocPlan.globalSoftBand.min === 0.58, "AllocPlan soft band min is 0.58 (0.70 - 0.12)");
-  assert(allocPlan.globalSoftBand.max === 0.82, "AllocPlan soft band max is 0.82 (0.70 + 0.12)");
+  assert(allocPlan.globalSoftBand.min === 0.65, "Soft band min is 0.65 (0.70 - 0.05)");
+  assert(allocPlan.globalSoftBand.max === 0.75, "Soft band max is 0.75 (0.70 + 0.05)");
+  assert(allocPlan.globalHardBand.min === 0.58, "Hard band min is 0.58 (0.70 - 0.12)");
+  assert(allocPlan.globalHardBand.max === 0.82, "Hard band max is 0.82 (0.70 + 0.12)");
   assert(allocPlan.allocationMode === "deterministic_voice_weighted", "Allocation mode is deterministic_voice_weighted");
   assert(allocPlan.sections.length === 4, "AllocPlan contains exactly 4 sections");
 
-  // Offset sections should be biased toward higher English ratio (~0.85)
-  const offsetVerse = allocPlan.sections.find(s => s.sectionId === "sec_v1")!;
-  assert(offsetVerse.preferredEnglishRatio === 0.85, "Offset section prefers ~85% English");
+  // Mathematical Solver Reconciliation Check:
+  // sum(w_i * r_i) must equal targetEnglishRatio (0.70) within 0.01
+  const weightedSum = allocPlan.sections.reduce((acc, s) => acc + s.preferredEnglishRatio * s.syllableWeight, 0);
+  assert(Math.abs(weightedSum - 0.70) <= 0.015, `Mathematical Solver: weighted sum ${weightedSum.toFixed(3)} matches target 0.70 (error <= 0.015)`);
 
-  // Yovngchimi section should be biased toward higher Spanish ratio (lower English ratio, ~0.50)
+  // Offset sections should have higher English ratio than Yovngchimi's verse
+  const offsetVerse = allocPlan.sections.find(s => s.sectionId === "sec_v1")!;
   const chimiVerse = allocPlan.sections.find(s => s.sectionId === "sec_v2")!;
-  assert(chimiVerse.preferredEnglishRatio === 0.50, "Yovngchimi section prefers ~50% English / ~50% Spanish");
+  assert(offsetVerse.preferredEnglishRatio > chimiVerse.preferredEnglishRatio, "Offset section has higher English ratio than Yovngchimi section");
+  assert(chimiVerse.preferredEnglishRatio < 0.65, "Yovngchimi section provides balanced/higher Spanish content");
   assert(chimiVerse.targetGuideline.includes("yovngchimi"), "Target guideline includes artist identity");
-  totalPassed += 8;
+  totalPassed += 11;
 
   // -------------------------------------------------------------
   // TEST 3: Prompt Hygiene (ZERO Negative Example Leaks)
   // -------------------------------------------------------------
   console.log("\n--- TEST 3: Prompt Hygiene (ZERO Negative Example Leaks) ---");
-  const directives = buildDialectPromptDirectives(offsetProfile, chimiProfile, autoOffset, 0.70, allocPlan);
+  const directives = buildDialectPromptDirectives(offsetProfile, chimiProfile, autoCollab, 0.70, allocPlan);
 
   // Prohibited negative phrase strings must NEVER appear in the generated prompt
   const negativePhrases = [
