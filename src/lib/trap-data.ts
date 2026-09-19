@@ -1339,3 +1339,113 @@ export function getIntroStyleOptionById(id: string): IntroStyleOption | undefine
   return INTRO_STYLE_OPTIONS.find(i => i.id === id);
 }
 
+// ===== OUTRO STYLES (EXPANDED TRAP ARCHETYPES) =====
+export type OutroStyleId =
+  | "auto"
+  | "abrupt_cutoff"
+  | "faded_echo"
+  | "spoken_reflection"
+  | "beat_breakdown"
+  | "vocal_melodic_fade"
+  | "phone_hangup"
+  | "chopped_slowdown";
+
+export interface OutroStyleOption {
+  id: OutroStyleId;
+  label: string;
+  badge: string;
+  icon: string;
+  description: string;
+  sunoAcousticTag: string;
+  instruction: string;
+  performanceDirective: string;
+}
+
+export const OUTRO_STYLE_OPTIONS: OutroStyleOption[] = [
+  {
+    id: "auto",
+    label: "Auto / Fade Out Estándar",
+    badge: "Auto",
+    icon: "🎯",
+    description: "Cierre atmosférico natural según el flow nativo del artista y desvanecimiento progresivo.",
+    sunoAcousticTag: "Atmospheric fade out, subtle reverb tail",
+    instruction: "Outro atmosférico estándar de cierre de tema, manteniendo el groove hasta el fade-out final.",
+    performanceDirective: "standard_fade",
+  },
+  {
+    id: "abrupt_cutoff",
+    label: "Corte Abrupto en Seco",
+    badge: "Abrupt Cutoff",
+    icon: "⏹️",
+    description: "Final seco y cortante sin reverb ni aviso (Gunna / Carti / Travis). El beat y la voz se detienen instantáneamente.",
+    sunoAcousticTag: "Sudden abrupt cutoff, dry stop, zero reverb tail, instant silence",
+    instruction: "Cierre cortante y abrupto (estilo Playboi Carti / Gunna / Travis Scott). La última barra se corta en seco sin aviso ni desvanecimiento, dejando un silencio instantáneo.",
+    performanceDirective: "abrupt_cutoff",
+  },
+  {
+    id: "faded_echo",
+    label: "Eco Espacial & Delay",
+    badge: "Faded Echo",
+    icon: "🌌",
+    description: "El último compás se repite flotando con delay largo y filtro espacial hacia el infinito (Future / Don Toliver).",
+    sunoAcousticTag: "Stereo ping-pong delay, washed out reverb tail, low-pass filter sweep",
+    instruction: "Outro espacial con delay y eco flotante (estilo Future / Don Toliver). El último verso se repite con ecos y desvanecimiento progresivo en el espectro estéreo.",
+    performanceDirective: "faded_echo",
+  },
+  {
+    id: "spoken_reflection",
+    label: "Monólogo / Reflexión Final",
+    badge: "Spoken Word",
+    icon: "🎙️",
+    description: "La percusión se apaga; barras finales habladas en tono íntimo sobre la crudeza del camino (Morad / Duki / Cole).",
+    sunoAcousticTag: "Drums cut, dry spoken word reflection, subtle ambient drone",
+    instruction: "Outro hablado y reflexivo (estilo Morad / Duki / J. Cole). La batería desaparece por completo; el artista deja unas últimas palabras habladas con voz grave y cercana.",
+    performanceDirective: "spoken_reflection",
+  },
+  {
+    id: "beat_breakdown",
+    label: "808 Bass Breakdown",
+    badge: "808 Solo",
+    icon: "🔊",
+    description: "La voz calla y queda únicamente el subgrave 808 deslizándose con ad-libs lejanos hasta apagarse (Metro Boomin / 21 Savage).",
+    sunoAcousticTag: "Heavy 808 bass slides solo, distant muffled ad-libs, kick muting",
+    instruction: "Breakdown de bajo 808 final (estilo Metro Boomin / 21 Savage). La voz principal concluye y el tema se despide con el bajo saturado y ad-libs lejanos en eco.",
+    performanceDirective: "beat_breakdown",
+  },
+  {
+    id: "vocal_melodic_fade",
+    label: "Melodic Autotune Fade",
+    badge: "Melodic Glitch",
+    icon: "🎵",
+    description: "Vocalizaciones y quejíos melódicos con autotune extremo desvaneciéndose en capas armónicas (Young Thug / Lil Baby).",
+    sunoAcousticTag: "Layered autotune vocal runs, melodic vocal ad-libs, warm pad fade out",
+    instruction: "Cierre melódico con carreras vocales y autotune intenso (estilo Young Thug / Lil Baby). Frases melódicas y armonías que se van disolviendo en capas vocales.",
+    performanceDirective: "vocal_melodic_fade",
+  },
+  {
+    id: "phone_hangup",
+    label: "Cierre con Tono de Colgar",
+    badge: "Hang Up",
+    icon: "📞",
+    description: "Última frase corta seguida de un 'click' y los tonos de llamada terminada (Anuel / Drake / French Montana).",
+    sunoAcousticTag: "Phone hang up click, dial tone beeps, lo-fi telephone filter ending",
+    instruction: "Cierre con sonido de colgar llamada telefónica (estilo Drake / Anuel AA). La última barra suena como mensaje telefónico que finaliza con un pitido de llamada cortada.",
+    performanceDirective: "phone_hangup",
+  },
+  {
+    id: "chopped_slowdown",
+    label: "Chopped & Screwed Slowdown",
+    badge: "Chopped Slow",
+    icon: "📼",
+    description: "Ralentización de cinta y pitch-shift descendente en los últimos dos compases (Houston classic / A$AP Rocky).",
+    sunoAcousticTag: "Tape stop fx, pitched down half-time slowdown, vinyl brake finish",
+    instruction: "Outro Chopped & Screwed con ralentización de cinta tipo tape-stop (estilo A$AP Rocky / Houston Trap). El tempo y el tono bajan drásticamente en los compases finales.",
+    performanceDirective: "chopped_slowdown",
+  },
+];
+
+export function getOutroStyleOptionById(id: string): OutroStyleOption | undefined {
+  return OUTRO_STYLE_OPTIONS.find(o => o.id === id);
+}
+
+

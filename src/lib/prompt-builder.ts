@@ -1,4 +1,5 @@
-import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, getDirtyLevel, getRepetitionPatternById, getHookStyleOptionById, getIntroStyleOptionById, MOODS, getSituationalPresetById, getFlowPocketOptionById, type SongStructure, type BpmVibe, type BeatType, type FlowPocketOption, type IntroStyleId, type IntroStyleOption } from "./trap-data";
+import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, getDirtyLevel, getRepetitionPatternById, getHookStyleOptionById, getIntroStyleOptionById, OUTRO_STYLE_OPTIONS, getOutroStyleOptionById, MOODS, getSituationalPresetById, getFlowPocketOptionById, type SongStructure, type BpmVibe, type BeatType, type FlowPocketOption, type IntroStyleId, type IntroStyleOption, type OutroStyleId, type OutroStyleOption } from "./trap-data";
+export { OUTRO_STYLE_OPTIONS, getOutroStyleOptionById, type OutroStyleId, type OutroStyleOption };
 import {
   getFlowProfile,
   getBreathInstruction,
@@ -39,6 +40,7 @@ export interface SectionVoiceAssignment {
   hookStyle?: string; // "auto" | "melodic" | "mantra" | "punchy" | "call_response" | "anthemic"
   hookMood?: string; // "auto" | moodId from MOODS
   introStyle?: IntroStyleId; // archetypes from INTRO_STYLE_OPTIONS in trap-data.ts
+  outroStyle?: OutroStyleId; // archetypes from OUTRO_STYLE_OPTIONS in trap-data.ts
 }
 
 
@@ -1395,6 +1397,13 @@ export function buildStage2GhostwriterPrompt(
     if (isIntro && va?.introStyle && va.introStyle !== "auto") {
       const opt = getIntroStyleOptionById(va.introStyle);
       return `[${s.name}: ${guide.fullHeaderTag}] — 4 compases [ARQUETIPO INTRO: ${opt?.label ?? va.introStyle}] (${opt?.instruction ?? ""})`;
+    }
+
+    const isOutro = s.type === "outro" || s.name.toLowerCase().includes("outro") || s.name.toLowerCase().includes("final");
+    if (isOutro && va?.outroStyle && va.outroStyle !== "auto") {
+      const opt = getOutroStyleOptionById(va.outroStyle);
+      const targetBars = va?.bars || 4;
+      return `[${s.name}: ${guide.fullHeaderTag}] — ${targetBars} compases [ARQUETIPO OUTRO: ${opt?.label ?? va.outroStyle}] (${opt?.instruction ?? ""})`;
     }
 
     if (isHype || (isIntro && isHype)) {

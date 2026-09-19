@@ -36,9 +36,10 @@ import {
   SITUATIONAL_PRESETS, getSituationalPresetById,
   SECTION_TEMPLATES, FLOW_POCKET_OPTIONS, getFlowPocketOptionById,
   INTRO_STYLE_OPTIONS, getIntroStyleOptionById,
+  OUTRO_STYLE_OPTIONS, getOutroStyleOptionById,
   getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, generateBeatPrompt,
   type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset, type DirtyLevel, type RepetitionPattern, type InstrumentalBreak, type SituationalPreset,
-  type SongSection, type SongStructure, type SectionTemplate, type FlowPocketOption, type IntroStyleOption, type IntroStyleId
+  type SongSection, type SongStructure, type SectionTemplate, type FlowPocketOption, type IntroStyleOption, type IntroStyleId, type OutroStyleOption, type OutroStyleId
 } from "@/lib/trap-data";
 import type { HookVariationOption } from "@/app/api/hook-variations/route";
 import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, cleanSunoBracketHeaders, resolveArtistVocalGuide, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
@@ -2777,13 +2778,16 @@ export default function TrapGhostPage() {
                         const isIntro = sec.type === "intro" || sec.name.toLowerCase().includes("intro");
                         const introStyleId = assign?.introStyle ?? "auto";
                         const introStyle = getIntroStyleOptionById(introStyleId);
+                        const isOutro = sec.type === "outro" || sec.name.toLowerCase().includes("outro") || sec.name.toLowerCase().includes("final");
+                        const outroStyleId = assign?.outroStyle ?? "auto";
+                        const outroStyle = getOutroStyleOptionById(outroStyleId);
                         const repPatternId = assign?.repetitionPattern ?? "none";
                         const repPattern = getRepetitionPatternById(repPatternId);
                         const hookStyleId = assign?.hookStyle ?? "auto";
                         const hookStyle = getHookStyleOptionById(hookStyleId);
                         const hookMoodId = assign?.hookMood ?? "auto";
                         const hookMoodObj = MOODS.find(m => m.id === hookMoodId);
-                        const showCustomKeywordInput = (isChorus && hookStyleId === "mantra") || (!isChorus && !isIntro && (repPatternId === "mantra" || repPatternId === "staccato"));
+                        const showCustomKeywordInput = (isChorus && hookStyleId === "mantra") || (!isChorus && !isIntro && !isOutro && (repPatternId === "mantra" || repPatternId === "staccato"));
 
                         return (
                           <div key={`${sec.name}-${secIdx}`} className="p-2 rounded-md border border-border/40 bg-black/30 space-y-1.5">
@@ -2932,6 +2936,34 @@ export default function TrapGhostPage() {
                                   </SelectTrigger>
                                   <SelectContent className="max-h-72">
                                     {INTRO_STYLE_OPTIONS.map(opt => (
+                                      <SelectItem key={opt.id} value={opt.id}>
+                                        <div className="flex items-center justify-between w-full gap-2">
+                                          <span className="flex items-center gap-1.5">
+                                            <span>{opt.icon}</span> <span>{opt.label}</span>
+                                          </span>
+                                          <span className="text-[9px] text-muted-foreground/70 font-mono px-1 rounded bg-white/5">{opt.badge}</span>
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : isOutro ? (
+                                /* Outro Style Selector */
+                                <Select
+                                  value={outroStyleId}
+                                  onValueChange={(v) => {
+                                    setSectionVoices(prev => {
+                                      const others = prev.filter(p => p.sectionName !== sec.name);
+                                      const currentVoice = assign?.voice ?? "auto";
+                                      return [...others, { ...assign, sectionName: sec.name, voice: currentVoice, outroStyle: v === "auto" ? undefined : v as OutroStyleId }];
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className={`bg-black/40 h-7 text-[10px] w-[155px] sm:w-[185px] ${outroStyleId !== "auto" ? "border-purple-400/80 text-purple-300 font-semibold bg-purple-400/10 shadow-xs" : "text-muted-foreground"}`}>
+                                    <SelectValue placeholder="Estilo Outro" />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-72">
+                                    {OUTRO_STYLE_OPTIONS.map(opt => (
                                       <SelectItem key={opt.id} value={opt.id}>
                                         <div className="flex items-center justify-between w-full gap-2">
                                           <span className="flex items-center gap-1.5">

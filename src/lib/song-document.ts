@@ -7,6 +7,7 @@ export interface BarPerformanceMarkup {
   adlibs?: string[];           // (ad-lib text)
   vocalCut?: boolean;          // [Vocal Cut]
   emphasis?: string[];         // Words emphasized
+  performanceDirective?: string; // e.g. "abrupt_cutoff", "faded_echo", etc.
 }
 
 export interface BarAnalysis {
@@ -135,6 +136,7 @@ export interface SongSectionDoc {
   voiceId: "lead" | "feature" | "adlib_layer" | "whisper_layer" | "both";
   performanceHint?: string;    // Suno acoustic hint: "Hypnotic repetitive mantra, heavy 808"
   hookContractId?: string;     // Reference to HookContract if this section is a hook
+  performanceDirective?: string; // Segregated performance directive (e.g. "abrupt_cutoff")
   bars: SongBar[];
 }
 
