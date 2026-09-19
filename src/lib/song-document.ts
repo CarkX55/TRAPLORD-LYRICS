@@ -429,6 +429,67 @@ export function isMetaReasoningLine(line: string): boolean {
   return reasoningPatterns.some((pattern) => pattern.test(trimmed));
 }
 
+export interface LyricEnvelopeValidationResult {
+  valid: boolean;
+  reason?: string;
+  detectedReasoningLines?: string[];
+}
+
+/**
+ * Fail-Closed Validator for LLM lyric responses.
+ * Rejects any response that exposes conversational commentary, meta-reasoning justifications,
+ * bullet lists of changes, or transition delimiters ('Letra ajustada:').
+ * Invariant: Never guess or slice text to "salvage" an invalid contaminated payload.
+ */
+export function validateLyricEnvelope(rawText: string): LyricEnvelopeValidationResult {
+  if (!rawText || !rawText.trim()) {
+    return { valid: false, reason: "Respuesta vacía o sin contenido lírico." };
+  }
+
+  const trimmed = rawText.trim();
+
+  // 1. Check for explicit transition delimiters (e.g. "Letra ajustada:")
+  const transitionMatch = trimmed.match(
+    /(?:^|\n)\s*(?:letra ajustada|letra corregida|versi[óo]n ajustada|versi[óo]n corregida|versi[óo]n final|letra final|letra mejorada|texto ajustado|texto corregido|adjusted lyrics|revised lyrics|final lyrics)\s*:\s*/i
+  );
+  if (transitionMatch) {
+    return {
+      valid: false,
+      reason: `Fuga de metarazonamiento detectada (delimitador de transición: '${transitionMatch[0].trim()}'). Política Fail-Closed activada.`,
+      detectedReasoningLines: [transitionMatch[0].trim()],
+    };
+  }
+
+  // 2. Scan line-by-line for meta-reasoning phrases or bullet points of explanation
+  const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const reasoningLines: string[] = [];
+
+  for (const line of lines) {
+    if (isMetaReasoningLine(line)) {
+      reasoningLines.push(line);
+    }
+  }
+
+  if (reasoningLines.length > 0) {
+    return {
+      valid: false,
+      reason: `Fuga de metarazonamiento detectada en ${reasoningLines.length} línea(s). Política Fail-Closed activada.`,
+      detectedReasoningLines: reasoningLines,
+    };
+  }
+
+  // 3. Must contain at least one genuine Suno section bracket
+  const hasSectionBracket = lines.some((l) => /^\[[^\]]+\]/.test(l));
+  if (!hasSectionBracket) {
+    return {
+      valid: false,
+      reason: "No se detectaron corchetes de sección válidos (ej: [Intro], [Verse], [Chorus]).",
+    };
+  }
+
+  return { valid: true };
+}
+
 /**
  * Strips any conversational preamble, meta-reasoning blocks, or explanation headers
  * from raw LLM output before it is parsed into the SongDocument AST.

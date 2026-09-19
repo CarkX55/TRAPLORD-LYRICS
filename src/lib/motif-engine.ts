@@ -2,6 +2,29 @@ import { createHash } from "crypto";
 import { getSceneById } from "./scene-engine";
 import { getArtistById, type SongStructure } from "./trap-data";
 
+export type TopicIntent =
+  | {
+      kind: "named_entity";
+      value: string; // Ej: "Cardano", "Rolls Royce", "Atlanta"
+      preservation: "lexical_available";
+      // La entidad literal debe estar disponible para cuando la escena lo requiera,
+      // pero NO se exige ni se fuerza su repetición a lo largo de las secciones.
+    }
+  | {
+      kind: "abstract_theme";
+      value: string; // Ej: "lealtad", "paranoia", "éxito solitario"
+      preservation: "semantic_intent";
+      // Se preserva la intención dramática a través de conductas y hechos,
+      // sin forzar la aparición literal de la palabra ni discursos morales de autoayuda.
+    };
+
+export interface SemanticSceneFraming {
+  dominantSemanticRole: string; // Ej: "digital_value_under_pressure"
+  situation: string;            // Ej: "espera nocturna en un vehículo o espacio cerrado"
+  tension: string;              // Ej: "algo se mueve fuera mientras el personaje no puede intervenir físicamente"
+  dramaticFunction: string;     // Ej: "contraste entre valor invisible y riesgo físico tangible"
+}
+
 export interface SemanticAnchor {
   anchorType: "physical_image" | "sensory_detail" | "emotional_contradiction" | "spatial_tension" | "behavioral_action";
   title: string;
@@ -14,6 +37,8 @@ export interface SemanticAnchor {
   generationIntentHash?: string;
   dramaticMotifId?: string;
   antiClicheDirectives?: string[];
+  topicIntents?: TopicIntent[];
+  framing?: SemanticSceneFraming;
 }
 
 export interface CanonicalIntent {
@@ -316,6 +341,153 @@ export function selectDramaticMotif(generationIntentHash: string): DramaticMotif
   return DRAMATIC_MOTIF_CATALOG[index];
 }
 
+const ABSTRACT_THEME_KEYWORDS = new Set([
+  "lealtad", "traicion", "traición", "respeto", "envidia", "paranoia", "fe",
+  "soledad", "superacion", "superación", "exito", "éxito", "ambicion", "ambición",
+  "calle", "barrio", "familia", "venganza", "amor", "desamor", "tristeza",
+  "dolor", "rabia", "muerte", "tiempo", "paz", "esfuerzo", "disciplina",
+  "fama", "silencio", "vacio", "vacío", "presion", "presión", "ego", "orgullo",
+  "nostalgia", "memoria", "destino", "lucha", "hambre", "codicia", "frialdad"
+]);
+
+/**
+ * Classifies a user topic or custom topic into an ontological TopicIntent:
+ * - named_entity: tokens, brands, locations, people, specific proper nouns. Available literally, without repetition quota.
+ * - abstract_theme: ethical concepts, emotions, psychological tensions. Preserved via dramatic intent, conduct, and facts.
+ */
+export function classifyTopicIntent(topic: string): TopicIntent {
+  const trimmed = (topic || "").trim();
+  const lower = trimmed.toLowerCase();
+
+  // Check known abstract themes
+  const tokens = lower.split(/[\s,]+/);
+  const isAbstract =
+    ABSTRACT_THEME_KEYWORDS.has(lower) ||
+    tokens.some((t) => ABSTRACT_THEME_KEYWORDS.has(t)) ||
+    /^(?:la |el |las |los )?(?:lealtad|traici[óo]n|calle|familia|soledad|paranoia|respeto|superaci[óo]n)\b/i.test(lower);
+
+  // Check for specific named entities: crypto, brands, places, people, or capitalized proper nouns
+  const isCryptoOrBrand =
+    /\b(?:cardano|bitcoin|ethereum|solana|crypto|btc|eth|ada|rolls|royce|maybach|mercedes|ferrari|lambo|patek|rolex|glock|atlanta|miami|madrid|barcelona|compton|detroit|memphis|brooklyn|chicago|shiesty|curry|jordan)\b/i.test(
+      lower
+    );
+
+  const hasCapitalization = /^[A-Z]/.test(trimmed) && !isAbstract;
+
+  if (isCryptoOrBrand || hasCapitalization) {
+    return {
+      kind: "named_entity",
+      value: trimmed,
+      preservation: "lexical_available",
+    };
+  }
+
+  if (isAbstract) {
+    return {
+      kind: "abstract_theme",
+      value: trimmed,
+      preservation: "semantic_intent",
+    };
+  }
+
+  // Default fallback: if capitalized -> named entity; otherwise abstract theme
+  if (/[A-Z]/.test(trimmed)) {
+    return {
+      kind: "named_entity",
+      value: trimmed,
+      preservation: "lexical_available",
+    };
+  }
+
+  return {
+    kind: "abstract_theme",
+    value: trimmed,
+    preservation: "semantic_intent",
+  };
+}
+
+/**
+ * Resolves Semantic Scene Framing: Translates topics into situational tension and dramaturgical roles.
+ * Avoids rigid keyword lists or substitute dictionaries.
+ */
+export function resolveSemanticSceneFraming(
+  topics: string[],
+  customTopic?: string,
+  situationalPresetId?: string
+): { topicIntents: TopicIntent[]; framing: SemanticSceneFraming } {
+  const allRaw = [customTopic, ...topics].filter(Boolean) as string[];
+  const topicIntents = allRaw.map(classifyTopicIntent);
+
+  const preset =
+    situationalPresetId && situationalPresetId !== "none"
+      ? getSceneById(situationalPresetId)
+      : null;
+
+  if (preset) {
+    return {
+      topicIntents,
+      framing: {
+        dominantSemanticRole: `situational_${preset.id}`,
+        situation: preset.atmosphere,
+        tension: preset.conflict,
+        dramaticFunction: preset.sceneTurn || "desarrollar la tensión rítmica y dramática del momento",
+      },
+    };
+  }
+
+  const combinedLower = allRaw.join(" ").toLowerCase();
+
+  // 1. Digital value / crypto under pressure
+  if (/\b(?:cardano|bitcoin|crypto|wallet|ada|cifrado|claves|llaves|digital)\b/i.test(combinedLower)) {
+    return {
+      topicIntents,
+      framing: {
+        dominantSemanticRole: "digital_value_under_pressure",
+        situation: "espacio cerrado, terminales con saldo cifrado y vigilancia constante del entorno exterior",
+        tension: "contraste entre el valor intangible custodiado en la red y la vulnerabilidad física tangible en el asfalto",
+        dramaticFunction: "mostrar el peso y la frialdad de la custodia digital sin eslóganes de folleto financiero ni clichés corporativos",
+      },
+    };
+  }
+
+  // 2. Loyalty / betrayal / street code
+  if (/\b(?:lealtad|traici[óo]n|respeto|codigo|código|hermano|familia)\b/i.test(combinedLower)) {
+    return {
+      topicIntents,
+      framing: {
+        dominantSemanticRole: "fractured_trust_and_street_code",
+        situation: "reunión nocturna en un vehículo o descansillo con teléfonos boca abajo",
+        tension: "la sospecha silenciosa de que alguien del círculo cercano no resistirá la presión exterior",
+        dramaticFunction: "revelar la lealtad a través de acciones concretas, silencios y cautela táctica, sin discursos morales de autoayuda",
+      },
+    };
+  }
+
+  // 3. Ambition / sports / competitive precision
+  if (/\b(?:baloncesto|basket|nba|curry|deporte|cancha|partido|juego)\b/i.test(combinedLower)) {
+    return {
+      topicIntents,
+      framing: {
+        dominantSemanticRole: "competitive_precision_under_clock",
+        situation: "espacio de concentración solitaria, el asfalto o la pista vacía a altas horas",
+        tension: "la necesidad de no errar el tiro cuando no hay margen de error ni segundas oportunidades",
+        dramaticFunction: "anclar la competitividad en la disciplina física y la ejecución milimétrica, sin narraciones de retransmisión televisiva",
+      },
+    };
+  }
+
+  // 4. Fallback: Street authenticity & territorial tension
+  return {
+    topicIntents,
+    framing: {
+      dominantSemanticRole: "street_authenticity_and_territorial_presence",
+      situation: "asfalto nocturno, movimiento coordinado y perímetro bajo control",
+      tension: "mantener la compostura y la firmeza frente al asedio exterior sin ceder terreno",
+      dramaticFunction: "anclar cada compás en hechos físicos, ritmo pesado y detalles táctiles sin frases genéricas de relleno",
+    },
+  };
+}
+
 /**
  * Synthesizes topics + situational scene/structure into an organic Semantic Anchor (Step 4 Canonical).
  * Prevents mechanical repetition of topic nouns and equips the Topliner and Ghostwriter with
@@ -347,7 +519,14 @@ export function synthesizeSemanticAnchor(params: {
   const generationIntentHash = computeGenerationIntentHash(canonicalIntent);
   const dramaticMotif = selectDramaticMotif(generationIntentHash);
 
-  // 2. Extract literalization penalty words (words that should not be mindlessly repeated 10 times in the hook)
+  // 2. Resolve Semantic Scene Framing and Topic Intents
+  const { topicIntents, framing } = resolveSemanticSceneFraming(
+    params.topics,
+    params.customTopic,
+    params.situationalPresetId
+  );
+
+  // 3. Extract literalization penalty words (words that should not be mindlessly repeated 10 times in the hook)
   const penaltyWords: string[] = [];
   if (params.customTopic) {
     const rawTokens = params.customTopic
@@ -360,7 +539,7 @@ export function synthesizeSemanticAnchor(params: {
     }
   }
 
-  // 3. Case A: Situational scene explicitly chosen by user
+  // 4. Case A: Situational scene explicitly chosen by user
   if (scene) {
     return {
       anchorType: "physical_image",
@@ -373,10 +552,12 @@ export function synthesizeSemanticAnchor(params: {
       generationIntentHash,
       dramaticMotifId: dramaticMotif.id,
       antiClicheDirectives: dramaticMotif.antiClicheDirectives,
+      topicIntents,
+      framing,
     };
   }
 
-  // 4. Case B: Dynamic anti-cliché anchor driven by canonical dramatic motif
+  // 5. Case B: Dynamic anti-cliché anchor driven by canonical dramatic motif
   const userTopicString = [params.customTopic, ...params.topics].filter(Boolean).join(", ");
   const topicLabel = userTopicString || "Vida nocturna, ambición y calle";
 
@@ -391,5 +572,7 @@ export function synthesizeSemanticAnchor(params: {
     generationIntentHash,
     dramaticMotifId: dramaticMotif.id,
     antiClicheDirectives: dramaticMotif.antiClicheDirectives,
+    topicIntents,
+    framing,
   };
 }

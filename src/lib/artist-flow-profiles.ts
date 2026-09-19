@@ -23,7 +23,49 @@ export interface FlowProfile {
   songFormStyle: "expanding_chorus" | "pre_chorus_build" | "beat_drop" | "variable_verse" | "minimal_standard" | "hybrid";  // NEW Phase 6
   imageryBank: string[];  // NEW Phase 7 — concrete specific imagery the artist uses at peak (brands, places, objects, slang, concepts)
   sunoVocalTimbre: string; // Suno AI v4.5 specific vocal descriptor
+  compositionalGoldExamples?: CompositionalGoldExample[];
 }
+
+export interface CompositionalGoldExample {
+  technique: "compressed_imagery" | "staggered_internal_rhyme" | "pause_architecture" | "delayed_punchline";
+  description: string;
+  bars: [string, string];
+}
+
+export const CANONICAL_COMPOSITIONAL_GOLD_VAULT: readonly CompositionalGoldExample[] = [
+  {
+    technique: "compressed_imagery",
+    description: "Condensación de múltiples detalles visuales y táctiles en 2 compases sin palabras de relleno ni clichés.",
+    bars: [
+      "Sombra en el retrovisor, asfalto frío y la pantalla en gris (Hold up)",
+      "Cuatro llamadas perdidas antes de cruzar la M-30 (Facts)",
+    ],
+  },
+  {
+    technique: "staggered_internal_rhyme",
+    description: "Enlace de rimas internas asonantes a contratiempo sin forzar la última palabra del compás.",
+    bars: [
+      "Cuentas claras en la mesa, pesa el metal de la llave (Yeah)",
+      "Trago amargo en el vaso, paso despacio y sin prisa (Never)",
+    ],
+  },
+  {
+    technique: "pause_architecture",
+    description: "Apertura deliberada de espacio rítmico dejando respirar al bajo 808 en el tiempo 1 con pausas dramáticas.",
+    bars: [
+      "(Silence) Dos segundos sin hablar... el motor sigue encendido",
+      "Nadie se mueve en la cabina hasta que baje el cristal (Hold on)",
+    ],
+  },
+  {
+    technique: "delayed_punchline",
+    description: "Retención del golpe de sentido o remate lírico hasta la última fracción del compás final.",
+    bars: [
+      "Muchos prometen cubrir la espalda cuando el cielo está despejado",
+      "Pero cuando cae la tormenta... ni la sombra se queda al lado (No cap)",
+    ],
+  },
+];
 
 export type CadenceType =
   | "triplet" | "staccato" | "legato" | "swing" | "syncopated"
@@ -80,6 +122,16 @@ export function getCadenceLabel(cadence: CadenceType): string {
 
 export function getBreathInstruction(profile: FlowProfile): string {
   return `Inserta un ${profile.breathStyle} cada ${profile.breathEveryBars} barras aproximadamente, en el punto natural de respiración. Esto hace que Suno genere pausas vocales realistas.`;
+}
+
+export function getCompositionalGoldExamples(artistId?: string): readonly CompositionalGoldExample[] {
+  if (artistId) {
+    const profile = getFlowProfile(artistId);
+    if (profile?.compositionalGoldExamples && profile.compositionalGoldExamples.length > 0) {
+      return profile.compositionalGoldExamples;
+    }
+  }
+  return CANONICAL_COMPOSITIONAL_GOLD_VAULT;
 }
 
 // ===== ARTISTAS FALTANTES =====

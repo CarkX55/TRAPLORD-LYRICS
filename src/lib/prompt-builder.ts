@@ -6,6 +6,7 @@ import {
   getCadenceLabel,
   getRhymeTier,
   getHookDensityProfile,
+  getCompositionalGoldExamples,
   type FlowProfile,
   type HookDensityProfile,
 } from "./artist-flow-profiles";
@@ -14,7 +15,13 @@ import type { TrackAnalysis } from "./track-analyzer";
 import { getSceneById, type SituationalScene } from "./scene-engine";
 import { getMusicalDNAForArtist, getSectionModulatedTexture, ARTIST_PRESETS, type MusicalDNA } from "./musical-dna";
 import { HOOK_STRATEGIES, recommendHookStrategy, type HookStrategyType } from "./hook-engine";
-import type { SemanticAnchor } from "./motif-engine";
+import {
+  classifyTopicIntent,
+  resolveSemanticSceneFraming,
+  type SemanticAnchor,
+  type TopicIntent,
+  type SemanticSceneFraming,
+} from "./motif-engine";
 import type { LanguageDNA } from "./language-dna";
 import { formatSectionHeader, resolveSectionSpec, stripMetaReasoning } from "./song-document";
 
@@ -1257,8 +1264,15 @@ export function buildStage1ToplinePrompt(
   const kw = hookVa?.customKeyword?.trim();
 
   const userTopicsList = [params.customTopic, ...params.topics].filter(Boolean);
+  const topicIntents = userTopicsList.map(classifyTopicIntent);
+  const namedEntities = topicIntents.filter(t => t.kind === "named_entity").map(t => t.value);
+  const abstractThemes = topicIntents.filter(t => t.kind === "abstract_theme").map(t => t.value);
+  const goldExamples = getCompositionalGoldExamples(params.artistId);
+
   const topicsBlock = userTopicsList.length > 0
-    ? `- **Temáticas Elegidas por el Usuario**: ${userTopicsList.join(", ")}\n- **ENTIDADES EXPLÍCITAS DEL USUARIO (PRESERVACIÓN INVIOLABLE)**: Las temáticas pedidas por el usuario (${userTopicsList.join(", ")}) son elecciones deliberadas e inviolables. Queda TERMINANTEMENTE PROHIBIDO censurarlas, reemplazarlas por perífrasis genéricas o considerarlas como 'contaminación corporativa'.`
+    ? `- **Temáticas Elegidas por el Usuario**: ${userTopicsList.join(", ")}
+${namedEntities.length > 0 ? `- **Entidades Nombradas Disponibles (Preservación Inviolable)**: [${namedEntities.join(", ")}]. Están disponibles literalmente cuando la métrica o la escena lo requieran. Queda TERMINANTEMENTE PROHIBIDO censurarlas, cambiarlas por perífrasis genéricas, forzar su repetición en cada compás o convertirlas en eslóganes comerciales de folleto publicitario.` : ""}
+${abstractThemes.length > 0 ? `- **Temas Abstractos (Preservación Semántica)**: [${abstractThemes.join(", ")}]. Se expresan a través de hechos, conductas y detalles físicos tangibles, NUNCA mediante sermones morales ni discursos de autoayuda.` : ""}`
     : "- **Temática**: Estilo libre de trap y calle.";
 
   return `Eres el Topliner y Diseñador de Ganchos (Hook Architect) más cotizado del Trap y Rap contemporáneo.
@@ -1281,6 +1295,11 @@ ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 - 🚫 PROHIBIDO generar repeticiones del estribillo (Chorus 2, Chorus 3, etc.) ni duplicar el bloque de texto. El motor de estudio se encargará de instanciarlo a lo largo de la canción.
 - 🚫 PROHIBIDO usar asteriscos * o ** ni formato Markdown en los ad-libs. Usa ÚNICAMENTE paréntesis planos normales: (Yeah), (Facts), (Uh).
 
+# 🎯 DIRECTIVA DE UNICIDAD DE CENTRO SEMÁNTICO DOMINANTE:
+- El Hook/Chorus debe articular EXCLUSIVAMENTE UNA SOLA idea, imagen o tensión nuclear con gancho melódico y rítmico contundente.
+- 🚫 PROHIBIDO el estribillo-catálogo: NO intentes resumir o meter múltiples temas distintos yuxtapuestos en el estribillo.
+- Si el usuario introdujo varios temas, selecciona la tensión nuclear o imagen más potente para el coro; las demás temáticas se desarrollarán en las estrofas y versos.
+
 ${hookInstructionBlock}
 ${hookVariationsEnabled ? `
 # 🌊 ESPACIO RÍTMICO Y DENSIDAD PREFERIDA (ADAPTIVE HOOK FLOW):
@@ -1289,6 +1308,9 @@ ${hookVariationsEnabled ? `
 - **Frecuencia de Ad-libs**: ${getHookDensityProfile(params.artistId).adlibDensity >= 0.4 ? "Ad-libs rítmicos en contratiempo con actitud." : "Ad-libs comedidos y selectivos."}
 - **Regla Blanda**: Trata estas directivas como preferencias de bolsillo y respiración para el gancho, no como cuotas matemáticas fijas.
 ` : ""}
+# 💎 ANCLAS COMPOSITIVAS NEUTRALES (TÉCNICA DE ESTUDIO):
+${goldExamples.map(g => `- **${g.technique}** (${g.description}):\n  Barra 1: "${g.bars[0]}"\n  Barra 2: "${g.bars[1]}"`).join("\n")}
+
 # 🏀 REGLAS DE ARQUITECTURA TOPLINE (MÚSICA REAL DE ESTUDIO):
 1. **FRASEO MUSICAL Y BARRAS COMPLETAS:**
    - Escribe compases que fluyan con ritmo natural, swing y musicalidad real.
@@ -1418,6 +1440,18 @@ export function buildStage2GhostwriterPrompt(
   }).join("\n");
 
   const userTopicsList = [params.customTopic, ...params.topics].filter(Boolean);
+  const framingData = resolveSemanticSceneFraming(params.topics, params.customTopic, params.situationalPresetId);
+  const framing = framingData.framing;
+  const topicIntents = framingData.topicIntents;
+  const namedEntities = topicIntents.filter(t => t.kind === "named_entity").map(t => t.value);
+  const abstractThemes = topicIntents.filter(t => t.kind === "abstract_theme").map(t => t.value);
+  const goldExamples = getCompositionalGoldExamples(params.artistId);
+
+  const topicsBlock = userTopicsList.length > 0
+    ? `- Temáticas Elegidas por el Usuario: ${userTopicsList.join(", ")}
+${namedEntities.length > 0 ? `- **Entidades Nombradas Disponibles (Preservación Inviolable)**: [${namedEntities.join(", ")}]. Están disponibles literalmente cuando la métrica o la escena lo requieran. Queda TERMINANTEMENTE PROHIBIDO censurarlas, cambiarlas por perífrasis genéricas, forzar su repetición en cada compás o convertirlas en eslóganes comerciales de folleto publicitario.` : ""}
+${abstractThemes.length > 0 ? `- **Temas Abstractos (Preservación Semántica)**: [${abstractThemes.join(", ")}]. Se expresan a través de hechos, conductas y detalles físicos tangibles, NUNCA mediante discursos morales ni sermones de autoayuda.` : ""}`
+    : "- Temática: Vida de calle y rap auténtico";
 
   return `Eres un Ghostwriter de élite y Director Vocal de cabina en el Trap y Rap contemporáneo.
 Tu misión es componer la canción definitiva masterizada con el máximo calibre lírico, flow elástico y dimensión vocal tridimensional para Suno AI v4.5.
@@ -1436,9 +1470,15 @@ ${lockedTopline}
 ${featureArtist ? `- Feature Artist: ${featureArtist.name} (${featureArtist.origin})` : ""}
 - Tempo & Vibra: ${params.bpmVibe.range} BPM (${params.bpmVibe.label})
 - Actitud / Dirty Level: ${dirty.label} (${dirty.badge}) — ${dirty.instruction}
-${userTopicsList.length > 0 ? `- Temáticas Elegidas por el Usuario: ${userTopicsList.join(", ")}` : "- Temática: Vida de calle y rap auténtico"}
+${topicsBlock}
 ${params.customDictionary?.trim() ? `- Diccionario de calle / Marcas: { ${params.customDictionary.trim()} }` : ""}
 ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
+
+# 🎭 ENCUADRE ESCÉNICO Y TENSIÓN DRAMÁTICA (SEMANTIC SCENE FRAMING):
+- Rol Semántico Dominante: ${framing.dominantSemanticRole}
+- Situación Escénica: ${framing.situation}
+- Tensión Dramática: ${framing.tension}
+- Función en la Canción: ${framing.dramaticFunction}
 
 🚫 REGLAS DE VOCABULARIO Y AUTENTICIDAD:
 1. **Cero Palabras Inyectadas / Cero Atrezzo Artificial:** Desarrolla la narrativa y metáforas ÚNICAMENTE a través de las temáticas elegidas por el usuario y el vocabulario natural de ${artist?.name ?? "el artista"}. Queda terminantemente prohibido meter objetos no pedidos.
@@ -1467,6 +1507,17 @@ Si la [Intro] está en modo Hype Man o tiene asignado 'Hype', queda TERMINANTEME
 - Flow DNA (${artist?.name}): Cadencia ${mainDNA.flow.cadenceType} (${mainDNA.flow.avgSyllablesPerBar.join("-")} sílabas por compás). Síncopa: ${Math.round(mainDNA.flow.syncopation * 100)}%. ${flowProfile?.cadenceInstruction ?? ""}
 ${featDNA ? `- Flow Feature (${featureArtist?.name}): Cadencia ${featDNA.flow.cadenceType}. ${featureFlowProfile?.cadenceInstruction ?? ""}` : ""}
 ${featureContrast ? `${featureContrast.instruction}\n` : ""}- ${rhymeLevelInstruction}
+
+# 💎 ANCLAS COMPOSITIVAS NEUTRALES (TÉCNICA DE ESTUDIO):
+${goldExamples.map(g => `- **${g.technique}** (${g.description}):\n  Barra 1: "${g.bars[0]}"\n  Barra 2: "${g.bars[1]}"`).join("\n")}
+
+# 🧱 CONTINUIDAD ESCÉNICA EN CÉLULAS DE ESCRITURA (4-BAR SCENE PROGRESSION):
+Cada célula o bloque de 4 compases debe mantener continuidad escénica o de tensión dramática:
+- Compás 1: Establece la situación o escenario físico.
+- Compás 2: Aporta un detalle táctil o subtexto revelador.
+- Compás 3: Escala la tensión o introduce un giro interno.
+- Compás 4: Cierra con una consecuencia tangible o punchline de remate.
+🚫 PROHIBIDO cambiar arbitrariamente de tema o saltar de un cliché a otro en cada compás individual.
 
 🔄 RIMA Y DENSIDAD VARIABLE:
 Se permiten compases hablados (spoken bars), silencios rítmicos y rimas internas asonantes. La rima nunca debe forzar o gobernar la frase de forma artificial.

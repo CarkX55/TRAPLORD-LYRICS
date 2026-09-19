@@ -16,7 +16,7 @@ import {
 } from "./delivery-analyzer";
 import { calculateSyllableLanguageRatio, type LanguageRatioResult } from "./language-dna";
 import { analyzeRhymes, type RhymeAnalysis } from "./rhyme-detector";
-import { auditMetadataLeakage, type MetadataLeakReport } from "./prompt-hygiene";
+import { auditMetadataLeakage, auditCliches, type MetadataLeakReport, type ClicheAuditReport } from "./prompt-hygiene";
 import type { SunoBudgetAudit } from "./suno-budget";
 import type { DialectAuditResult } from "./dialect-engine";
 
@@ -99,6 +99,7 @@ export interface InitialAuditContext {
   languageAnalysis: LanguageRatioResult;
   rhymeAnalysis: RhymeAnalysis;
   leakageAudit: MetadataLeakReport;
+  clicheAudit?: ClicheAuditReport;
   structuralCardinality: StructuralCardinalityAudit[];
   dialectAudit?: DialectAuditResult;
 }
@@ -268,6 +269,9 @@ export function runInitialDeliveryAudit(
   // 6. Prompt Hygiene / Metadata Leakage
   const leakageAudit = auditMetadataLeakage(lyricsText, userExplicitInputs);
 
+  // 7. Tired AI Cliches & Moralizing Tropes Audit
+  const clicheAudit = auditCliches(lyricsText, userExplicitInputs);
+
   return {
     phoneticFit,
     deliveryLoad,
@@ -275,6 +279,7 @@ export function runInitialDeliveryAudit(
     languageAnalysis,
     rhymeAnalysis,
     leakageAudit,
+    clicheAudit,
     structuralCardinality,
     dialectAudit,
   };
@@ -283,7 +288,8 @@ export function runInitialDeliveryAudit(
 /**
  * Evaluates whether surgical repair is actually justified.
  * UNIFIED DEFECT SET: Incorporates structural cardinality, delivery load,
- * metadata leaks, forced rhymes, and critical dialect/translation calques.
+ * metadata leaks, forced rhymes, critical dialect/translation calques,
+ * and tired corporate/moralizing AI cliches.
  * Rule: Repair ONLY if net gain (quality gain - disruption risk) > 0.
  * Weak diagnostics (low confidence, single words, slang warnings) NEVER trigger repairs.
  * Maximum 1 surgical repair execution strictly bounded (<= 3 targets).
@@ -342,6 +348,17 @@ export function evaluateRepairability(audit: InitialAuditContext): {
     }
   }
 
+  // 6. Critical Cliche & Moralizing Tropes Audit (Corporate pitch, generic moralizing, lazy AI loops)
+  if (audit.clicheAudit && audit.clicheAudit.criticalCount > 0) {
+    for (const finding of audit.clicheAudit.findings.filter(f => f.severity === "critical")) {
+      targets.push({
+        sectionId: "verse_1",
+        barIndices: finding.barIndex !== undefined ? [finding.barIndex] : [0],
+        reason: `Defecto de cliché crítico (${finding.category}): "${finding.token}" — ${finding.reason}`,
+      });
+    }
+  }
+
   return {
     needsRepair: targets.length > 0 && targets.length <= 3,
     targetBars: targets.slice(0, 3),
@@ -380,7 +397,7 @@ export function evaluateFinalQualityGate(
 ): AnalysisSnapshot {
   // Check Layer Compliance
   const musicalPassed = audit.phoneticFit.overallComfort >= 60 && audit.deliveryLoad.loadScore >= 55;
-  const narrativePassed = true; // Scene anchors verified during generation
+  const narrativePassed = !audit.clicheAudit || audit.clicheAudit.criticalCount === 0;
   const linguisticPassed = audit.languageAnalysis.mechanicityScore <= 7.5;
 
   // Invariant: Structural layer requires adlib hygiene AND zero unresolved structural cardinality mismatches!
@@ -388,7 +405,7 @@ export function evaluateFinalQualityGate(
   const structuralPassed = !audit.adlibAnalysis.clusterWarning && !audit.adlibAnalysis.leadOccupancyCollision && !hasStructuralMismatch;
   const technicalPassed = sunoBudget.outroPresent && sunoBudget.outroComplete && sunoBudget.status !== "critical";
 
-  const allPassed = musicalPassed && linguisticPassed && structuralPassed && technicalPassed;
+  const allPassed = musicalPassed && narrativePassed && linguisticPassed && structuralPassed && technicalPassed;
 
   let decision: GateDecision = "PASS";
   if (!allPassed) {

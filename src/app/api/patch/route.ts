@@ -5,6 +5,7 @@ import {
   stringifyASTToSunoLyrics,
   validateMutation,
   isMetaReasoningLine,
+  validateLyricEnvelope,
 } from "@/lib/song-document";
 import {
   type RepairOperation,
@@ -171,6 +172,22 @@ DEBES devolver EXCLUSIVAMENTE un array JSON con las nuevas líneas de texto cant
       return NextResponse.json(
         { error: "El motor de reparación no devolvió contenido." },
         { status: 502 }
+      );
+    }
+
+    // Invariant: Zero Reasoning Leakage & Fail-Closed Envelope Policy (P7 Invariant).
+    // If the raw response contains transition delimiters or explanatory reasoning lines, abort immediately without modifying the AST.
+    const envelopeCheck = validateLyricEnvelope(raw);
+    if (envelopeCheck.detectedReasoningLines && envelopeCheck.detectedReasoningLines.length > 0) {
+      console.warn("[patch] Meta-reasoning leak detected in raw response. Aborting repair safely (REPAIR_ABORTED).");
+      return NextResponse.json(
+        {
+          error: `Fuga de metarazonamiento detectada en la respuesta del modelo: ${envelopeCheck.reason}. Reparación abortada de forma segura (REPAIR_ABORTED).`,
+          reasoningLeakDetected: true,
+          status: "REPAIR_ABORTED",
+          detectedLines: envelopeCheck.detectedReasoningLines,
+        },
+        { status: 422 }
       );
     }
 

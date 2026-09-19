@@ -31,7 +31,7 @@ import { buildCorrectionInstruction, analyzeLanguageRatio, type LanguageAnalysis
 import { getArtistReference } from "@/lib/artist-references";
 import { generateArtistReference } from "@/lib/reference-generator";
 import { analyzeReferenceTrack } from "@/lib/track-analyzer";
-import { parseRawLyricsToAST, stringifyASTToSunoLyrics, createHookContract, bindHookContractToAST, hashSongDocument, resolveSectionSpec, type HookContract } from "@/lib/song-document";
+import { parseRawLyricsToAST, stringifyASTToSunoLyrics, createHookContract, bindHookContractToAST, hashSongDocument, resolveSectionSpec, validateLyricEnvelope, type HookContract } from "@/lib/song-document";
 import { synthesizeSemanticAnchor } from "@/lib/motif-engine";
 import { buildLanguageDNA, buildLanguageTarget, calculateSyllableLanguageRatio } from "@/lib/language-dna";
 import { auditDialectAndTranslationArtifacts, type SpanishFlavor } from "@/lib/dialect-engine";
@@ -520,7 +520,22 @@ export async function POST(req: NextRequest) {
         flowSkeletonSnippet
       );
       const t2 = Date.now();
-      const stage2Lyrics = await callLLM(stage2Prompt, body, 0.72);
+      let stage2Lyrics = await callLLM(stage2Prompt, body, 0.72);
+
+      // Invariant: Fail-Closed Lyric Envelope Validation
+      const envelopeCheck = validateLyricEnvelope(stage2Lyrics);
+      if (!envelopeCheck.valid && envelopeCheck.detectedReasoningLines && envelopeCheck.detectedReasoningLines.length > 0) {
+        console.warn(`[generate] Fail-Closed: Contaminated envelope detected (${envelopeCheck.reason}). Retrying once with strict zero-reasoning instruction.`);
+        const retryPrompt = `${stage2Prompt}\n\n⚠️ ALERTA DE COMPOSICIÓN CRÍTICA: Tu salida previa contenía texto conversacional o justificaciones explicativas ("${envelopeCheck.detectedReasoningLines[0]}"). Comienza INMEDIATAMENTE en el primer corchete de sección. CERO TEXTO ANTES O DESPUÉS.`;
+        const retryLyrics = await callLLM(retryPrompt, body, 0.55);
+        const retryCheck = validateLyricEnvelope(retryLyrics);
+        if (retryCheck.valid) {
+          stage2Lyrics = retryLyrics;
+        } else {
+          console.error(`[generate] FAIL_CLOSED_LEAK_REJECTED: Second attempt also failed envelope validation.`);
+          throw new Error(`FAIL_CLOSED_LEAK_REJECTED: La salida del modelo contenía explicaciones o metarazonamiento fuera de la letra musical (${retryCheck.reason}).`);
+        }
+      }
       const d2Ms = Date.now() - t2;
       pipelineStagesCompleted.push("studio_master_completed");
       stageLogs.push({
