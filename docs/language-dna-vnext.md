@@ -211,8 +211,8 @@ Benchmark execution:
   commit = 43d92c0
 
 Current product main:
-  commit = 22ca20d
+  commit = 2ca546d
 ```
 
 - **Regla de Recogida de Datos**: La suite de evaluación del Benchmark Contract v1 se ejecuta estrictamente desde `git checkout 43d92c0`.
-- **Evolución del Producto**: Esta especificación de Language DNA vNext reside y evoluciona en la rama `main` (`22ca20d` y posteriores).
+- **Evolución del Producto**: Esta especificación de Language DNA vNext reside y evoluciona en la rama `main` (`2ca546d` y posteriores).
