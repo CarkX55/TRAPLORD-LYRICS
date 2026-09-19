@@ -169,15 +169,15 @@ Con una tolerancia numérica $\epsilon = 0.02$, los estados de viabilidad del ta
 - **`CLAMPED`**: $|T - T_{\min}| \le \epsilon$ o $|T - T_{\max}| \le \epsilon$ (la meta solicitada se sitúa exactamente en o alcanza un extremo alcanzable global).
 - **`INFEASIBLE`**: $T < T_{\min} - \epsilon$ o $T > T_{\max} + \epsilon$ (la meta solicitada queda estrictamente fuera del espacio alcanzable; el sistema registra el target original en `targetEnglishRatio`, proyecta al extremo alcanzable en `effectiveTargetEnglishRatio = T_eff`, y establece $\text{predictedEnglishRatio} = T_{\text{eff}}$).
 
-**Diagnóstico Ortogonal de Restricciones Activas**:
-La activación de una restricción de caja individual en una sección ($r_i = l_i$ o $r_i = u_i$) dentro de una meta global factible no altera el `allocationStatus` (que sigue siendo `FEASIBLE`), sino que se reporta de forma independiente mediante:
-$$\text{boundaryConstraintActive} = \exists \, i : (r_i = l_i \lor r_i = u_i)$$
+**Diagnóstico Ortogonal de Restricciones Activas (Tolerancia Numérica)**:
+La activación de una restricción de caja individual en una sección dentro de una meta global factible no altera el `allocationStatus` (que sigue siendo `FEASIBLE`), sino que se reporta de forma independiente. Para evitar fragilidades por redondeo de coma flotante de 64 bits (IEEE 754), se evalúa con tolerancia numérica $\delta_{\text{tol}} = 0.005$:
+$$\text{boundaryConstraintActive} = \exists \, i : (|r_i - l_i| \le \delta_{\text{tol}} \lor |r_i - u_i| \le \delta_{\text{tol}})$$
 
 ### D. Asignación Operacional de Bandas de Tolerancia Truncadas a $[0, 1]$
 Existe una separación ontológica inequívoca entre la variable optimizada por el solver y la evaluada por las bandas:
 ```text
 Language Allocation Solver
-→ optimiza predictedEnglishRatio
+→ optimiza predictedEnglishRatio (= T_eff)
 
 Language Audit
 → mide observedEnglishRatio
@@ -185,9 +185,14 @@ Language Audit
 Soft/Hard language bands
 → se aplican a observedEnglishRatio
 ```
-Las bandas de tolerancia se aplican sobre `observedEnglishRatio` con truncado formal en los extremos para garantizar coherencia en metas limítrofes (ej. $T = 0.95$ produce $[0.83, 1.00]$, jamás $> 1$):
-$$\text{softLower} = \max(0, T - 0.05), \qquad \text{softUpper} = \min(1, T + 0.05)$$
-$$\text{hardLower} = \max(0, T - 0.12), \qquad \text{hardUpper} = \min(1, T + 0.12)$$
+**Centro de Referencia de las Bandas ($T_{\text{eff}}$)**:
+Las bandas de tolerancia se centran formalmente en el target efectivo alcanzable $T_{\text{eff}} = \operatorname{clip}(T, T_{\min}, T_{\max})$:
+- Cuando $T$ es `FEASIBLE` o `CLAMPED`, $T_{\text{eff}} \equiv T$.
+- Cuando $T$ es `INFEASIBLE`, centrar las bandas en el target inalcanzable $T$ forzaría un fallo artificial del 100% de las canciones por imposibilidad física del reparto de voces. Centrar en $T_{\text{eff}}$ evalúa rigurosamente si el LLM obedeció la realización compositiva óptima y factible programada en su directiva.
+
+Las bandas se aplican sobre `observedEnglishRatio` con truncado formal en $[0, 1]$:
+$$\text{softLower} = \max(0, T_{\text{eff}} - 0.05), \qquad \text{softUpper} = \min(1, T_{\text{eff}} + 0.05)$$
+$$\text{hardLower} = \max(0, T_{\text{eff}} - 0.12), \qquad \text{hardUpper} = \min(1, T_{\text{eff}} + 0.12)$$
 
 ### E. Prioridad Universal en Cascada para `SpanishFlavor = auto`
 1. Sabor explícito en la UI (`requestedFlavor !== "auto"`).

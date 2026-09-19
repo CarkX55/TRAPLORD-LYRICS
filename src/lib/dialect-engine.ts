@@ -641,8 +641,17 @@ export function getExpectedSyllablesPerBar(sectionType: string): number {
  *   CLAMPED:    |T - T_min| <= eps  or  |T - T_max| <= eps
  *   INFEASIBLE: T < T_min - eps  or  T > T_max + eps
  *
- * INDIVIDUAL BOX CONSTRAINT STATUS:
- *   boundaryConstraintActive = exists i: (r_i == l_i || r_i == u_i)
+ * INDIVIDUAL BOX CONSTRAINT STATUS (NUMERICAL TOLERANCE):
+ *   boundaryConstraintActive = exists i: (|r_i - l_i| <= delta_tol || |r_i - u_i| <= delta_tol)
+ *   where delta_tol = 0.005 accounts for 64-bit float rounding.
+ *
+ * SOFT / HARD BAND EVALUATION TARGET:
+ *   Bands center on T_eff = clip(T, T_min, T_max):
+ *     softLower = max(0, T_eff - 0.05),  softUpper = min(1, T_eff + 0.05)
+ *     hardLower = max(0, T_eff - 0.12),  hardUpper = min(1, T_eff + 0.12)
+ *   When allocationStatus is INFEASIBLE, centering bands on T_eff avoids penalizing the
+ *   LLM for failing to achieve a physically impossible target, auditing instead whether
+ *   the LLM honored the optimal feasible realization planned for the vocal ensemble.
  */
 export function buildLanguageAllocationPlan(
   targetEnglishRatio: number,
@@ -650,25 +659,23 @@ export function buildLanguageAllocationPlan(
   featureProfile: SpeakerDialectProfile | null,
   sections?: Array<{ id: string; name: string; type: string; voiceArtistId?: string; bars?: number }>
 ): LanguageAllocationPlan {
-  const globalSoftBand = {
-    min: Number(Math.max(0, targetEnglishRatio - 0.05).toFixed(2)),
-    max: Number(Math.min(1, targetEnglishRatio + 0.05).toFixed(2)),
-  };
-  const globalHardBand = {
-    min: Number(Math.max(0, targetEnglishRatio - 0.12).toFixed(2)),
-    max: Number(Math.min(1, targetEnglishRatio + 0.12).toFixed(2)),
-  };
-
   if (!sections || sections.length === 0) {
+    const T_eff = targetEnglishRatio;
     return {
       targetEnglishRatio,
-      effectiveTargetEnglishRatio: targetEnglishRatio,
-      predictedEnglishRatio: targetEnglishRatio,
+      effectiveTargetEnglishRatio: T_eff,
+      predictedEnglishRatio: T_eff,
       allocationStatus: "FEASIBLE",
       boundaryConstraintActive: false,
       achievableRange: { min: 0.0, max: 1.0 },
-      globalSoftBand,
-      globalHardBand,
+      globalSoftBand: {
+        min: Number(Math.max(0, T_eff - 0.05).toFixed(2)),
+        max: Number(Math.min(1, T_eff + 0.05).toFixed(2)),
+      },
+      globalHardBand: {
+        min: Number(Math.max(0, T_eff - 0.12).toFixed(2)),
+        max: Number(Math.min(1, T_eff + 0.12).toFixed(2)),
+      },
       allocationMode: "flexible_global",
       sections: [],
     };
@@ -732,6 +739,16 @@ export function buildLanguageAllocationPlan(
   // 4. Compute effective target: T_eff = clip(T, T_min, T_max)
   const T_eff = Math.max(T_min, Math.min(T_max, targetEnglishRatio));
   const effectiveTargetEnglishRatio = Number(T_eff.toFixed(2));
+
+  // Soft/Hard bands center on effective target T_eff (truncated to [0, 1])
+  const globalSoftBand = {
+    min: Number(Math.max(0, T_eff - 0.05).toFixed(2)),
+    max: Number(Math.min(1, T_eff + 0.05).toFixed(2)),
+  };
+  const globalHardBand = {
+    min: Number(Math.max(0, T_eff - 0.12).toFixed(2)),
+    max: Number(Math.min(1, T_eff + 0.12).toFixed(2)),
+  };
 
   // 5. Global allocationStatus classification based strictly on global target reachability
   const eps = 0.02;

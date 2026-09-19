@@ -184,12 +184,21 @@ async function runDialectEngineTests() {
   assert(feasibleBoxPlan.effectiveTargetEnglishRatio === 0.60, "effectiveTargetEnglishRatio preserves target 0.60");
   assert(feasibleBoxPlan.predictedEnglishRatio === 0.60, "predictedEnglishRatio preserves target 0.60 exactly");
 
+  // Band Evaluation Target: Centered on T_eff when INFEASIBLE
+  assert(extremePlan.globalSoftBand.min === 0.83, "When INFEASIBLE, soft band centers on T_eff (0.88 - 0.05 = 0.83)");
+  assert(extremePlan.globalSoftBand.max === 0.93, "When INFEASIBLE, soft band centers on T_eff (0.88 + 0.05 = 0.93)");
+
   // Band Clipping Verification at Edges:
-  const edgePlan = buildLanguageAllocationPlan(0.95, offsetProfile, chimiProfile, testSections);
+  const soloOffsetSections = [
+    { id: "sec_v1", name: "Verse 1", type: "verse", voiceArtistId: "offset", bars: 16 },
+    { id: "sec_hook", name: "Chorus", type: "hook", voiceArtistId: "offset", bars: 8 },
+  ];
+  const edgePlan = buildLanguageAllocationPlan(0.95, offsetProfile, null, soloOffsetSections);
   assert(edgePlan.globalSoftBand.min === 0.90, "Soft band min is 0.90");
   assert(edgePlan.globalSoftBand.max === 1.00, "Soft band max is clamped to 1.00 (not 1.00+)");
   assert(edgePlan.globalHardBand.min === 0.83, "Hard band min is 0.83 (0.95 - 0.12)");
   assert(edgePlan.globalHardBand.max === 1.00, "Hard band max is clamped to 1.00 (not 1.07)");
+  totalPassed += 2;
 
   // Predicted vs Observed Variable Decoupling Test:
   allocPlan.observedEnglishRatio = 0.68;
