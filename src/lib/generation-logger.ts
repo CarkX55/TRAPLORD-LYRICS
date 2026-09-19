@@ -45,6 +45,9 @@ export interface GenerationProcessLog {
     title: string;
     sensoryDescription: string;
     emotionalAxis: string;
+    structureFingerprint?: string;
+    generationIntentHash?: string;
+    dramaticMotifId?: string;
   };
   languageDriftHistory?: LanguageDriftStep[];
   repairDecision?: {

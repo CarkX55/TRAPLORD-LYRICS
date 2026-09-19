@@ -1,7 +1,7 @@
-import { buildLanguageDNA, buildLanguageTarget, calculateSyllableLanguageRatio } from "./src/lib/language-dna";
-import { synthesizeSemanticAnchor } from "./src/lib/motif-engine";
-import { auditPromptContamination } from "./src/lib/prompt-hygiene";
-import { evaluateAndPlanLanguageRepair } from "./src/lib/language-repair";
+import { buildLanguageDNA, buildLanguageTarget, calculateSyllableLanguageRatio } from "../src/lib/language-dna";
+import { synthesizeSemanticAnchor } from "../src/lib/motif-engine";
+import { auditPromptContamination } from "../src/lib/prompt-hygiene";
+import { evaluateAndPlanLanguageRepair } from "../src/lib/language-repair";
 
 function testContinuity() {
   console.log("=== TEST 1: LANGUAGE DNA CONTINUITY ===");

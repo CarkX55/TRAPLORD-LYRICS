@@ -284,6 +284,7 @@ export async function POST(req: NextRequest) {
       situationalPresetId: body.situationalPresetId,
       artistId: body.artistId,
       moodId: body.moodId,
+      structure,
     });
     const languageTarget = buildLanguageTarget(body.spanglishPercent);
     const languageDNA = buildLanguageDNA(body.spanglishPercent, body.artistId, body.featureArtistId);
@@ -663,6 +664,9 @@ export async function POST(req: NextRequest) {
         title: semanticAnchor.title,
         sensoryDescription: semanticAnchor.sensoryDescription,
         emotionalAxis: semanticAnchor.emotionalAxis,
+        structureFingerprint: semanticAnchor.structureFingerprint,
+        generationIntentHash: semanticAnchor.generationIntentHash,
+        dramaticMotifId: semanticAnchor.dramaticMotifId,
       },
       compositionPlanning: compositionPlanningInfo,
       languageDriftHistory: driftHistory,
