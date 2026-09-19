@@ -11,10 +11,16 @@ import {
   resolveSpeakerDialectProfile,
   resolveSpanishFlavor,
   buildDialectPromptDirectives,
+  buildLanguageAllocationPlan,
   auditDialectAndTranslationArtifacts,
   SPANISH_FLAVOR_CATALOG,
   SPEAKER_DIALECT_CATALOG,
+  type LanguageAllocationPlan,
 } from "../src/lib/dialect-engine";
+import {
+  BENCHMARK_EXECUTION_COMMIT,
+  BENCHMARK_EXECUTION_TAG,
+} from "../src/lib/factorial-harness";
 import { type SongDocument } from "../src/lib/song-document";
 
 function assert(condition: boolean, message: string) {
@@ -78,13 +84,55 @@ async function runDialectEngineTests() {
 
   const explicitArg = resolveSpanishFlavor("argentina");
   assert(explicitArg.flavor === "argentina", "Explicit 'argentina' resolves Argentina flavor profile");
-  totalPassed += 6;
+
+  // Cascading Precedence:
+  // 1. Explicit UI wins even if project config is set
+  const explicitWins = resolveSpanishFlavor("mexico", offsetProfile, chimiProfile, "spain");
+  assert(explicitWins.flavor === "mexico", "Cascading P1: Explicit user selection wins over project and speaker");
+
+  // 2. Project config wins if UI is "auto"
+  const projectWins = resolveSpanishFlavor("auto", offsetProfile, chimiProfile, "spain");
+  assert(projectWins.flavor === "spain", "Cascading P2: Project default wins when user selects 'auto'");
+
+  // 3. Speaker feature wins if Lead is EN and Feature is ES
+  const speakerFeatureWins = resolveSpanishFlavor("auto", offsetProfile, chimiProfile, "auto");
+  assert(speakerFeatureWins.flavor === "puerto_rico", "Cascading P3: Feature native Spanish resolves when Lead is English");
+
+  totalPassed += 9;
+
+  // -------------------------------------------------------------
+  // TEST 2.1: LanguageAllocationPlan (Deterministic Voice Weighting & Elasticity)
+  // -------------------------------------------------------------
+  console.log("\n--- TEST 2.1: LanguageAllocationPlan ---");
+  const testSections = [
+    { id: "sec_intro", name: "Intro", type: "intro", voiceArtistId: "offset" },
+    { id: "sec_v1", name: "Verse 1", type: "verse", voiceArtistId: "offset" },
+    { id: "sec_v2", name: "Verse 2", type: "verse", voiceArtistId: "yovngchimi" },
+    { id: "sec_hook", name: "Chorus", type: "hook", voiceArtistId: "offset" },
+  ];
+
+  const allocPlan = buildLanguageAllocationPlan(0.70, offsetProfile, chimiProfile, testSections);
+  assert(allocPlan.targetEnglishRatio === 0.70, "AllocPlan reflects targetEnglishRatio 0.70");
+  assert(allocPlan.globalSoftBand.min === 0.58, "AllocPlan soft band min is 0.58 (0.70 - 0.12)");
+  assert(allocPlan.globalSoftBand.max === 0.82, "AllocPlan soft band max is 0.82 (0.70 + 0.12)");
+  assert(allocPlan.allocationMode === "deterministic_voice_weighted", "Allocation mode is deterministic_voice_weighted");
+  assert(allocPlan.sections.length === 4, "AllocPlan contains exactly 4 sections");
+
+  // Offset sections should be biased toward higher English ratio (~0.85)
+  const offsetVerse = allocPlan.sections.find(s => s.sectionId === "sec_v1")!;
+  assert(offsetVerse.preferredEnglishRatio === 0.85, "Offset section prefers ~85% English");
+
+  // Yovngchimi section should be biased toward higher Spanish ratio (lower English ratio, ~0.50)
+  const chimiVerse = allocPlan.sections.find(s => s.sectionId === "sec_v2")!;
+  assert(chimiVerse.preferredEnglishRatio === 0.50, "Yovngchimi section prefers ~50% English / ~50% Spanish");
+  assert(chimiVerse.targetGuideline.includes("yovngchimi"), "Target guideline includes artist identity");
+  totalPassed += 8;
 
   // -------------------------------------------------------------
   // TEST 3: Prompt Hygiene (ZERO Negative Example Leaks)
   // -------------------------------------------------------------
   console.log("\n--- TEST 3: Prompt Hygiene (ZERO Negative Example Leaks) ---");
-  const directives = buildDialectPromptDirectives(offsetProfile, chimiProfile, autoOffset, 0.70);
+  const directives = buildDialectPromptDirectives(offsetProfile, chimiProfile, autoOffset, 0.70, allocPlan);
 
   // Prohibited negative phrase strings must NEVER appear in the generated prompt
   const negativePhrases = [
@@ -220,7 +268,8 @@ async function runDialectEngineTests() {
   const overstuffAudit = auditDialectAndTranslationArtifacts(overstuffedDoc, flavorPR, chimiProfile);
   assert(overstuffAudit.slangChecklistScore > 0, "Overstuffing increases slangChecklistScore");
   assert(overstuffAudit.issues.some(i => i.issueType === "slang_overstuffing"), "Detects slang_overstuffing issue");
-  totalPassed += 11;
+  assert(overstuffAudit.flaggedBarsForRepair.length === 0, "Non-destructive: overstuffing alone does NOT force surgical repair");
+  totalPassed += 12;
 
   // -------------------------------------------------------------
   // TEST 6: Execution Latency Budget (<5ms)
@@ -236,6 +285,14 @@ async function runDialectEngineTests() {
   const avgMs = (performance.now() - start) / 50;
   assert(avgMs < 5.0, `Dialect resolution, directives and audit executed in ${avgMs.toFixed(3)}ms (budget: <5ms)`);
   totalPassed += 1;
+
+  // -------------------------------------------------------------
+  // TEST 7: Benchmark Contract Immutability & Execution Isolation
+  // -------------------------------------------------------------
+  console.log("\n--- TEST 7: Benchmark Contract v1 Isolation ---");
+  assert(BENCHMARK_EXECUTION_COMMIT === "43d92c0", "Benchmark execution commit is frozen at 43d92c0");
+  assert(BENCHMARK_EXECUTION_TAG === "benchmark-contract-v1-frozen", "Benchmark execution tag is benchmark-contract-v1-frozen");
+  totalPassed += 2;
 
   console.log("\n=======================================================");
   console.log(`📊 ALL DIALECT ENGINE TESTS PASSED: ${totalPassed} ASSERTS VERIFIED | 0 FAILED`);

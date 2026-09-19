@@ -53,15 +53,17 @@ export interface SpeakerDialectProfile {
     antiTranslationRules: string[];
   };
 
-  codeSwitchStyle:
-    | "smooth"
-    | "punctuated"
-    | "bar_end"
-    | "phrase_swap"
-    | "bilingual_flow";
+  codeSwitchStyle: CodeSwitchStyle;
 
   dialectConfidence: number; // 0.0 to 1.0
 }
+
+export type CodeSwitchStyle =
+  | "smooth"
+  | "punctuated"
+  | "bar_end"
+  | "phrase_swap"
+  | "bilingual_flow";
 
 // ---------------------------------------------------------------------------
 // Catálogo de Sabores de Español (Spanish Flavor)
@@ -562,23 +564,131 @@ export function resolveSpeakerDialectProfile(artistId: string): SpeakerDialectPr
   };
 }
 
+export interface SectionLanguageAllocation {
+  sectionId: string;
+  sectionName: string;
+  voiceId: string;
+  preferredEnglishRatio: number;
+  flexibility: number;
+  codeSwitchStyle: CodeSwitchStyle;
+  targetGuideline: string;
+}
+
+export interface LanguageAllocationPlan {
+  targetEnglishRatio: number;
+  globalSoftBand: {
+    min: number;
+    max: number;
+  };
+  allocationMode: "deterministic_voice_weighted" | "flexible_global";
+  sections: SectionLanguageAllocation[];
+}
+
 /**
- * Resolves the effective SpanishFlavor based on requested flavor and artist profile.
+ * Builds a deterministic, voice-weighted Language Allocation Plan.
+ * Calculates section-by-section language preferences while preserving global soft-band elasticity.
+ */
+export function buildLanguageAllocationPlan(
+  targetEnglishRatio: number,
+  leadProfile: SpeakerDialectProfile,
+  featureProfile: SpeakerDialectProfile | null,
+  sections?: Array<{ id: string; name: string; type: string; voiceArtistId?: string }>
+): LanguageAllocationPlan {
+  const globalSoftBand = {
+    min: Number(Math.max(0, targetEnglishRatio - 0.12).toFixed(2)),
+    max: Number(Math.min(1, targetEnglishRatio + 0.12).toFixed(2)),
+  };
+
+  if (!sections || sections.length === 0) {
+    return {
+      targetEnglishRatio,
+      globalSoftBand,
+      allocationMode: "flexible_global",
+      sections: [],
+    };
+  }
+
+  const sectionAllocations: SectionLanguageAllocation[] = sections.map(sec => {
+    const isFeature = Boolean(sec.voiceArtistId && featureProfile && sec.voiceArtistId === featureProfile.artistId);
+    const voiceProfile = isFeature && featureProfile ? featureProfile : leadProfile;
+
+    let preferredRatio = targetEnglishRatio;
+    const style = voiceProfile.codeSwitchStyle;
+
+    // Deterministic voice weighting:
+    // Native English voice has higher English affinity; native Spanish voice has higher Spanish affinity
+    if (voiceProfile.primaryLanguage === "en" && targetEnglishRatio > 0.10) {
+      preferredRatio = Math.min(1.0, targetEnglishRatio + 0.15);
+    } else if (voiceProfile.primaryLanguage === "es" && targetEnglishRatio < 0.90) {
+      preferredRatio = Math.max(0.0, targetEnglishRatio - 0.20);
+    }
+
+    const enPct = Math.round(preferredRatio * 100);
+    const esPct = 100 - enPct;
+
+    return {
+      sectionId: sec.id,
+      sectionName: sec.name,
+      voiceId: voiceProfile.artistId,
+      preferredEnglishRatio: Number(preferredRatio.toFixed(2)),
+      flexibility: 0.15,
+      codeSwitchStyle: style,
+      targetGuideline: `[${sec.name}] (${voiceProfile.artistId}): ~${enPct}% EN / ~${esPct}% ES (${voiceProfile.primaryDialect}, transición: ${style})`,
+    };
+  });
+
+  return {
+    targetEnglishRatio,
+    globalSoftBand,
+    allocationMode: "deterministic_voice_weighted",
+    sections: sectionAllocations,
+  };
+}
+
+/**
+ * Resolves the effective SpanishFlavor with strict cascading priority:
+ * 1. Explicit user selection (requestedFlavor !== "auto")
+ * 2. Project-level configuration (projectDefaultFlavor !== "auto")
+ * 3. Speaker resolution:
+ *    - If lead is native Spanish, use lead profile default flavor
+ *    - If lead is English and feature is native Spanish, use feature profile default flavor (e.g. Offset ft. Yovngchimi -> PR)
+ *    - Otherwise lead default flavor
+ * 4. Global fallback: puerto_rico (canonical urban drill trap flavor)
  */
 export function resolveSpanishFlavor(
   requestedFlavor?: SpanishFlavor,
-  leadProfile?: SpeakerDialectProfile
+  leadProfile?: SpeakerDialectProfile,
+  featureProfile?: SpeakerDialectProfile | null,
+  projectDefaultFlavor?: SpanishFlavor
 ): SpanishFlavorProfile {
+  // 1. Explicit user selection in UI
   if (requestedFlavor && requestedFlavor !== "auto" && SPANISH_FLAVOR_CATALOG[requestedFlavor]) {
     return SPANISH_FLAVOR_CATALOG[requestedFlavor];
   }
 
-  // Auto resolution
+  // 2. Project-level configuration
+  if (projectDefaultFlavor && projectDefaultFlavor !== "auto" && SPANISH_FLAVOR_CATALOG[projectDefaultFlavor]) {
+    return SPANISH_FLAVOR_CATALOG[projectDefaultFlavor];
+  }
+
+  // 3. Speaker resolution:
+  // 3a. Lead artist is native Spanish
+  if (leadProfile && leadProfile.primaryLanguage === "es" && leadProfile.spanishRegister.defaultFlavor !== "auto") {
+    return SPANISH_FLAVOR_CATALOG[leadProfile.spanishRegister.defaultFlavor];
+  }
+
+  // 3b. Feature artist is native Spanish (e.g. Lead is Offset/Atlanta, Feature is Yovngchimi/PR)
+  if (featureProfile && featureProfile.primaryLanguage === "es" && featureProfile.spanishRegister.defaultFlavor !== "auto") {
+    return SPANISH_FLAVOR_CATALOG[featureProfile.spanishRegister.defaultFlavor];
+  }
+
+  // 3c. Lead artist defined default flavor
   if (leadProfile && leadProfile.spanishRegister.defaultFlavor !== "auto") {
     return SPANISH_FLAVOR_CATALOG[leadProfile.spanishRegister.defaultFlavor];
   }
 
-  return SPANISH_FLAVOR_CATALOG.neutral_latam;
+  // 4. Global fallback
+  return SPANISH_FLAVOR_CATALOG.puerto_rico;
 }
 
 // ---------------------------------------------------------------------------
@@ -593,15 +703,24 @@ export function buildDialectPromptDirectives(
   leadProfile: SpeakerDialectProfile,
   featureProfile: SpeakerDialectProfile | null,
   flavorProfile: SpanishFlavorProfile,
-  targetEnglishRatio: number
+  targetEnglishRatio: number,
+  allocationPlan?: LanguageAllocationPlan
 ): string {
   const enPct = Math.round(targetEnglishRatio * 100);
   const esPct = 100 - enPct;
 
   const sections: string[] = [];
 
-  sections.push(`### 1. OBJETIVO GLOBAL DE IDIOMA (PONDERADO POR SÍLABAS)`);
+  sections.push(`### 1. OBJETIVO GLOBAL DE IDIOMA Y REPARTO POR SECCIONES`);
   sections.push(`- Meta global de canción: ~${enPct}% Inglés / ~${esPct}% Español (evaluado de forma elástica a nivel de obra completa, no como cuota rígida compás a compás).`);
+
+  if (allocationPlan && allocationPlan.sections.length > 0) {
+    sections.push(`- Banda elástica global: ${Math.round(allocationPlan.globalSoftBand.min * 100)}% – ${Math.round(allocationPlan.globalSoftBand.max * 100)}% EN.`);
+    sections.push(`- Preferencia sugerida por sección (Language Allocation):`);
+    for (const alloc of allocationPlan.sections) {
+      sections.push(`  · ${alloc.targetGuideline}`);
+    }
+  }
 
   sections.push(`\n### 2. IDENTIDAD Y REALIZACIÓN DIALECTAL POR INTÉRPRETE`);
   sections.push(`* **Voz Principal (${leadProfile.artistId}) — Dialecto Nativo: ${leadProfile.primaryDialect}:**`);

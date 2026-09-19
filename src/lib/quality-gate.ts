@@ -18,6 +18,7 @@ import { calculateSyllableLanguageRatio, type LanguageRatioResult } from "./lang
 import { analyzeRhymes, type RhymeAnalysis } from "./rhyme-detector";
 import { auditMetadataLeakage, type MetadataLeakReport } from "./prompt-hygiene";
 import type { SunoBudgetAudit } from "./suno-budget";
+import type { DialectAuditResult } from "./dialect-engine";
 
 // ========================================================================
 // 1. TYPES & CONTRACTS
@@ -99,6 +100,7 @@ export interface InitialAuditContext {
   rhymeAnalysis: RhymeAnalysis;
   leakageAudit: MetadataLeakReport;
   structuralCardinality: StructuralCardinalityAudit[];
+  dialectAudit?: DialectAuditResult;
 }
 
 // ========================================================================
@@ -120,7 +122,8 @@ export function runInitialDeliveryAudit(
   bpm: number = 135,
   flowProfile?: FlowProfile,
   userExplicitInputs: string[] = [],
-  externalExpectations?: ExternalExpectationsInput
+  externalExpectations?: ExternalExpectationsInput,
+  dialectAudit?: DialectAuditResult
 ): InitialAuditContext {
   const allBars = doc.sections.flatMap(s => s.bars);
 
@@ -273,13 +276,17 @@ export function runInitialDeliveryAudit(
     rhymeAnalysis,
     leakageAudit,
     structuralCardinality,
+    dialectAudit,
   };
 }
 
 /**
  * Evaluates whether surgical repair is actually justified.
+ * UNIFIED DEFECT SET: Incorporates structural cardinality, delivery load,
+ * metadata leaks, forced rhymes, and critical dialect/translation calques.
  * Rule: Repair ONLY if net gain (quality gain - disruption risk) > 0.
- * Weak diagnostics (low confidence) NEVER trigger repairs.
+ * Weak diagnostics (low confidence, single words, slang warnings) NEVER trigger repairs.
+ * Maximum 1 surgical repair execution strictly bounded (<= 3 targets).
  */
 export function evaluateRepairability(audit: InitialAuditContext): {
   needsRepair: boolean;
@@ -287,7 +294,7 @@ export function evaluateRepairability(audit: InitialAuditContext): {
 } {
   const targets: Array<{ sectionId: string; barIndices: number[]; reason: string }> = [];
 
-  // Structural Cardinality Mismatches or Anomalies (Chorus overflow, verse below/above range)
+  // 1. Structural Cardinality Mismatches or Anomalies (Chorus overflow, verse below/above range)
   const cardinalityIssues = audit.structuralCardinality?.filter(c => c.status !== "pass" && c.status !== "safe-collapse") || [];
   for (const issue of cardinalityIssues) {
     targets.push({
@@ -297,7 +304,7 @@ export function evaluateRepairability(audit: InitialAuditContext): {
     });
   }
 
-  // High confidence crowded bars
+  // 2. High confidence crowded bars
   if (audit.deliveryLoad.confidence >= 0.70 && audit.deliveryLoad.crowdedBars.length > 0 && audit.deliveryLoad.loadScore < 60) {
     targets.push({
       sectionId: "verse_1",
@@ -306,7 +313,7 @@ export function evaluateRepairability(audit: InitialAuditContext): {
     });
   }
 
-  // Severe unprompted metadata leaks
+  // 3. Severe unprompted metadata leaks
   if (audit.leakageAudit.hasLeak) {
     targets.push({
       sectionId: "general",
@@ -315,13 +322,24 @@ export function evaluateRepairability(audit: InitialAuditContext): {
     });
   }
 
-  // Extreme forced rhyme score (> 8.5)
+  // 4. Extreme forced rhyme score (> 8.5)
   if (audit.rhymeAnalysis.forcedRhymeScore >= 8.5 && audit.rhymeAnalysis.clichePenalty >= 60) {
     targets.push({
       sectionId: "verse_1",
       barIndices: [3, 4],
       reason: `Rima forzada extrema con cliches múltiples (forcedScore: ${audit.rhymeAnalysis.forcedRhymeScore})`,
     });
+  }
+
+  // 5. Critical Dialect Contamination or Translation Calques (Language & Dialect Audit)
+  if (audit.dialectAudit && audit.dialectAudit.flaggedBarsForRepair.length > 0) {
+    for (const flag of audit.dialectAudit.flaggedBarsForRepair) {
+      targets.push({
+        sectionId: flag.sectionId,
+        barIndices: [0],
+        reason: `Calco o contaminación crítica en "${flag.lyricText}": ${flag.reason}`,
+      });
+    }
   }
 
   return {
@@ -343,9 +361,10 @@ export function runReAudit(
   bpm: number = 135,
   flowProfile?: FlowProfile,
   userExplicitInputs: string[] = [],
-  externalExpectations?: ExternalExpectationsInput
+  externalExpectations?: ExternalExpectationsInput,
+  dialectAudit?: DialectAuditResult
 ): InitialAuditContext {
-  return runInitialDeliveryAudit(repairedDoc, bpm, flowProfile, userExplicitInputs, externalExpectations);
+  return runInitialDeliveryAudit(repairedDoc, bpm, flowProfile, userExplicitInputs, externalExpectations, dialectAudit);
 }
 
 /**

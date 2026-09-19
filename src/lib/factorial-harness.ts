@@ -51,7 +51,12 @@ export interface SunoAttemptLog {
   latencyMs: number;
 }
 
+export const BENCHMARK_EXECUTION_COMMIT = "43d92c0";
+export const BENCHMARK_EXECUTION_TAG = "benchmark-contract-v1-frozen";
+
 export interface GenerationManifest {
+  benchmarkExecutionCommit: string; // "43d92c0"
+  benchmarkExecutionTag: string; // "benchmark-contract-v1-frozen"
   experimentId: string; // "factorial-2x2-v1"
   statisticalPlanVersion: string; // "v1"
   repairPolicyVersion: string; // "v1"
@@ -252,6 +257,8 @@ export function forkStep3Branches(
   const interventionAST = patchOutcome.document;
 
   const baseManifest: Omit<GenerationManifest, "sampleId" | "branchId" | "logicalLLMCalls" | "networkRequestAttempts" | "llmAttempts"> = {
+    benchmarkExecutionCommit: BENCHMARK_EXECUTION_COMMIT,
+    benchmarkExecutionTag: BENCHMARK_EXECUTION_TAG,
     experimentId: "factorial-2x2-v1",
     statisticalPlanVersion: "v1",
     repairPolicyVersion: "v1",

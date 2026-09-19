@@ -289,7 +289,20 @@ export async function POST(req: NextRequest) {
       structure,
     });
     const languageTarget = buildLanguageTarget(body.spanglishPercent);
-    const languageDNA = buildLanguageDNA(body.spanglishPercent, body.artistId, body.featureArtistId, body.spanishFlavor);
+    const mappedSections = structure.sections.map(s => {
+      const va = body.sectionVoices?.find(v => v.sectionName === s.name);
+      let voiceArtistId = body.artistId;
+      if (va?.voice === "feature" || s.name.toLowerCase().includes("feat")) {
+        voiceArtistId = body.featureArtistId || body.artistId;
+      }
+      return {
+        id: s.name.toLowerCase().replace(/\s+/g, "_"),
+        name: s.name,
+        type: s.type,
+        voiceArtistId,
+      };
+    });
+    const languageDNA = buildLanguageDNA(body.spanglishPercent, body.artistId, body.featureArtistId, body.spanishFlavor, mappedSections);
 
     const promptParams: PromptParams = {
       artistId: body.artistId,
@@ -550,10 +563,6 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // --- FASE 1: INITIAL DELIVERY AUDIT & MULTI-CRITIC (Determinista en memoria) ---
-      auditContext = runInitialDeliveryAudit(candidateAST, parsedBpm, flowProfile, userExplicitTerms, structuralExpectations);
-      const repairPlan = evaluateRepairability(auditContext);
-
       // --- AUDITORÍA DE DIALECTO Y ARTEFACTOS DE TRADUCCIÓN (LANGUAGE & DIALECT AUDIT) ---
       if (languageDNA.flavorProfile && languageDNA.leadDialectProfile) {
         dialectAudit = auditDialectAndTranslationArtifacts(
@@ -562,18 +571,19 @@ export async function POST(req: NextRequest) {
           languageDNA.leadDialectProfile,
           languageDNA.featureDialectProfile
         );
-
-        // Si no hay reparaciones de entrega pero sí un artefacto de traducción crítico (score >= 0.85)
-        if (!repairPlan.needsRepair && dialectAudit.flaggedBarsForRepair.length > 0) {
-          const topFlag = dialectAudit.flaggedBarsForRepair[0];
-          repairPlan.needsRepair = true;
-          repairPlan.targetBars.push({
-            sectionId: topFlag.sectionId,
-            barIndices: [0],
-            reason: `Artefacto de traducción o contaminación detectado en "${topFlag.lyricText}": ${topFlag.reason}`,
-          });
-        }
       }
+
+      // --- FASE 1: INITIAL DELIVERY AUDIT & MULTI-CRITIC (UNIFIED DEFECT SET) ---
+      // Evaluates structural cardinality, delivery load, metadata leaks, rhymes and dialect calques
+      auditContext = runInitialDeliveryAudit(
+        candidateAST,
+        parsedBpm,
+        flowProfile,
+        userExplicitTerms,
+        structuralExpectations,
+        dialectAudit
+      );
+      const repairPlan = evaluateRepairability(auditContext);
 
       finalRaw = stage2Lyrics;
       lyrics = candidateLyrics;
@@ -608,7 +618,15 @@ export async function POST(req: NextRequest) {
             });
 
             // Re-Audit tras la reparación quirúrgica
-            auditContext = runReAudit(finalAST, parsedBpm, flowProfile, userExplicitTerms, structuralExpectations);
+            if (dialectAudit && languageDNA.flavorProfile && languageDNA.leadDialectProfile) {
+              dialectAudit = auditDialectAndTranslationArtifacts(
+                finalAST,
+                languageDNA.flavorProfile,
+                languageDNA.leadDialectProfile,
+                languageDNA.featureDialectProfile
+              );
+            }
+            auditContext = runReAudit(finalAST, parsedBpm, flowProfile, userExplicitTerms, structuralExpectations, dialectAudit);
           }
         } catch {
           // Si falla la llamada quirúrgica, preservamos el Master de la Pasada 2

@@ -23,9 +23,11 @@ import {
   type SpanishFlavor,
   type SpanishFlavorProfile,
   type SpeakerDialectProfile,
-  resolveSpeakerDialectProfile,
+  type LanguageAllocationPlan,
   resolveSpanishFlavor,
+  resolveSpeakerDialectProfile,
   buildDialectPromptDirectives,
+  buildLanguageAllocationPlan,
 } from "./dialect-engine";
 
 export interface LanguageDNA {
@@ -41,6 +43,7 @@ export interface LanguageDNA {
   leadDialectProfile?: SpeakerDialectProfile;
   featureDialectProfile?: SpeakerDialectProfile | null;
   flavorProfile?: SpanishFlavorProfile;
+  allocationPlan?: LanguageAllocationPlan;
   instructionBlock: string;
 }
 
@@ -53,16 +56,20 @@ export function buildLanguageDNA(
   spanglishPercent: number,
   artistId: string,
   featureId?: string,
-  spanishFlavor?: SpanishFlavor
+  spanishFlavor?: SpanishFlavor,
+  sections?: Array<{ id: string; name: string; type: string; voiceArtistId?: string }>
 ): LanguageDNA {
   const target = buildLanguageTarget(spanglishPercent);
   const ratio = target.center;
   const isEnDominant = ratio >= 0.5;
 
-  // Resolve Dialect & Regional Flavor Profiles
+  // Resolve Dialect & Regional Flavor Profiles with cascading precedence
   const leadDialectProfile = resolveSpeakerDialectProfile(artistId);
   const featureDialectProfile = featureId ? resolveSpeakerDialectProfile(featureId) : null;
-  const flavorProfile = resolveSpanishFlavor(spanishFlavor, leadDialectProfile);
+  const flavorProfile = resolveSpanishFlavor(spanishFlavor, leadDialectProfile, featureDialectProfile);
+
+  // Deterministic Language Allocation Plan across sections
+  const allocationPlan = buildLanguageAllocationPlan(ratio, leadDialectProfile, featureDialectProfile, sections);
 
   // Smooth continuous switch density: highest around 50%, lowest at 0% and 100%
   const switchDensity = Number((Math.sin(ratio * Math.PI) * 0.85).toFixed(2));
@@ -90,7 +97,8 @@ export function buildLanguageDNA(
     leadDialectProfile,
     featureDialectProfile,
     flavorProfile,
-    ratio
+    ratio,
+    allocationPlan
   );
 
   let flowGuideline = "";
@@ -117,6 +125,7 @@ export function buildLanguageDNA(
     leadDialectProfile,
     featureDialectProfile,
     flavorProfile,
+    allocationPlan,
     instructionBlock: instruction,
   };
 }
