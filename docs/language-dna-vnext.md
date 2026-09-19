@@ -135,6 +135,19 @@ Para garantizar que el predictor pre-generación y el auditor post-generación m
 - **Ratio Observado**: Ratio medido empíricamente post-generación por el Language Audit sobre las sílabas efectivas del AST compilado:
   $$\text{observedEnglishRatio} = \frac{\text{sílabas en inglés observadas}}{\text{total de sílabas observadas}}$$
 
+La cadena conceptual queda estrictamente estructurada como:
+```text
+expected syllable mass
+        ↓
+planned ratio
+        ↓
+LLM generation
+        ↓
+actual syllable mass
+        ↓
+observed ratio
+```
+
 ### B. Formulación Matemática del Solver y Restricciones de Caja
 Cada sección/intérprete está delimitada por límites lingüísticos naturales $[l_i, u_i]$ (ej. $[0.20, 1.00]$ para raperos angloparlantes de Atlanta; $[0.00, 0.70]$ para drillers hispanohablantes boricuas):
 $$\min_r \left[ \sum_i W_i (r_i - p_i)^2 + \lambda \left(\sum_i W_i r_i - T\right)^2 \right] \quad \text{sujeto a} \quad l_i \le r_i \le u_i$$
@@ -143,14 +156,25 @@ $$\min_r \left[ \sum_i W_i (r_i - p_i)^2 + \lambda \left(\sum_i W_i r_i - T\righ
 El espacio global de metas alcanzables para la configuración vocal de la canción queda acotado por:
 $$T_{\min} = \sum_i W_i l_i, \qquad T_{\max} = \sum_i W_i u_i$$
 Los estados se definen formalmente sobre este espacio:
-- **`FEASIBLE`**: $T_{\min} + \epsilon < T < T_{\max} - \epsilon$ (la meta cae holgadamente en el interior del espacio alcanzable).
-- **`CLAMPED`**: $T \in [T_{\min}, T_{\min} + \epsilon] \cup [T_{\max} - \epsilon, T_{\max}]$, o cuando al menos una sección satura su límite natural ($r_i = l_i$ o $r_i = u_i$).
+- **`FEASIBLE`**: $T_{\min} < T < T_{\max}$ (la meta cae dentro del espacio alcanzable).
+- **`CLAMPED`**: $T$ está en o llega a un extremo alcanzable, o cuando al menos una sección satura su límite de caja natural ($r_i = l_i$ o $r_i = u_i$, por ejemplo acotada a $[0.20, 0.80]$ por restricciones de los intérpretes).
 - **`INFEASIBLE`**: $T < T_{\min}$ o $T > T_{\max}$ (la meta solicitada queda estrictamente fuera del espacio alcanzable del ensamble de voces; el solver proyecta a la frontera más próxima).
 
-### D. Bandas de Tolerancia Truncadas a $[0, 1]$
-Las bandas de tolerancia se definen con truncado formal en los extremos para garantizar coherencia en metas limítrofes (ej. $T = 0.95$ produce $[0.83, 1.00]$, jamás $> 1$):
-$$\text{SoftBand} = [\max(0, T - 0.05), \min(1, T + 0.05)]$$
-$$\text{HardBand} = [\max(0, T - 0.12), \min(1, T + 0.12)]$$
+### D. Asignación Operacional de Bandas de Tolerancia Truncadas a $[0, 1]$
+Existe una separación ontológica inequívoca entre la variable optimizada por el solver y la evaluada por las bandas:
+```text
+Language Allocation Solver
+→ optimiza predictedEnglishRatio
+
+Language Audit
+→ mide observedEnglishRatio
+
+Soft/Hard language bands
+→ se aplican a observedEnglishRatio
+```
+Las bandas de tolerancia se aplican sobre `observedEnglishRatio` con truncado formal en los extremos para garantizar coherencia en metas limítrofes (ej. $T = 0.95$ produce $[0.83, 1.00]$, jamás $> 1$):
+$$\text{softLower} = \max(0, T - 0.05), \qquad \text{softUpper} = \min(1, T + 0.05)$$
+$$\text{hardLower} = \max(0, T - 0.12), \qquad \text{hardUpper} = \min(1, T + 0.12)$$
 
 ### E. Prioridad Universal en Cascada para `SpanishFlavor = auto`
 1. Sabor explícito en la UI (`requestedFlavor !== "auto"`).
@@ -161,9 +185,16 @@ $$\text{HardBand} = [\max(0, T - 0.12), \min(1, T + 0.12)]$$
 
 ---
 
-## 5. Aislamiento Git y Reproducibilidad
+## 5. Aislamiento Git y Trazabilidad
 
-- **Benchmark Frozen Tag**: `benchmark-contract-v1-frozen`
-- **Benchmark Frozen Commit**: `43d92c0`
+```text
+Benchmark execution:
+  tag    = benchmark-contract-v1-frozen
+  commit = 43d92c0
+
+Current product main:
+  commit = 9a12d4f
+```
+
 - **Regla de Recogida de Datos**: La suite de evaluación del Benchmark Contract v1 se ejecuta estrictamente desde `git checkout 43d92c0`.
-- **Evolución del Producto**: Esta especificación de Language DNA vNext reside y evoluciona en la rama `main` (`a9bbc26` y posteriores).
+- **Evolución del Producto**: Esta especificación de Language DNA vNext reside y evoluciona en la rama `main` (`9a12d4f` y posteriores).

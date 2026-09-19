@@ -663,6 +663,9 @@ export async function POST(req: NextRequest) {
 
     // Post-generation: final syllable-weighted and token-based language analysis
     const syllableFinal = calculateSyllableLanguageRatio(lyrics, languageTarget);
+    if (languageDNA?.allocationPlan) {
+      languageDNA.allocationPlan.observedEnglishRatio = Number((syllableFinal.englishPercent / 100).toFixed(2));
+    }
     const analysis: LanguageAnalysis = analyzeLanguageRatio(lyrics, body.spanglishPercent);
     const spanglishInfo = buildSpanglishInstruction(body.spanglishPercent);
 
