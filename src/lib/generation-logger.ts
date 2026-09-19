@@ -70,4 +70,11 @@ export interface GenerationProcessLog {
     hookVariationsEnabled?: boolean;
     plannedVerseIntents?: PlannedVerseIntent[];
   };
+  dialectAuditReport?: {
+    passed: boolean;
+    translationArtifactScore: number;
+    dialectContaminationScore: number;
+    slangChecklistScore: number;
+    issuesCount: number;
+  };
 }

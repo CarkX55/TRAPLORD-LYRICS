@@ -34,6 +34,7 @@ import { analyzeReferenceTrack } from "@/lib/track-analyzer";
 import { parseRawLyricsToAST, stringifyASTToSunoLyrics, createHookContract, bindHookContractToAST, hashSongDocument, resolveSectionSpec, type HookContract } from "@/lib/song-document";
 import { synthesizeSemanticAnchor } from "@/lib/motif-engine";
 import { buildLanguageDNA, buildLanguageTarget, calculateSyllableLanguageRatio } from "@/lib/language-dna";
+import { auditDialectAndTranslationArtifacts, type SpanishFlavor } from "@/lib/dialect-engine";
 import { auditPromptContamination, sanitizeUserInput, auditMetadataLeakage } from "@/lib/prompt-hygiene";
 import { auditSunoBudget, type SunoBudgetAudit } from "@/lib/suno-budget";
 import type { LanguageDriftStep } from "@/lib/generation-logger";
@@ -113,6 +114,7 @@ interface GenerateBody {
   useLegacySinglePass?: boolean;
   writingCellsEnabled?: boolean;
   hookVariationsEnabled?: boolean;
+  spanishFlavor?: SpanishFlavor;
 }
 
 // Unified LLM Caller honoring strictly the user's selected model with progressive retry
@@ -287,7 +289,7 @@ export async function POST(req: NextRequest) {
       structure,
     });
     const languageTarget = buildLanguageTarget(body.spanglishPercent);
-    const languageDNA = buildLanguageDNA(body.spanglishPercent, body.artistId, body.featureArtistId);
+    const languageDNA = buildLanguageDNA(body.spanglishPercent, body.artistId, body.featureArtistId, body.spanishFlavor);
 
     const promptParams: PromptParams = {
       artistId: body.artistId,
@@ -333,6 +335,7 @@ export async function POST(req: NextRequest) {
       flowPocketMode: body.flowPocketMode,
       semanticAnchor,
       languageDNA,
+      spanishFlavor: body.spanishFlavor,
     };
 
     const temperature = typeof body.temperature === "number" ? body.temperature : 0.72;
@@ -342,6 +345,7 @@ export async function POST(req: NextRequest) {
     let finalRaw = "";
     let finalAST: SongDocument | null = null;
     let auditContext: InitialAuditContext | null = null;
+    let dialectAudit: any = null;
     let compositionPlanningInfo: {
       flowSkeletonSummary?: string;
       writingCellsCount?: number;
@@ -550,6 +554,27 @@ export async function POST(req: NextRequest) {
       auditContext = runInitialDeliveryAudit(candidateAST, parsedBpm, flowProfile, userExplicitTerms, structuralExpectations);
       const repairPlan = evaluateRepairability(auditContext);
 
+      // --- AUDITORÍA DE DIALECTO Y ARTEFACTOS DE TRADUCCIÓN (LANGUAGE & DIALECT AUDIT) ---
+      if (languageDNA.flavorProfile && languageDNA.leadDialectProfile) {
+        dialectAudit = auditDialectAndTranslationArtifacts(
+          candidateAST,
+          languageDNA.flavorProfile,
+          languageDNA.leadDialectProfile,
+          languageDNA.featureDialectProfile
+        );
+
+        // Si no hay reparaciones de entrega pero sí un artefacto de traducción crítico (score >= 0.85)
+        if (!repairPlan.needsRepair && dialectAudit.flaggedBarsForRepair.length > 0) {
+          const topFlag = dialectAudit.flaggedBarsForRepair[0];
+          repairPlan.needsRepair = true;
+          repairPlan.targetBars.push({
+            sectionId: topFlag.sectionId,
+            barIndices: [0],
+            reason: `Artefacto de traducción o contaminación detectado en "${topFlag.lyricText}": ${topFlag.reason}`,
+          });
+        }
+      }
+
       finalRaw = stage2Lyrics;
       lyrics = candidateLyrics;
       finalAST = candidateAST;
@@ -678,6 +703,13 @@ export async function POST(req: NextRequest) {
         warningCount: hygieneReport.warningCount,
         findingsSummary: hygieneReport.findings.map(f => `[${f.severity.toUpperCase()}] ${f.reason}`),
       },
+      dialectAuditReport: dialectAudit ? {
+        passed: dialectAudit.passed,
+        translationArtifactScore: dialectAudit.translationArtifactScore,
+        dialectContaminationScore: dialectAudit.dialectContaminationScore,
+        slangChecklistScore: dialectAudit.slangChecklistScore,
+        issuesCount: dialectAudit.issues.length,
+      } : undefined,
     };
 
     if (!finalAST) finalAST = parseRawLyricsToAST(lyrics);

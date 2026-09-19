@@ -233,20 +233,27 @@ export function analyzeLanguageRatio(text: string, targetEnglishPercent: number)
 /**
  * Generates a corrective instruction when the language ratio is off.
  */
-export function buildCorrectionInstruction(analysis: LanguageAnalysis): string {
+export function buildCorrectionInstruction(analysis: LanguageAnalysis, spanishFlavor?: string): string {
   const needMoreEnglish = analysis.englishPercent < analysis.targetEnglishPercent;
   const diff = analysis.deviation;
 
   if (needMoreEnglish) {
     return `INSTRUCCIÓN CORRECTIVA DE IDIOMA: En el intento anterior, la letra contenía solo ${analysis.englishPercent}% de inglés, pero el objetivo era ${analysis.targetEnglishPercent}%. ` +
-      `DEBES aumentar drásticamente el uso de inglés. Convierte al menos ${diff}% más del contenido a inglés. ` +
-      `Técnicas: traduce frases completas al inglés, usa slang americano (bands, drip, opp, slime), ` +
-      `termina las rimas en inglés, y haz que el chorus sea mayoritariamente en inglés.`;
+      `DEBES aumentar el uso de inglés en aproximadamente ${diff}%. ` +
+      `Técnicas: compone barras completas en inglés de forma natural, utiliza cadencia y terminaciones en inglés en remates de compás, y expande el cuerpo anglosajón del chorus.`;
   } else {
+    const regionalHint = spanishFlavor === "spain"
+      ? "jerga callejera española/peninsular (bando, buga, lealtad)"
+      : spanishFlavor === "mexico"
+      ? "slang urbano mexicano (feria, morra, calle)"
+      : spanishFlavor === "argentina"
+      ? "slang urbano rioplatense (wacho, rancho, corte)"
+      : "slang urbano latino/caribeño auténtico (carro, piquete, calle, combi)";
+
     return `INSTRUCCIÓN CORRECTIVA DE IDIOMA: En el intento anterior, la letra contenía ${analysis.englishPercent}% de inglés, pero el objetivo era solo ${analysis.targetEnglishPercent}%. ` +
-      `DEBES reducir el uso de inglés y aumentar el español. Convierte al menos ${diff}% del contenido a español. ` +
-      `Técnicas: traduce frases al español, usa slang español/barrial (pana, chaval, vale, tío, loco), ` +
-      `termina las rimas en español, y mantén el chorus en español.`;
+      `DEBES aumentar el español en aproximadamente ${diff}%. ` +
+      `Técnicas: compone barras completas en español de forma orgánica, usa ${regionalHint}, ` +
+      `termina las rimas en español y mantén el chorus predominantemente en español.`;
   }
 }
 

@@ -741,7 +741,7 @@ export const ARTIST_REFERENCES: Record<string, ArtistReference> = {
     ],
     hookBars: [
       "Hellcat sonando, to's de negro en la noche (Hellcat!)",
-      "Drill boricua, no te bajes del coche (Glizzy!)",
+      "Drill boricua, no te bajes del carro (Glizzy!)",
     ],
     signatureBar: "Yovngchimi, Glizzy Gang, Money Way",
     verified: true,

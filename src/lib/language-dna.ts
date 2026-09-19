@@ -19,6 +19,15 @@ export function buildLanguageTarget(spanglishPercent: number): LanguageTarget {
   };
 }
 
+import {
+  type SpanishFlavor,
+  type SpanishFlavorProfile,
+  type SpeakerDialectProfile,
+  resolveSpeakerDialectProfile,
+  resolveSpanishFlavor,
+  buildDialectPromptDirectives,
+} from "./dialect-engine";
+
 export interface LanguageDNA {
   primaryLanguage: "en" | "es";
   englishRatio: number;
@@ -28,17 +37,32 @@ export interface LanguageDNA {
   switchPosition: "bar_start" | "bar_end" | "mid_bar" | "variable";
   switchDensity: number; // 0.0 to 1.0
   spanishFunction: "punchline" | "slang" | "emphasis" | "emotion" | "adlib" | "variable";
+  spanishFlavor?: SpanishFlavor;
+  leadDialectProfile?: SpeakerDialectProfile;
+  featureDialectProfile?: SpeakerDialectProfile | null;
+  flavorProfile?: SpanishFlavorProfile;
   instructionBlock: string;
 }
 
 /**
  * Constructs continuous Language DNA (6th Layer of Musical DNA)
  * Uses smooth sigmoidal/linear curves without abrupt jumps at 35% or 65%.
+ * Enriched with Speaker Dialect Engine & Regional Spanish Flavor realization.
  */
-export function buildLanguageDNA(spanglishPercent: number, artistId: string, featureId?: string): LanguageDNA {
+export function buildLanguageDNA(
+  spanglishPercent: number,
+  artistId: string,
+  featureId?: string,
+  spanishFlavor?: SpanishFlavor
+): LanguageDNA {
   const target = buildLanguageTarget(spanglishPercent);
   const ratio = target.center;
   const isEnDominant = ratio >= 0.5;
+
+  // Resolve Dialect & Regional Flavor Profiles
+  const leadDialectProfile = resolveSpeakerDialectProfile(artistId);
+  const featureDialectProfile = featureId ? resolveSpeakerDialectProfile(featureId) : null;
+  const flavorProfile = resolveSpanishFlavor(spanishFlavor, leadDialectProfile);
 
   // Smooth continuous switch density: highest around 50%, lowest at 0% and 100%
   const switchDensity = Number((Math.sin(ratio * Math.PI) * 0.85).toFixed(2));
@@ -61,15 +85,24 @@ export function buildLanguageDNA(spanglishPercent: number, artistId: string, fea
   else if (ratio <= 0.30) spanishFunction = "slang";
   else spanishFunction = "variable";
 
-  // Continuous prompt instruction
-  let instruction = "";
+  // Build dialect-aware prompt instruction
+  const dialectDirectives = buildDialectPromptDirectives(
+    leadDialectProfile,
+    featureDialectProfile,
+    flavorProfile,
+    ratio
+  );
+
+  let flowGuideline = "";
   if (ratio >= 0.70) {
-    instruction = `LENGUAJE CONTINUO: Dominio anglosajón prioritario (~${Math.round(ratio * 100)}% EN). El cuerpo melódico y las barras métricas se escriben predominantemente en inglés callejero (Atlanta/US Trap). El español entra de forma orgánica (${Math.round((1 - ratio) * 100)}% ES) como remate de barra, punchline final o frase de peso callejero. EVITA cortar cada compás rígidamente por la mitad; deja fluir el idioma en bloques naturales.`;
+    flowGuideline = `El cuerpo melódico y las barras métricas se escriben predominantemente en inglés con la identidad del intérprete. El español entra como remate de barra o punchline final bajo el registro ${flavorProfile.label}, sin partir cada compás rígidamente por la mitad.`;
   } else if (ratio <= 0.30) {
-    instruction = `LENGUAJE CONTINUO: Dominio español prioritario (~${Math.round((1 - ratio) * 100)}% ES). El peso narrativo, rimas y barras métricas se componen en español callejero/latino. El inglés (~${Math.round(ratio * 100)}% EN) entra como jerga urbana, marcas, flex y ad-libs de contratiempo con naturalidad, sin forzar cambios artificiales en cada línea.`;
+    flowGuideline = `El peso narrativo y barras métricas se componen en español bajo el registro ${flavorProfile.label}. El inglés entra como jerga urbana y ad-libs orgánicos de contratiempo sin forzar cambios artificiales en cada línea.`;
   } else {
-    instruction = `LENGUAJE CONTINUO: Code-switching orgánico y musical (~${Math.round(ratio * 100)}% EN / ~${Math.round((1 - ratio) * 100)}% ES). Alternancia derivada del discurso callejero real: trabaja bloques de compases fluidos, barras enteras en un idioma seguidas de barras en otro, o español con jerga de hip-hop auténtica. Queda TERMINANTEMENTE DESACONSEJADA la alternancia matemática o partir artificialmente cada línea en 50% inglés y 50% español.`;
+    flowGuideline = `Code-switching orgánico y musical derivado del discurso callejero real: trabaja bloques fluidos, barras completas en un idioma seguidas de barras en otro, o español con préstamos nativos de hip-hop. Queda desaconsejada la alternancia matemática rígida compás a compás.`;
   }
+
+  const instruction = `${dialectDirectives}\n\n### 5. DINÁMICA DE FLUJO LINGÜÍSTICO\n${flowGuideline}`;
 
   return {
     primaryLanguage: isEnDominant ? "en" : "es",
@@ -80,6 +113,10 @@ export function buildLanguageDNA(spanglishPercent: number, artistId: string, fea
     switchPosition,
     switchDensity,
     spanishFunction,
+    spanishFlavor: flavorProfile.flavor,
+    leadDialectProfile,
+    featureDialectProfile,
+    flavorProfile,
     instructionBlock: instruction,
   };
 }

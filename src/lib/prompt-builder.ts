@@ -88,6 +88,7 @@ export interface PromptParams {
   flowPocketMode?: "auto" | "bouncy" | "triplets" | "heavy";
   semanticAnchor?: SemanticAnchor;
   languageDNA?: LanguageDNA;
+  spanishFlavor?: import("./dialect-engine").SpanishFlavor;
 }
 
 export interface VocalGuideResult {

@@ -43,6 +43,7 @@ import {
 } from "@/lib/trap-data";
 import type { HookVariationOption } from "@/app/api/hook-variations/route";
 import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, cleanSunoBracketHeaders, resolveArtistVocalGuide, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
+import { type SpanishFlavor, SPANISH_FLAVOR_CATALOG } from "@/lib/dialect-engine";
 import { ArtistSearchCombobox } from "@/components/artist-search-combobox";
 import { SectionVoiceCombobox } from "@/components/section-voice-combobox";
 import { SunoBudgetCard } from "@/components/suno-budget-card";
@@ -196,6 +197,7 @@ export default function TrapGhostPage() {
   const [selectedTopics, setSelectedTopics] = useState<string[]>(["t_dinero", "t_enemigos"]);
   const [customTopic, setCustomTopic] = useState<string>("");
   const [spanglishPercent, setSpanglishPercent] = useState<number>(50);
+  const [spanishFlavor, setSpanishFlavor] = useState<SpanishFlavor>("auto");
   const [bpmVibeId, setBpmVibeId] = useState<string>("bpm_trap_standard");
   const [structureId, setStructureId] = useState<string>("std_basic");
   const [customSections, setCustomSections] = useState<SongSection[]>(STRUCTURES[0].sections);
@@ -579,6 +581,7 @@ export default function TrapGhostPage() {
       topics: selectedTopics,
       customTopic,
       spanglishPercent,
+      spanishFlavor,
       bpmVibeId,
       beatTypeId: beatTypeId || undefined,
       structureId,
@@ -2552,6 +2555,42 @@ export default function TrapGhostPage() {
                     <p className="text-[13px] font-medium text-slime">{spanglishInfo.label}</p>
                     <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
                       {spanglishInfo.prompt.replace(/\*\*[^*]*\*\*\.?/g, "").trim()}
+                    </p>
+                  </div>
+
+                  {/* Spanish Flavor / Dialect Realization */}
+                  <div className="space-y-2 pt-2 border-t border-border/40">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold flex items-center gap-1.5 text-cyber">
+                        <span>🎙️ Sabor / Registro de Español</span>
+                      </Label>
+                      <Badge variant="outline" className="text-[10px] border-cyber/30 text-cyber">
+                        {SPANISH_FLAVOR_CATALOG[spanishFlavor]?.label}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      {(Object.keys(SPANISH_FLAVOR_CATALOG) as SpanishFlavor[]).map((flavorKey) => {
+                        const flavorItem = SPANISH_FLAVOR_CATALOG[flavorKey];
+                        const isSelected = spanishFlavor === flavorKey;
+                        return (
+                          <button
+                            key={flavorKey}
+                            type="button"
+                            onClick={() => setSpanishFlavor(flavorKey)}
+                            className={`px-2 py-1.5 rounded text-left transition-all text-xs border flex items-center gap-1.5 ${
+                              isSelected
+                                ? "border-cyber bg-cyber/15 text-cyber font-medium shadow-[0_0_8px_rgba(0,240,255,0.2)]"
+                                : "border-border/40 bg-black/20 hover:border-border text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            <span className="text-sm">{flavorItem.flag}</span>
+                            <span className="truncate text-[11px]">{flavorItem.label.split("/")[0].trim()}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground italic">
+                      {SPANISH_FLAVOR_CATALOG[spanishFlavor]?.linguisticDescription}
                     </p>
                   </div>
 
