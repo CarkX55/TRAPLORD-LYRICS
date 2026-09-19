@@ -236,6 +236,7 @@ export async function POST(req: NextRequest) {
 
     // Resolve referenced entities
     const bpmVibe = BPM_VIBES.find(b => b.id === body.bpmVibeId) ?? BPM_VIBES[5];
+    const parsedBpm = parseInt((bpmVibe.range || "135").split("-")[0], 10) || 135;
     const structure: SongStructure = body.customSections && body.customSections.length > 0
       ? { id: "custom", label: "Estructura Personalizada", sections: body.customSections }
       : (STRUCTURES.find(s => s.id === body.structureId) ?? STRUCTURES[0]);
@@ -409,7 +410,6 @@ export async function POST(req: NextRequest) {
       // --- ETAPA PREVIA: PLANIFICACIÓN RÍTMICA BEAT-FIRST (Determinista Local <5ms) ---
       const flowProfile = getFlowProfile(body.artistId) || undefined;
       const mainDNA = getMusicalDNAForArtist(body.artistId);
-      const parsedBpm = parseInt((bpmVibe.range || "135").split("-")[0], 10) || 135;
 
       const performanceArc = generatePerformanceArc(structure, body.moodId, mainDNA);
       const flowSkeleton = generateFlowSkeleton(performanceArc, mainDNA, flowProfile, structure, body.flowPocketMode);
@@ -644,7 +644,6 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    const parsedBpm = parseInt((bpmVibe.range || "135").split("-")[0], 10) || 135;
     if (!finalAST) finalAST = parseRawLyricsToAST(lyrics);
     if (!auditContext) auditContext = runInitialDeliveryAudit(finalAST, parsedBpm, getFlowProfile(body.artistId) || undefined, [], structure.sections);
 
