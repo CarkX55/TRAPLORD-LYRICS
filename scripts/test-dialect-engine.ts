@@ -137,11 +137,13 @@ async function runDialectEngineTests() {
   assert(allocPlan.sections.length === 4, "AllocPlan contains exactly 4 sections");
 
   // Mathematical Solver Reconciliation Check:
-  // sum(w_i * r_i) must equal targetEnglishRatio (0.70) within 0.01
+  // sum(w_i * r_i) must equal effectiveTargetEnglishRatio exactly
   const weightedSum = allocPlan.sections.reduce((acc, s) => acc + s.preferredEnglishRatio * s.syllableWeight, 0);
   assert(Math.abs(weightedSum - 0.70) <= 0.015, `Mathematical Solver: weighted sum ${weightedSum.toFixed(3)} matches target 0.70 (error <= 0.015)`);
-  assert(allocPlan.predictedEnglishRatio >= 0.69 && allocPlan.predictedEnglishRatio <= 0.71, "predictedEnglishRatio matches target 0.70");
+  assert(allocPlan.effectiveTargetEnglishRatio === 0.70, "effectiveTargetEnglishRatio is 0.70 for reachable target");
+  assert(allocPlan.predictedEnglishRatio === 0.70, "predictedEnglishRatio matches target 0.70 exactly");
   assert(allocPlan.allocationStatus === "FEASIBLE", "allocationStatus is FEASIBLE for balanced 70% target");
+  assert(typeof allocPlan.boundaryConstraintActive === "boolean", "boundaryConstraintActive is a separate boolean diagnostic");
 
   // Syllable Mass Verification (W_i = expectedSyllables_i / totalExpectedSyllables):
   const introSec = allocPlan.sections.find(s => s.sectionId === "sec_intro")!;
@@ -165,10 +167,22 @@ async function runDialectEngineTests() {
   // Infeasibility & Clamping Status Checks:
   const extremePlan = buildLanguageAllocationPlan(0.99, offsetProfile, chimiProfile, testSections);
   assert(extremePlan.allocationStatus === "INFEASIBLE", "Target 0.99 > T_max (0.88) is strictly INFEASIBLE");
+  assert(extremePlan.effectiveTargetEnglishRatio === extremePlan.achievableRange.max, "effectiveTargetEnglishRatio is clipped to T_max");
+  assert(extremePlan.predictedEnglishRatio === extremePlan.achievableRange.max, "predictedEnglishRatio equals T_max when target > T_max");
+
   const lowExtremePlan = buildLanguageAllocationPlan(0.05, offsetProfile, chimiProfile, testSections);
   assert(lowExtremePlan.allocationStatus === "INFEASIBLE", "Target 0.05 < T_min (0.12) is strictly INFEASIBLE");
-  const clampedPlan = buildLanguageAllocationPlan(0.86, offsetProfile, chimiProfile, testSections);
-  assert(clampedPlan.allocationStatus === "CLAMPED", "Target 0.86 near T_max is CLAMPED");
+  assert(lowExtremePlan.effectiveTargetEnglishRatio === lowExtremePlan.achievableRange.min, "effectiveTargetEnglishRatio is clipped to T_min");
+  assert(lowExtremePlan.predictedEnglishRatio === lowExtremePlan.achievableRange.min, "predictedEnglishRatio equals T_min when target < T_min");
+
+  const clampedPlan = buildLanguageAllocationPlan(0.87, offsetProfile, chimiProfile, testSections);
+  assert(clampedPlan.allocationStatus === "CLAMPED", "Target 0.87 within eps=0.02 of T_max (0.88) is CLAMPED");
+
+  // Interior Target with Active Box Constraint is still FEASIBLE:
+  const feasibleBoxPlan = buildLanguageAllocationPlan(0.60, offsetProfile, chimiProfile, testSections);
+  assert(feasibleBoxPlan.allocationStatus === "FEASIBLE", "Target 0.60 in interior is FEASIBLE even if individual box constraints activate");
+  assert(feasibleBoxPlan.effectiveTargetEnglishRatio === 0.60, "effectiveTargetEnglishRatio preserves target 0.60");
+  assert(feasibleBoxPlan.predictedEnglishRatio === 0.60, "predictedEnglishRatio preserves target 0.60 exactly");
 
   // Band Clipping Verification at Edges:
   const edgePlan = buildLanguageAllocationPlan(0.95, offsetProfile, chimiProfile, testSections);
@@ -181,7 +195,7 @@ async function runDialectEngineTests() {
   allocPlan.observedEnglishRatio = 0.68;
   assert(allocPlan.observedEnglishRatio !== undefined, "observedEnglishRatio can be recorded post-generation");
   assert(allocPlan.observedEnglishRatio !== allocPlan.predictedEnglishRatio, "predictedEnglishRatio (planned) and observedEnglishRatio (actual AST) are distinct variables");
-  totalPassed += 26;
+  totalPassed += 34;
 
   // -------------------------------------------------------------
   // TEST 3: Prompt Hygiene (ZERO Negative Example Leaks)

@@ -581,9 +581,11 @@ export interface SectionLanguageAllocation {
 
 export interface LanguageAllocationPlan {
   targetEnglishRatio: number;
-  predictedEnglishRatio: number;
+  effectiveTargetEnglishRatio: number; // T_eff = clip(T, T_min, T_max)
+  predictedEnglishRatio: number; // sum W_i * r_i = T_eff
   observedEnglishRatio?: number;
   allocationStatus: AllocationStatus;
+  boundaryConstraintActive: boolean; // exists i: r_i == l_i || r_i == u_i
   achievableRange: {
     min: number; // T_min = sum W_i * l_i
     max: number; // T_max = sum W_i * u_i
@@ -615,9 +617,14 @@ export function getExpectedSyllablesPerBar(sectionType: string): number {
 /**
  * Builds a deterministic, voice-weighted Language Allocation Plan.
  *
- * SOLVER OBJECTIVE FUNCTION:
- *   min_r [ sum_i W_i * (r_i - p_i)^2 + lambda * (sum_i W_i * r_i - T)^2 ]
- *   subject to:  l_i <= r_i <= u_i
+ * SOLVER FORMULATION (EXPLICIT TARGET PRESERVATION):
+ *   Step 1 — Effective Target:
+ *     T_eff = clip(T, T_min, T_max)
+ *
+ *   Step 2 — Optimization:
+ *     min_r sum_i W_i * (r_i - p_i)^2
+ *     subject to:  l_i <= r_i <= u_i
+ *     and:         sum_i W_i * r_i = T_eff
  *
  * where:
  *   expectedSyllables_i = bars_i * expectedSyllablesPerBar_i
@@ -629,10 +636,13 @@ export function getExpectedSyllablesPerBar(sectionType: string): number {
  *   T_min  = sum_i W_i * l_i (infimum of reachable global ratio)
  *   T_max  = sum_i W_i * u_i (supremum of reachable global ratio)
  *
- * FEASIBILITY STATUS:
+ * FEASIBILITY STATUS (GLOBAL TARGET REACHABILITY):
  *   FEASIBLE:   T_min + eps < T < T_max - eps
- *   CLAMPED:    T near T_min or T near T_max, or individual r_i on boundary
- *   INFEASIBLE: T < T_min or T > T_max (outside reachable linguistic space)
+ *   CLAMPED:    |T - T_min| <= eps  or  |T - T_max| <= eps
+ *   INFEASIBLE: T < T_min - eps  or  T > T_max + eps
+ *
+ * INDIVIDUAL BOX CONSTRAINT STATUS:
+ *   boundaryConstraintActive = exists i: (r_i == l_i || r_i == u_i)
  */
 export function buildLanguageAllocationPlan(
   targetEnglishRatio: number,
@@ -652,8 +662,10 @@ export function buildLanguageAllocationPlan(
   if (!sections || sections.length === 0) {
     return {
       targetEnglishRatio,
+      effectiveTargetEnglishRatio: targetEnglishRatio,
       predictedEnglishRatio: targetEnglishRatio,
       allocationStatus: "FEASIBLE",
+      boundaryConstraintActive: false,
       achievableRange: { min: 0.0, max: 1.0 },
       globalSoftBand,
       globalHardBand,
@@ -717,52 +729,57 @@ export function buildLanguageAllocationPlan(
     max: Number(T_max.toFixed(2)),
   };
 
-  // 4. Solve constrained quadratic projection onto [l_i, u_i]
-  let resolvedRatios: number[] = [];
-  let hadClamping = false;
-  let allocationStatus: AllocationStatus = "FEASIBLE";
+  // 4. Compute effective target: T_eff = clip(T, T_min, T_max)
+  const T_eff = Math.max(T_min, Math.min(T_max, targetEnglishRatio));
+  const effectiveTargetEnglishRatio = Number(T_eff.toFixed(2));
 
-  if (targetEnglishRatio < T_min - 0.01) {
-    // Mathematically below minimum achievable English ratio
-    resolvedRatios = sectionConstraints.map(c => c.lowerBound);
-    hadClamping = true;
+  // 5. Global allocationStatus classification based strictly on global target reachability
+  const eps = 0.02;
+  let allocationStatus: AllocationStatus;
+  if (targetEnglishRatio < T_min - eps || targetEnglishRatio > T_max + eps) {
     allocationStatus = "INFEASIBLE";
-  } else if (targetEnglishRatio > T_max + 0.01) {
-    // Mathematically above maximum achievable English ratio
-    resolvedRatios = sectionConstraints.map(c => c.upperBound);
-    hadClamping = true;
-    allocationStatus = "INFEASIBLE";
+  } else if (Math.abs(targetEnglishRatio - T_min) <= eps || Math.abs(targetEnglishRatio - T_max) <= eps) {
+    allocationStatus = "CLAMPED";
   } else {
-    // Inside reachable envelope: reconcile preferences with target T
+    allocationStatus = "FEASIBLE";
+  }
+
+  // 6. Constrained optimization solver: min_r sum W_i (r_i - p_i)^2 s.t. l_i <= r_i <= u_i and sum W_i r_i = T_eff
+  let resolvedRatios: number[] = [];
+
+  if (Math.abs(T_eff - T_min) < 1e-5) {
+    // Saturated at minimum boundary
+    resolvedRatios = sectionConstraints.map(c => c.lowerBound);
+  } else if (Math.abs(T_eff - T_max) < 1e-5) {
+    // Saturated at maximum boundary
+    resolvedRatios = sectionConstraints.map(c => c.upperBound);
+  } else {
     const rawPreferences = sectionConstraints.map(c => c.preference);
     const initialWeightedSum = rawPreferences.reduce((acc, p, i) => acc + p * weights[i], 0);
-    const initialError = targetEnglishRatio - initialWeightedSum;
+    const initialResidual = T_eff - initialWeightedSum;
 
     // Shift preferences by residual and project onto box [l_i, u_i]
     resolvedRatios = rawPreferences.map((p, i) => {
-      const shifted = p + initialError;
+      const shifted = p + initialResidual;
       const c = sectionConstraints[i];
-      if (shifted < c.lowerBound || shifted > c.upperBound) {
-        hadClamping = true;
-      }
       return Math.max(c.lowerBound, Math.min(c.upperBound, shifted));
     });
 
-    // Iterative redistribution over unclamped sections
-    for (let iter = 0; iter < 5; iter++) {
+    // Iterative redistribution over unclamped coordinates to preserve sum(W_i * r_i) = T_eff exactly
+    for (let iter = 0; iter < 10; iter++) {
       const currentSum = resolvedRatios.reduce((acc, r, i) => acc + r * weights[i], 0);
-      const residual = targetEnglishRatio - currentSum;
-      if (Math.abs(residual) <= 0.002) break;
+      const residual = T_eff - currentSum;
+      if (Math.abs(residual) <= 0.0001) break;
 
       const unclampedIndices = resolvedRatios
         .map((r, i) => ({ r, i, c: sectionConstraints[i] }))
-        .filter(x => x.r > x.c.lowerBound + 0.001 && x.r < x.c.upperBound - 0.001)
+        .filter(x => x.r > x.c.lowerBound + 0.0001 && x.r < x.c.upperBound - 0.0001)
         .map(x => x.i);
 
       if (unclampedIndices.length === 0) break;
 
       const unclampedWeightSum = unclampedIndices.reduce((sum, idx) => sum + weights[idx], 0);
-      if (unclampedWeightSum <= 0.001) break;
+      if (unclampedWeightSum <= 0.0001) break;
 
       for (const idx of unclampedIndices) {
         const c = sectionConstraints[idx];
@@ -770,19 +787,18 @@ export function buildLanguageAllocationPlan(
         resolvedRatios[idx] = Math.max(c.lowerBound, Math.min(c.upperBound, resolvedRatios[idx] + step));
       }
     }
-
-    // Determine status: CLAMPED if near boundary or hitting box limits, else FEASIBLE
-    if (targetEnglishRatio <= T_min + 0.04 || targetEnglishRatio >= T_max - 0.04 || hadClamping) {
-      allocationStatus = "CLAMPED";
-    } else {
-      allocationStatus = "FEASIBLE";
-    }
   }
 
   const finalWeightedSum = resolvedRatios.reduce((acc, r, i) => acc + r * weights[i], 0);
   const predictedEnglishRatio = Number(finalWeightedSum.toFixed(2));
 
-  // 5. Build output section allocations
+  // 7. Separate diagnostic flag: boundaryConstraintActive (exists i: r_i == l_i || r_i == u_i)
+  const boundaryConstraintActive = resolvedRatios.some((r, i) =>
+    Math.abs(r - sectionConstraints[i].lowerBound) <= 0.005 ||
+    Math.abs(r - sectionConstraints[i].upperBound) <= 0.005
+  );
+
+  // 8. Build output section allocations
   const sectionAllocations: SectionLanguageAllocation[] = sections.map((sec, i) => {
     const c = sectionConstraints[i];
     const finalRatio = Number(resolvedRatios[i].toFixed(2));
@@ -809,8 +825,10 @@ export function buildLanguageAllocationPlan(
 
   return {
     targetEnglishRatio,
+    effectiveTargetEnglishRatio,
     predictedEnglishRatio,
     allocationStatus,
+    boundaryConstraintActive,
     achievableRange,
     globalSoftBand,
     globalHardBand,

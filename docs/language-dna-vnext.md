@@ -148,17 +148,30 @@ actual syllable mass
 observed ratio
 ```
 
-### B. Formulación Matemática del Solver y Restricciones de Caja
-Cada sección/intérprete está delimitada por límites lingüísticos naturales $[l_i, u_i]$ (ej. $[0.20, 1.00]$ para raperos angloparlantes de Atlanta; $[0.00, 0.70]$ para drillers hispanohablantes boricuas):
-$$\min_r \left[ \sum_i W_i (r_i - p_i)^2 + \lambda \left(\sum_i W_i r_i - T\right)^2 \right] \quad \text{sujeto a} \quad l_i \le r_i \le u_i$$
+### B. Formulación Matemática del Solver y Target Global Explícito ($T_{\text{eff}}$)
+Para garantizar matemáticamente la igualdad con la meta solicitada sin depender de un hiperparámetro de penalización blanda ($\lambda$), el solver opera bajo un problema de proyección de dos pasos:
 
-### C. Espacio Global Alcanzable y Estados de Viabilidad
+1. **Target Efectivo**:
+   $$T_{\text{eff}} = \operatorname{clip}(T, T_{\min}, T_{\max})$$
+
+2. **Optimización con Restricción de Igualdad Exacta**:
+   $$\min_r \sum_i W_i (r_i - p_i)^2 \quad \text{sujeto a} \quad l_i \le r_i \le u_i \quad \text{y} \quad \sum_i W_i r_i = T_{\text{eff}}$$
+   donde $p_i$ es la preferencia lingüística del intérprete para la sección $i$, y $[l_i, u_i]$ son las restricciones de caja naturales del artista (ej. $[0.20, 1.00]$ para raperos angloparlantes de Atlanta; $[0.00, 0.70]$ para drillers hispanohablantes boricuas).
+   
+Esta formulación preserva exactamente $T_{\text{eff}}$ ($\text{predictedEnglishRatio} = T_{\text{eff}}$) mientras minimiza la pérdida cuadrática frente a la preferencia de cada intérprete.
+
+### C. Espacio Global Alcanzable, Estados de Viabilidad y Diagnóstico de Frontera
 El espacio global de metas alcanzables para la configuración vocal de la canción queda acotado por:
 $$T_{\min} = \sum_i W_i l_i, \qquad T_{\max} = \sum_i W_i u_i$$
-Los estados se definen formalmente sobre este espacio:
-- **`FEASIBLE`**: $T_{\min} < T < T_{\max}$ (la meta cae dentro del espacio alcanzable).
-- **`CLAMPED`**: $T$ está en o llega a un extremo alcanzable, o cuando al menos una sección satura su límite de caja natural ($r_i = l_i$ o $r_i = u_i$, por ejemplo acotada a $[0.20, 0.80]$ por restricciones de los intérpretes).
-- **`INFEASIBLE`**: $T < T_{\min}$ o $T > T_{\max}$ (la meta solicitada queda estrictamente fuera del espacio alcanzable del ensamble de voces; el solver proyecta a la frontera más próxima).
+
+Con una tolerancia numérica $\epsilon = 0.02$, los estados de viabilidad del target global se definen analíticamente sobre este intervalo:
+- **`FEASIBLE`**: $T_{\min} + \epsilon < T < T_{\max} - \epsilon$ (la meta solicitada cae holgadamente en el interior del espacio alcanzable; el solver preserva $\text{predictedEnglishRatio} = T$).
+- **`CLAMPED`**: $|T - T_{\min}| \le \epsilon$ o $|T - T_{\max}| \le \epsilon$ (la meta solicitada se sitúa exactamente en o alcanza un extremo alcanzable global).
+- **`INFEASIBLE`**: $T < T_{\min} - \epsilon$ o $T > T_{\max} + \epsilon$ (la meta solicitada queda estrictamente fuera del espacio alcanzable; el sistema registra el target original en `targetEnglishRatio`, proyecta al extremo alcanzable en `effectiveTargetEnglishRatio = T_eff`, y establece $\text{predictedEnglishRatio} = T_{\text{eff}}$).
+
+**Diagnóstico Ortogonal de Restricciones Activas**:
+La activación de una restricción de caja individual en una sección ($r_i = l_i$ o $r_i = u_i$) dentro de una meta global factible no altera el `allocationStatus` (que sigue siendo `FEASIBLE`), sino que se reporta de forma independiente mediante:
+$$\text{boundaryConstraintActive} = \exists \, i : (r_i = l_i \lor r_i = u_i)$$
 
 ### D. Asignación Operacional de Bandas de Tolerancia Truncadas a $[0, 1]$
 Existe una separación ontológica inequívoca entre la variable optimizada por el solver y la evaluada por las bandas:
