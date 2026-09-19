@@ -4,7 +4,7 @@
 // 2. FlowSkeleton: bar-by-bar rhythm hypothesis planned before Pass 1.
 // 3. WritingCells: flexible 4-bar scene scaffolding without rigid templates.
 
-import type { SongStructure } from "./trap-data";
+import type { SongStructure, SongSection } from "./trap-data";
 import type { MusicalDNA } from "./musical-dna";
 import type { FlowProfile } from "./artist-flow-profiles";
 
@@ -264,7 +264,7 @@ export function formatFlowSkeletonForPrompt(skeleton: FlowSkeleton, sectionIdPre
 }
 
 // ========================================================================
-// 3. WRITING CELLS (Flexible 4-Bar Scene Scaffolding)
+// 3. WRITING CELLS (Flexible 4-Bar Scene Scaffolding & Planned Verse Intent)
 // ========================================================================
 
 export type CellObjective =
@@ -277,9 +277,18 @@ export type CellObjective =
   | "reflect"
   | "release";
 
+export type ContrastIntent =
+  | "none"
+  | "rhythmic_break"
+  | "perspective_shift"
+  | "energy_spike"
+  | "introspective_drop"
+  | "double_time"
+  | "half_time";
+
 export interface WritingCell {
-  cellIndex: number;            // 1-based index (e.g. 1, 2, 3, 4)
-  sectionId: string;            // e.g. "verse_1"
+  cellIndex: number;            // 1-based index within section (e.g. 1, 2, 3, 4)
+  sectionId: string;            // e.g. "verse_1", "verse_2"
   barsRange: [number, number];  // e.g. [1, 4], [5, 8]
   objective: CellObjective;
   sceneAnchor?: string;
@@ -287,12 +296,44 @@ export interface WritingCell {
   targetEnergy: number;
 }
 
+export interface PlannedVerseIntent {
+  sectionId: string;            // e.g. "verse_1", "verse_2"
+  verseIndex: number;           // 1-based index among verses (1, 2, 3...)
+  totalVerses: number;          // Total verses in the song
+  totalBars: number;            // Total bars for this verse (e.g. 16, 12, 8)
+  contrastIntent: ContrastIntent;
+  cells: WritingCell[];
+  narrativeArcSummary: string;  // Concise synopsis of this verse's arc
+}
+
+/**
+ * Asserts purity of intent for PlannedVerseIntent:
+ * PlannedVerseIntent and WritingCell MUST NEVER contain raw lyrics text, generated words, or observed rhymes.
+ */
+export function assertPlannedIntentPurity(intent: PlannedVerseIntent): void {
+  const checkObject = (obj: unknown, label: string) => {
+    if (!obj || typeof obj !== "object") return;
+    const forbiddenKeys = ["lyrics", "text", "rhymeFamily", "rhymes", "rhymeWords", "lines", "verseText"];
+    const record = obj as Record<string, unknown>;
+    for (const key of forbiddenKeys) {
+      if (key in record && record[key] !== undefined && record[key] !== null) {
+        throw new Error(`[CRITICAL] Purity violation at ${label}.${key}: planned intents must never contain generated text or observed rhymes.`);
+      }
+    }
+  };
+
+  checkObject(intent, `PlannedVerseIntent(${intent.sectionId})`);
+  for (let i = 0; i < intent.cells.length; i++) {
+    checkObject(intent.cells[i], `WritingCell(${intent.sectionId}[${i}])`);
+  }
+}
+
 /**
  * Generates dynamic 4-bar Writing Cells for verses and bridge sections.
  * Guarantees that each cell has a distinct narrative function, avoiding the
- * flat 16-bar checklist syndrome while permitting different organic progressions:
- * Verse A: establish -> develop -> turn -> payoff
- * Verse B: contrast -> escalate -> reflect -> payoff
+ * flat 16-bar checklist syndrome while permitting different organic progressions.
+ *
+ * Fully backward-compatible with legacy calls (sectionId, totalBars, sceneDesc, motif, isSecondVerse, moodKey).
  */
 export function generateWritingCells(
   sectionId: string,
@@ -300,30 +341,77 @@ export function generateWritingCells(
   sceneDescription?: string,
   motif?: string,
   isSecondVerse: boolean = false,
-  moodKey?: string
+  moodKey?: string,
+  contrastIntent?: ContrastIntent,
+  verseIndex: number = isSecondVerse ? 2 : 1,
+  totalVerses: number = 2
 ): WritingCell[] {
   const cells: WritingCell[] = [];
   const cellCount = Math.max(1, Math.floor(totalBars / 4));
 
   const lowerMood = (moodKey || "").toLowerCase();
-  const isAggressive = lowerMood.includes("agresivo") || lowerMood.includes("oscuro") || lowerMood.includes("calle");
-  const isIntrospective = lowerMood.includes("introspectivo") || lowerMood.includes("melancolico") || lowerMood.includes("romantico");
+  const isAggressive = lowerMood.includes("agresivo") || lowerMood.includes("oscuro") || lowerMood.includes("calle") || lowerMood.includes("dark") || lowerMood.includes("hyped") || lowerMood.includes("aggressive");
+  const isIntrospective = lowerMood.includes("introspectivo") || lowerMood.includes("melancolico") || lowerMood.includes("romantico") || lowerMood.includes("sad") || lowerMood.includes("melodic");
 
-  // Dynamic progression patterns avoiding mechanical templates across songs
+  // Dynamic anti-formula progression catalog avoiding mechanical templates
   let selectedProgression: CellObjective[];
-  if (isSecondVerse) {
-    selectedProgression = isAggressive
-      ? ["contrast", "escalate", "turn", "payoff"]
-      : isIntrospective
-      ? ["reflect", "escalate", "turn", "release"]
-      : ["contrast", "escalate", "reflect", "payoff"];
+
+  if (verseIndex === 1) {
+    if (cellCount >= 4) {
+      selectedProgression = isAggressive
+        ? ["establish", "escalate", "turn", "release"]
+        : isIntrospective
+        ? ["reflect", "develop", "escalate", "payoff"]
+        : ["establish", "develop", "turn", "payoff"];
+    } else if (cellCount === 3) {
+      selectedProgression = isAggressive
+        ? ["establish", "escalate", "payoff"]
+        : isIntrospective
+        ? ["reflect", "escalate", "release"]
+        : ["establish", "turn", "payoff"];
+    } else {
+      selectedProgression = isIntrospective ? ["reflect", "release"] : ["establish", "payoff"];
+    }
+  } else if (verseIndex === 2) {
+    if (cellCount >= 4) {
+      if (contrastIntent === "energy_spike") {
+        selectedProgression = ["escalate", "develop", "turn", "payoff"];
+      } else if (contrastIntent === "introspective_drop") {
+        selectedProgression = ["reflect", "develop", "contrast", "release"];
+      } else if (contrastIntent === "rhythmic_break") {
+        selectedProgression = ["contrast", "escalate", "turn", "release"];
+      } else {
+        selectedProgression = isAggressive
+          ? ["contrast", "escalate", "turn", "payoff"]
+          : isIntrospective
+          ? ["reflect", "escalate", "turn", "release"]
+          : ["contrast", "escalate", "reflect", "payoff"];
+      }
+    } else if (cellCount === 3) {
+      selectedProgression = isAggressive
+        ? ["contrast", "escalate", "payoff"]
+        : isIntrospective
+        ? ["reflect", "turn", "payoff"]
+        : ["contrast", "turn", "payoff"];
+    } else {
+      selectedProgression = isIntrospective ? ["reflect", "release"] : ["contrast", "payoff"];
+    }
   } else {
-    selectedProgression = isAggressive
-      ? ["establish", "escalate", "turn", "release"]
-      : isIntrospective
-      ? ["reflect", "develop", "escalate", "payoff"]
-      : ["establish", "develop", "turn", "payoff"];
+    // Verse 3+
+    if (cellCount >= 4) {
+      selectedProgression = isAggressive
+        ? ["escalate", "turn", "payoff", "release"]
+        : ["reflect", "escalate", "payoff", "release"];
+    } else if (cellCount === 3) {
+      selectedProgression = ["escalate", "payoff", "release"];
+    } else {
+      selectedProgression = ["escalate", "release"];
+    }
   }
+
+  // Base energy calibration
+  const baseEnergy = isAggressive ? 0.70 : isIntrospective ? 0.50 : 0.60;
+  const energyStep = 0.08;
 
   for (let c = 0; c < cellCount; c++) {
     const startBar = c * 4 + 1;
@@ -331,12 +419,25 @@ export function generateWritingCells(
     const objective = selectedProgression[c % selectedProgression.length];
 
     let flowIntentDesc = "Fraseo rítmico natural";
-    if (objective === "establish") flowIntentDesc = "Establecer cadencia base y detalles físicos de la escena";
-    else if (objective === "develop" || objective === "escalate") flowIntentDesc = "Aumentar tensión rítmica y aceleración de frases";
-    else if (objective === "turn" || objective === "contrast") flowIntentDesc = "Quiebre de perspectiva, barra hablada o cambio métrico";
-    else if (objective === "payoff") flowIntentDesc = "Remate de impacto contundente (punchline) con resolución de rima";
-    else if (objective === "reflect") flowIntentDesc = "Pausa contemplativa o reducción deliberada de densidad";
-    else if (objective === "release") flowIntentDesc = "Salida fluida conectando con la siguiente sección";
+    if (objective === "establish") {
+      flowIntentDesc = "Establecer cadencia base, atmósfera y detalles físicos de la escena";
+    } else if (objective === "develop") {
+      flowIntentDesc = "Desarrollar el relato, encadenando métrica continua y tensión rítmica";
+    } else if (objective === "escalate") {
+      flowIntentDesc = "Acelerar fraseo, mayor síncopa o densidad silábica creciente";
+    } else if (objective === "turn") {
+      flowIntentDesc = "Quiebre de perspectiva, cambio métrico inesperado o barra hablada directa";
+    } else if (objective === "contrast") {
+      flowIntentDesc = "Quiebre marcado respecto al verso previo (ritmo, ángulo o volumen emocional)";
+    } else if (objective === "payoff") {
+      flowIntentDesc = "Remate de impacto contundente (punchline) con resolución métrica y cierre";
+    } else if (objective === "reflect") {
+      flowIntentDesc = "Pausa contemplativa, reducción deliberada de densidad y apertura de aire";
+    } else if (objective === "release") {
+      flowIntentDesc = "Liberación de tensión rítmica y salida fluida conectando con el estribillo";
+    }
+
+    const calculatedEnergy = Math.min(0.95, Number((baseEnergy + c * energyStep).toFixed(2)));
 
     cells.push({
       cellIndex: c + 1,
@@ -345,7 +446,7 @@ export function generateWritingCells(
       objective,
       sceneAnchor: c === 0 && motif ? `Ancla central: ${motif}` : sceneDescription ? `Acción: ${objective}` : undefined,
       flowIntent: flowIntentDesc,
-      targetEnergy: Number((0.55 + c * 0.1).toFixed(2)),
+      targetEnergy: calculatedEnergy,
     });
   }
 
@@ -353,14 +454,121 @@ export function generateWritingCells(
 }
 
 /**
- * Formats writing cells into a compact, telegraphic block for the Ghostwriter prompt.
+ * Generates PlannedVerseIntent structures for all verse sections in a song structure.
+ * Enforces pure intent (no raw lyrics or rhyme families) and anti-formula diversity across verses.
+ */
+export function generatePlannedVerseIntents(
+  structure: SongStructure,
+  moodId?: string,
+  dna?: MusicalDNA,
+  flowProfile?: FlowProfile,
+  motif?: string,
+  sceneDescription?: string
+): PlannedVerseIntent[] {
+  const verseSections: { sec: SongSection; index: number; verseIdx: number }[] = [];
+  let verseCounter = 0;
+  for (let i = 0; i < structure.sections.length; i++) {
+    if (structure.sections[i].type === "verse") {
+      verseCounter++;
+      verseSections.push({ sec: structure.sections[i], index: i, verseIdx: verseCounter });
+    }
+  }
+
+  const totalVerses = verseCounter > 0 ? verseCounter : 1;
+  const lowerMood = (moodId || "").toLowerCase();
+  const isAggressive = lowerMood.includes("agresivo") || lowerMood.includes("oscuro") || lowerMood.includes("calle") || lowerMood.includes("dark") || lowerMood.includes("hyped") || lowerMood.includes("aggressive");
+  const isIntrospective = lowerMood.includes("introspectivo") || lowerMood.includes("melancolico") || lowerMood.includes("romantico") || lowerMood.includes("sad") || lowerMood.includes("melodic");
+
+  const results: PlannedVerseIntent[] = [];
+
+  for (const { sec, verseIdx } of verseSections) {
+    const secKey = `verse_${verseIdx}`;
+    const totalBars = sec.bars ?? 16;
+
+    let contrastIntent: ContrastIntent = "none";
+    if (verseIdx === 2) {
+      if (isAggressive) {
+        contrastIntent = "energy_spike";
+      } else if (isIntrospective) {
+        contrastIntent = "introspective_drop";
+      } else {
+        contrastIntent = "perspective_shift";
+      }
+    } else if (verseIdx >= 3) {
+      contrastIntent = isAggressive ? "double_time" : "rhythmic_break";
+    }
+
+    const cells = generateWritingCells(
+      secKey,
+      totalBars,
+      sceneDescription,
+      motif,
+      verseIdx > 1,
+      moodId,
+      contrastIntent,
+      verseIdx,
+      totalVerses
+    );
+
+    const arcSummary = `Verso ${verseIdx} (${totalBars} barras): ${cells.map(c => c.objective.toUpperCase()).join(" ➔ ")}${contrastIntent !== "none" ? ` [Contraste: ${contrastIntent}]` : ""}`;
+
+    const plannedIntent: PlannedVerseIntent = {
+      sectionId: secKey,
+      verseIndex: verseIdx,
+      totalVerses,
+      totalBars,
+      contrastIntent,
+      cells,
+      narrativeArcSummary: arcSummary,
+    };
+
+    assertPlannedIntentPurity(plannedIntent);
+    results.push(plannedIntent);
+  }
+
+  return results;
+}
+
+/**
+ * Flattens writing cells across all verses in a song.
+ */
+export function generateAllWritingCells(
+  structure: SongStructure,
+  plannedIntents?: PlannedVerseIntent[],
+  sceneDescription?: string,
+  motif?: string,
+  moodKey?: string
+): WritingCell[] {
+  if (plannedIntents && plannedIntents.length > 0) {
+    return plannedIntents.flatMap(pi => pi.cells);
+  }
+  const generated = generatePlannedVerseIntents(structure, moodKey, undefined, undefined, motif, sceneDescription);
+  return generated.flatMap(pi => pi.cells);
+}
+
+/**
+ * Formats writing cells into a compact, telegraphic block for the Ghostwriter prompt,
+ * cleanly grouped by section to support multi-verse structures.
  */
 export function formatWritingCellsForPrompt(cells: WritingCell[]): string {
   if (!cells || cells.length === 0) return "";
-  const lines = cells.map(c => {
-    const anchor = c.sceneAnchor ? ` | ${c.sceneAnchor}` : "";
-    return `- **Célula ${c.cellIndex} [Barras ${c.barsRange[0]}-${c.barsRange[1]}]**: ${c.objective.toUpperCase()} (${c.flowIntent}${anchor})`;
-  });
 
-  return `### Células de Escritura (4-Bar Writing Cells)\n*Estructura narrativa interna para evitar versos planos de 16 barras*:\n${lines.join("\n")}`;
+  const sectionsMap = new Map<string, WritingCell[]>();
+  for (const c of cells) {
+    const list = sectionsMap.get(c.sectionId) || [];
+    list.push(c);
+    sectionsMap.set(c.sectionId, list);
+  }
+
+  const sectionsFormatted: string[] = [];
+  for (const [secId, secCells] of sectionsMap.entries()) {
+    const header = secId.toUpperCase().replace("_", " ");
+    const lines = secCells.map(c => {
+      const anchor = c.sceneAnchor ? ` | ${c.sceneAnchor}` : "";
+      return `- **Célula ${c.cellIndex} [Barras ${c.barsRange[0]}-${c.barsRange[1]}]**: ${c.objective.toUpperCase()} (${c.flowIntent}${anchor})`;
+    });
+    sectionsFormatted.push(`#### ${header}\n${lines.join("\n")}`);
+  }
+
+  return `### Células de Escritura (4-Bar Writing Cells)\n*Estructura narrativa interna para evitar versos planos de 16 barras. Usa cada célula como objetivo dinámico de 4 compases*:\n\n${sectionsFormatted.join("\n\n")}`;
 }

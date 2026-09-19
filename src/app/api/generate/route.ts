@@ -42,7 +42,11 @@ import {
   generateFlowSkeleton,
   formatFlowSkeletonForPrompt,
   generateWritingCells,
+  generatePlannedVerseIntents,
+  generateAllWritingCells,
   formatWritingCellsForPrompt,
+  type PlannedVerseIntent,
+  type WritingCell,
 } from "@/lib/composition-planner";
 import {
   runInitialDeliveryAudit,
@@ -107,6 +111,7 @@ interface GenerateBody {
   geminiModel?: string;
   thinkingBudget?: number; // 0: disabled/instant, 1024-2048: balanced, 4096-8192: deep study, -1: auto
   useLegacySinglePass?: boolean;
+  writingCellsEnabled?: boolean;
 }
 
 // Unified LLM Caller honoring strictly the user's selected model with progressive retry
@@ -335,7 +340,12 @@ export async function POST(req: NextRequest) {
     let finalRaw = "";
     let finalAST: SongDocument | null = null;
     let auditContext: InitialAuditContext | null = null;
-    let compositionPlanningInfo: { flowSkeletonSummary?: string; writingCellsCount?: number } | undefined = undefined;
+    let compositionPlanningInfo: {
+      flowSkeletonSummary?: string;
+      writingCellsCount?: number;
+      writingCellsEnabled?: boolean;
+      plannedVerseIntents?: PlannedVerseIntent[];
+    } | undefined = undefined;
     let pipelineStagesCompleted: string[] = [];
     const stageLogs: GenerationStageLog[] = [];
     const driftHistory: LanguageDriftStep[] = [];
@@ -453,13 +463,31 @@ export async function POST(req: NextRequest) {
         decision: stage1Syllable.bandDecision,
       });
 
-      // --- SCAFFOLDING DE CÉLULAS DE ESCRITURA PARA VERSOS (4-Bar Writing Cells) ---
-      const writingCellsV1 = generateWritingCells("verse_1", 16, semanticAnchor?.sensoryDescription, semanticAnchor?.title, false, body.moodId);
-      const writingCellsSnippet = formatWritingCellsForPrompt(writingCellsV1);
+      // --- SCAFFOLDING DE CÉLULAS DE ESCRITURA PARA VERSOS (4-Bar Writing Cells con Factorial Flag) ---
+      const writingCellsEnabled = body.writingCellsEnabled !== false;
+      let writingCellsSnippet: string | undefined = undefined;
+      let plannedVerseIntents: PlannedVerseIntent[] = [];
+      let allWritingCells: WritingCell[] = [];
+
+      if (writingCellsEnabled) {
+        plannedVerseIntents = generatePlannedVerseIntents(
+          structure,
+          body.moodId,
+          mainDNA,
+          flowProfile,
+          semanticAnchor?.title,
+          semanticAnchor?.sensoryDescription
+        );
+        allWritingCells = generateAllWritingCells(structure, plannedVerseIntents);
+        writingCellsSnippet = formatWritingCellsForPrompt(allWritingCells);
+      }
+
       const flowSkeletonSnippet = formatFlowSkeletonForPrompt(flowSkeleton, "verse_1");
       compositionPlanningInfo = {
         flowSkeletonSummary: flowSkeleton.globalIntentionSummary,
-        writingCellsCount: writingCellsV1.length,
+        writingCellsCount: allWritingCells.length,
+        writingCellsEnabled,
+        plannedVerseIntents,
       };
 
       // --- PASADA 2: Ghostwriter & Vocal Director Master (con Células y Skeleton) ---

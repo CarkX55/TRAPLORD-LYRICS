@@ -281,6 +281,7 @@ export type SongSectionType =
 export interface SongSection {
   name: string;
   type: SongSectionType;
+  bars?: number;
 }
 
 export interface SongStructure {

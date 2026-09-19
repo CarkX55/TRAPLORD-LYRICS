@@ -1,3 +1,5 @@
+import type { PlannedVerseIntent } from "./composition-planner";
+
 export interface GenerationStageLog {
   stageId: string;
   stageName: string;
@@ -61,5 +63,7 @@ export interface GenerationProcessLog {
   compositionPlanning?: {
     flowSkeletonSummary?: string;
     writingCellsCount?: number;
+    writingCellsEnabled?: boolean;
+    plannedVerseIntents?: PlannedVerseIntent[];
   };
 }
