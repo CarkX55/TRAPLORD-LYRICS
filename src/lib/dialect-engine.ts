@@ -572,7 +572,9 @@ export interface SectionLanguageAllocation {
   voiceId: string;
   preferredEnglishRatio: number;
   flexibility: number;
-  syllableWeight: number;
+  syllableWeight: number; // W_i = expectedSyllables_i / totalExpectedSyllables
+  expectedSyllables: number; // expectedSyllables_i = bars_i * expectedSyllablesPerBar_i
+  linguisticBounds: { min: number; max: number }; // [l_i, u_i]
   codeSwitchStyle: CodeSwitchStyle;
   targetGuideline: string;
 }
@@ -582,33 +584,55 @@ export interface LanguageAllocationPlan {
   predictedEnglishRatio: number;
   observedEnglishRatio?: number;
   allocationStatus: AllocationStatus;
+  achievableRange: {
+    min: number; // T_min = sum W_i * l_i
+    max: number; // T_max = sum W_i * u_i
+  };
   globalSoftBand: {
-    min: number;
-    max: number;
+    min: number; // max(0, T - 0.05)
+    max: number; // min(1, T + 0.05)
   };
   globalHardBand: {
-    min: number;
-    max: number;
+    min: number; // max(0, T - 0.12)
+    max: number; // min(1, T + 0.12)
   };
   allocationMode: "deterministic_voice_weighted" | "flexible_global";
   sections: SectionLanguageAllocation[];
 }
 
 /**
+ * Expected average syllable density per bar according to section musical function.
+ * Verses carry high narrative rap density; hooks/choruses are rhythmic and spacious;
+ * intros/outros feature sparse spoken or ad-lib phrasing.
+ */
+export function getExpectedSyllablesPerBar(sectionType: string): number {
+  const t = sectionType.toLowerCase();
+  if (t === "intro" || t === "outro") return 7;
+  if (t === "hook" || t === "chorus" || t === "bridge") return 9;
+  return 14; // verse / dense rap delivery
+}
+
+/**
  * Builds a deterministic, voice-weighted Language Allocation Plan.
  *
  * SOLVER OBJECTIVE FUNCTION:
- *   min_r [ sum_i w_i * (r_i - p_i)^2 + lambda * (sum_i w_i * r_i - T)^2 ]
- * where:
- *   p_i    = voice linguistic preference for section i
- *   w_i    = section syllable/bar weight (bars_i / totalBars)
- *   r_i    = section assigned English ratio
- *   T      = targetEnglishRatio requested by UI
- *   lambda = penalty weight balancing global target vs voice fidelity
+ *   min_r [ sum_i W_i * (r_i - p_i)^2 + lambda * (sum_i W_i * r_i - T)^2 ]
+ *   subject to:  l_i <= r_i <= u_i
  *
- * Reconciles section-by-section language preferences with targetEnglishRatio
- * yielding predictedEnglishRatio. Actual observedEnglishRatio is measured
- * post-generation on the AST syllables by the Language Audit.
+ * where:
+ *   expectedSyllables_i = bars_i * expectedSyllablesPerBar_i
+ *   W_i    = expected syllable mass (expectedSyllables_i / sum_j expectedSyllables_j)
+ *   p_i    = voice linguistic preference for section i
+ *   l_i    = lower linguistic bound for voice/section i
+ *   u_i    = upper linguistic bound for voice/section i
+ *   T      = targetEnglishRatio requested by UI
+ *   T_min  = sum_i W_i * l_i (infimum of reachable global ratio)
+ *   T_max  = sum_i W_i * u_i (supremum of reachable global ratio)
+ *
+ * FEASIBILITY STATUS:
+ *   FEASIBLE:   T_min + eps < T < T_max - eps
+ *   CLAMPED:    T near T_min or T near T_max, or individual r_i on boundary
+ *   INFEASIBLE: T < T_min or T > T_max (outside reachable linguistic space)
  */
 export function buildLanguageAllocationPlan(
   targetEnglishRatio: number,
@@ -630,6 +654,7 @@ export function buildLanguageAllocationPlan(
       targetEnglishRatio,
       predictedEnglishRatio: targetEnglishRatio,
       allocationStatus: "FEASIBLE",
+      achievableRange: { min: 0.0, max: 1.0 },
       globalSoftBand,
       globalHardBand,
       allocationMode: "flexible_global",
@@ -637,90 +662,148 @@ export function buildLanguageAllocationPlan(
     };
   }
 
-  // 1. Calculate section bar / syllable weights
-  const sectionBars = sections.map(sec => {
-    if (sec.bars && sec.bars > 0) return sec.bars;
-    const t = sec.type.toLowerCase();
-    if (t === "intro" || t === "outro") return 4;
-    if (t === "hook" || t === "chorus" || t === "bridge") return 8;
-    return 16;
+  // 1. Calculate section bar count and expected syllable mass (W_i)
+  const sectionMetrics = sections.map(sec => {
+    let bars = 16;
+    if (sec.bars && sec.bars > 0) {
+      bars = sec.bars;
+    } else {
+      const t = sec.type.toLowerCase();
+      if (t === "intro" || t === "outro") bars = 4;
+      else if (t === "hook" || t === "chorus" || t === "bridge") bars = 8;
+    }
+    const syllablesPerBar = getExpectedSyllablesPerBar(sec.type);
+    const expectedSyllables = bars * syllablesPerBar;
+    return { bars, syllablesPerBar, expectedSyllables };
   });
-  const totalBars = sectionBars.reduce((sum, b) => sum + b, 0);
-  const weights = sectionBars.map(b => (totalBars > 0 ? b / totalBars : 1 / sections.length));
 
-  // 2. Initial voice preferences
-  // English-native voice prefers higher English (min ~0.35 in bilingual tracks);
-  // Spanish-native voice maintains authentic Spanish presence (max ~0.65 English in bilingual tracks)
-  const rawPreferences = sections.map(sec => {
+  const totalExpectedSyllables = sectionMetrics.reduce((sum, m) => sum + m.expectedSyllables, 0);
+  const weights = sectionMetrics.map(m =>
+    totalExpectedSyllables > 0 ? m.expectedSyllables / totalExpectedSyllables : 1 / sections.length
+  );
+
+  // 2. Determine voice linguistic box bounds [l_i, u_i] and natural baseline preference p_i
+  const sectionConstraints = sections.map(sec => {
     const isFeature = Boolean(sec.voiceArtistId && featureProfile && sec.voiceArtistId === featureProfile.artistId);
     const voiceProfile = isFeature && featureProfile ? featureProfile : leadProfile;
 
+    let lowerBound = 0.0;
+    let upperBound = 1.0;
     let pref = targetEnglishRatio;
+
     if (voiceProfile.primaryLanguage === "en") {
-      pref = Math.min(1.0, Math.max(0.35, targetEnglishRatio + 0.15));
+      lowerBound = 0.20;
+      upperBound = 1.00;
+      pref = Math.min(upperBound, Math.max(0.35, targetEnglishRatio + 0.15));
     } else if (voiceProfile.primaryLanguage === "es") {
-      pref = Math.max(0.0, Math.min(0.65, targetEnglishRatio - 0.20));
+      lowerBound = 0.00;
+      upperBound = 0.70;
+      pref = Math.max(lowerBound, Math.min(0.65, targetEnglishRatio - 0.20));
     }
-    return pref;
+
+    return {
+      voiceProfile,
+      lowerBound,
+      upperBound,
+      preference: pref,
+    };
   });
 
-  // 3. Reconcile preferences with global target via weighted residual redistribution
-  const currentWeightedSum = rawPreferences.reduce((acc, pref, i) => acc + pref * weights[i], 0);
-  const error = targetEnglishRatio - currentWeightedSum;
+  // 3. Compute reachable global target space [T_min, T_max]
+  const T_min = sectionConstraints.reduce((sum, c, i) => sum + c.lowerBound * weights[i], 0);
+  const T_max = sectionConstraints.reduce((sum, c, i) => sum + c.upperBound * weights[i], 0);
+  const achievableRange = {
+    min: Number(T_min.toFixed(2)),
+    max: Number(T_max.toFixed(2)),
+  };
 
+  // 4. Solve constrained quadratic projection onto [l_i, u_i]
+  let resolvedRatios: number[] = [];
   let hadClamping = false;
-  const resolvedRatios = rawPreferences.map(pref => {
-    const adjusted = pref + error;
-    if (adjusted < 0.0 || adjusted > 1.0) {
-      hadClamping = true;
-    }
-    return Math.max(0.0, Math.min(1.0, adjusted));
-  });
+  let allocationStatus: AllocationStatus = "FEASIBLE";
 
-  // Secondary fine-tuning pass if clamping occurred
-  const postClampedSum = resolvedRatios.reduce((acc, r, i) => acc + r * weights[i], 0);
-  const secondaryError = targetEnglishRatio - postClampedSum;
-  const unclampedCount = resolvedRatios.filter(r => r > 0.0 && r < 1.0).length;
+  if (targetEnglishRatio < T_min - 0.01) {
+    // Mathematically below minimum achievable English ratio
+    resolvedRatios = sectionConstraints.map(c => c.lowerBound);
+    hadClamping = true;
+    allocationStatus = "INFEASIBLE";
+  } else if (targetEnglishRatio > T_max + 0.01) {
+    // Mathematically above maximum achievable English ratio
+    resolvedRatios = sectionConstraints.map(c => c.upperBound);
+    hadClamping = true;
+    allocationStatus = "INFEASIBLE";
+  } else {
+    // Inside reachable envelope: reconcile preferences with target T
+    const rawPreferences = sectionConstraints.map(c => c.preference);
+    const initialWeightedSum = rawPreferences.reduce((acc, p, i) => acc + p * weights[i], 0);
+    const initialError = targetEnglishRatio - initialWeightedSum;
 
-  if (Math.abs(secondaryError) > 0.001 && unclampedCount > 0) {
-    const correction = secondaryError / unclampedCount;
-    for (let i = 0; i < resolvedRatios.length; i++) {
-      if (resolvedRatios[i] > 0.0 && resolvedRatios[i] < 1.0) {
-        resolvedRatios[i] = Math.max(0.0, Math.min(1.0, resolvedRatios[i] + correction));
+    // Shift preferences by residual and project onto box [l_i, u_i]
+    resolvedRatios = rawPreferences.map((p, i) => {
+      const shifted = p + initialError;
+      const c = sectionConstraints[i];
+      if (shifted < c.lowerBound || shifted > c.upperBound) {
+        hadClamping = true;
       }
+      return Math.max(c.lowerBound, Math.min(c.upperBound, shifted));
+    });
+
+    // Iterative redistribution over unclamped sections
+    for (let iter = 0; iter < 5; iter++) {
+      const currentSum = resolvedRatios.reduce((acc, r, i) => acc + r * weights[i], 0);
+      const residual = targetEnglishRatio - currentSum;
+      if (Math.abs(residual) <= 0.002) break;
+
+      const unclampedIndices = resolvedRatios
+        .map((r, i) => ({ r, i, c: sectionConstraints[i] }))
+        .filter(x => x.r > x.c.lowerBound + 0.001 && x.r < x.c.upperBound - 0.001)
+        .map(x => x.i);
+
+      if (unclampedIndices.length === 0) break;
+
+      const unclampedWeightSum = unclampedIndices.reduce((sum, idx) => sum + weights[idx], 0);
+      if (unclampedWeightSum <= 0.001) break;
+
+      for (const idx of unclampedIndices) {
+        const c = sectionConstraints[idx];
+        const step = residual * (weights[idx] / unclampedWeightSum);
+        resolvedRatios[idx] = Math.max(c.lowerBound, Math.min(c.upperBound, resolvedRatios[idx] + step));
+      }
+    }
+
+    // Determine status: CLAMPED if near boundary or hitting box limits, else FEASIBLE
+    if (targetEnglishRatio <= T_min + 0.04 || targetEnglishRatio >= T_max - 0.04 || hadClamping) {
+      allocationStatus = "CLAMPED";
+    } else {
+      allocationStatus = "FEASIBLE";
     }
   }
 
   const finalWeightedSum = resolvedRatios.reduce((acc, r, i) => acc + r * weights[i], 0);
   const predictedEnglishRatio = Number(finalWeightedSum.toFixed(2));
 
-  // Determine allocation status
-  let allocationStatus: AllocationStatus = "FEASIBLE";
-  const finalError = Math.abs(predictedEnglishRatio - targetEnglishRatio);
-  if (finalError > 0.12) {
-    allocationStatus = "INFEASIBLE";
-  } else if (hadClamping || finalError > 0.05) {
-    allocationStatus = "CLAMPED";
-  }
-
-  // 4. Build output section allocations
+  // 5. Build output section allocations
   const sectionAllocations: SectionLanguageAllocation[] = sections.map((sec, i) => {
-    const isFeature = Boolean(sec.voiceArtistId && featureProfile && sec.voiceArtistId === featureProfile.artistId);
-    const voiceProfile = isFeature && featureProfile ? featureProfile : leadProfile;
+    const c = sectionConstraints[i];
     const finalRatio = Number(resolvedRatios[i].toFixed(2));
     const enPct = Math.round(finalRatio * 100);
     const esPct = 100 - enPct;
-    const style = voiceProfile.codeSwitchStyle;
+    const style = c.voiceProfile.codeSwitchStyle;
 
     return {
       sectionId: sec.id,
       sectionName: sec.name,
-      voiceId: voiceProfile.artistId,
+      voiceId: c.voiceProfile.artistId,
       preferredEnglishRatio: finalRatio,
       flexibility: 0.05,
       syllableWeight: Number(weights[i].toFixed(3)),
+      expectedSyllables: sectionMetrics[i].expectedSyllables,
+      linguisticBounds: {
+        min: c.lowerBound,
+        max: c.upperBound,
+      },
       codeSwitchStyle: style,
-      targetGuideline: `[${sec.name}] (${voiceProfile.artistId}): ~${enPct}% EN / ~${esPct}% ES (${voiceProfile.primaryDialect}, transición: ${style})`,
+      targetGuideline: `[${sec.name}] (${c.voiceProfile.artistId}): ~${enPct}% EN / ~${esPct}% ES (${c.voiceProfile.primaryDialect}, transición: ${style})`,
     };
   });
 
@@ -728,6 +811,7 @@ export function buildLanguageAllocationPlan(
     targetEnglishRatio,
     predictedEnglishRatio,
     allocationStatus,
+    achievableRange,
     globalSoftBand,
     globalHardBand,
     allocationMode: "deterministic_voice_weighted",

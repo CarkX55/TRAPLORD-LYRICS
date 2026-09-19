@@ -124,26 +124,33 @@ La arquitectura de Language DNA vNext se asienta sobre cuatro reglas cardinales:
 
 ## 4. Language Allocation Plan y Prioridad en Cascada
 
-### A. Desacople Epistemológico: Ratio Planificado vs Ratio Observado
-El solver conoce los pesos estructurales planificados de las secciones ($w_i$), pero no puede garantizar la cantidad exacta de sílabas que emitirá el LLM:
-- `targetEnglishRatio`: Meta fijada por el usuario en la UI.
-- `predictedEnglishRatio`: Ratio ponderado planificado previamente a la llamada generativa:
-  $$\text{predictedEnglishRatio} = \sum_i w_i r_i$$
-- `observedEnglishRatio`: Ratio medido empíricamente post-generación por el Language Audit:
+### A. Desacople Epistemológico y Masa Silábica Esperada
+Para garantizar que el predictor pre-generación y el auditor post-generación midan la misma magnitud conceptual, la ponderación de secciones no se calcula por compases simples (*bar-weighted*), sino por **masa silábica esperada** (*syllable-weighted*):
+- $\text{expectedSyllablesPerBar}_i$: Cadencia silábica típica según la función musical (7 en intro/outro, 9 en hook/chorus, 14 en verso/drill).
+- $\text{expectedSyllables}_i = \text{bars}_i \times \text{expectedSyllablesPerBar}_i$.
+- Ponderador de masa silábica:
+  $$W_i = \frac{\text{expectedSyllables}_i}{\sum_j \text{expectedSyllables}_j}$$
+- **Ratio Previsto**:
+  $$\text{predictedEnglishRatio} = \sum_i W_i r_i$$
+- **Ratio Observado**: Ratio medido empíricamente post-generación por el Language Audit sobre las sílabas efectivas del AST compilado:
   $$\text{observedEnglishRatio} = \frac{\text{sílabas en inglés observadas}}{\text{total de sílabas observadas}}$$
 
-### B. Formulación Matemática del Solver
-El solver optimiza los ratios de sección $r_i \in [0.0, 1.0]$ minimizando la desviación cuadrática respecto a las preferencias del intérprete $p_i$ y penalizando la desviación de la meta global $T$:
-$$\min_r \left[ \sum_i w_i (r_i - p_i)^2 + \lambda \left(\sum_i w_i r_i - T\right)^2 \right]$$
+### B. Formulación Matemática del Solver y Restricciones de Caja
+Cada sección/intérprete está delimitada por límites lingüísticos naturales $[l_i, u_i]$ (ej. $[0.20, 1.00]$ para raperos angloparlantes de Atlanta; $[0.00, 0.70]$ para drillers hispanohablantes boricuas):
+$$\min_r \left[ \sum_i W_i (r_i - p_i)^2 + \lambda \left(\sum_i W_i r_i - T\right)^2 \right] \quad \text{sujeto a} \quad l_i \le r_i \le u_i$$
 
-### C. Estados de Viabilidad (`AllocationStatus`)
-- `"FEASIBLE"`: Meta alcanzable naturalmente dentro de los rangos de las voces.
-- `"CLAMPED"`: Meta en el límite que satura compases a 0.0 o 1.0.
-- `"INFEASIBLE"`: Meta matemáticamente fuera del espacio alcanzable según las voces seleccionadas.
+### C. Espacio Global Alcanzable y Estados de Viabilidad
+El espacio global de metas alcanzables para la configuración vocal de la canción queda acotado por:
+$$T_{\min} = \sum_i W_i l_i, \qquad T_{\max} = \sum_i W_i u_i$$
+Los estados se definen formalmente sobre este espacio:
+- **`FEASIBLE`**: $T_{\min} + \epsilon < T < T_{\max} - \epsilon$ (la meta cae holgadamente en el interior del espacio alcanzable).
+- **`CLAMPED`**: $T \in [T_{\min}, T_{\min} + \epsilon] \cup [T_{\max} - \epsilon, T_{\max}]$, o cuando al menos una sección satura su límite natural ($r_i = l_i$ o $r_i = u_i$).
+- **`INFEASIBLE`**: $T < T_{\min}$ o $T > T_{\max}$ (la meta solicitada queda estrictamente fuera del espacio alcanzable del ensamble de voces; el solver proyecta a la frontera más próxima).
 
-### D. Bandas de Tolerancia
-- `globalSoftBand`: Margen elástico recomendado de $\pm 5\%$ (ej. 0.65 a 0.75 para meta 0.70).
-- `globalHardBand`: Límite duro admisible de $\pm 12\%$ (ej. 0.58 a 0.82 para meta 0.70).
+### D. Bandas de Tolerancia Truncadas a $[0, 1]$
+Las bandas de tolerancia se definen con truncado formal en los extremos para garantizar coherencia en metas limítrofes (ej. $T = 0.95$ produce $[0.83, 1.00]$, jamás $> 1$):
+$$\text{SoftBand} = [\max(0, T - 0.05), \min(1, T + 0.05)]$$
+$$\text{HardBand} = [\max(0, T - 0.12), \min(1, T + 0.12)]$$
 
 ### E. Prioridad Universal en Cascada para `SpanishFlavor = auto`
 1. Sabor explícito en la UI (`requestedFlavor !== "auto"`).

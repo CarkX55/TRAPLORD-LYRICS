@@ -143,22 +143,45 @@ async function runDialectEngineTests() {
   assert(allocPlan.predictedEnglishRatio >= 0.69 && allocPlan.predictedEnglishRatio <= 0.71, "predictedEnglishRatio matches target 0.70");
   assert(allocPlan.allocationStatus === "FEASIBLE", "allocationStatus is FEASIBLE for balanced 70% target");
 
+  // Syllable Mass Verification (W_i = expectedSyllables_i / totalExpectedSyllables):
+  const introSec = allocPlan.sections.find(s => s.sectionId === "sec_intro")!;
+  const v1Sec = allocPlan.sections.find(s => s.sectionId === "sec_v1")!;
+  const chimiVerse = allocPlan.sections.find(s => s.sectionId === "sec_v2")!;
+  assert(introSec.expectedSyllables === 28, "Intro (4 bars * 7) has expectedSyllables 28");
+  assert(v1Sec.expectedSyllables === 224, "Verse 1 (16 bars * 14) has expectedSyllables 224");
+  assert(introSec.linguisticBounds.min === 0.20 && introSec.linguisticBounds.max === 1.00, "Offset section has linguistic bounds [0.20, 1.00]");
+  assert(chimiVerse.linguisticBounds.min === 0.00 && chimiVerse.linguisticBounds.max === 0.70, "Yovngchimi section has linguistic bounds [0.00, 0.70]");
+
+  // Achievable Range Verification:
+  assert(allocPlan.achievableRange.min >= 0.11 && allocPlan.achievableRange.min <= 0.13, `T_min is ~0.12 (observed: ${allocPlan.achievableRange.min})`);
+  assert(allocPlan.achievableRange.max >= 0.86 && allocPlan.achievableRange.max <= 0.89, `T_max is ~0.88 (observed: ${allocPlan.achievableRange.max})`);
+
   // Offset sections should have higher English ratio than Yovngchimi's verse
   const offsetVerse = allocPlan.sections.find(s => s.sectionId === "sec_v1")!;
-  const chimiVerse = allocPlan.sections.find(s => s.sectionId === "sec_v2")!;
   assert(offsetVerse.preferredEnglishRatio > chimiVerse.preferredEnglishRatio, "Offset section has higher English ratio than Yovngchimi section");
   assert(chimiVerse.preferredEnglishRatio < 0.65, "Yovngchimi section provides balanced/higher Spanish content");
   assert(chimiVerse.targetGuideline.includes("yovngchimi"), "Target guideline includes artist identity");
 
-  // Infeasibility & Clamping Test: extreme target on bilingual arrangement
+  // Infeasibility & Clamping Status Checks:
   const extremePlan = buildLanguageAllocationPlan(0.99, offsetProfile, chimiProfile, testSections);
-  assert(extremePlan.allocationStatus === "CLAMPED" || extremePlan.allocationStatus === "INFEASIBLE", "Extreme target triggers CLAMPED or INFEASIBLE status");
+  assert(extremePlan.allocationStatus === "INFEASIBLE", "Target 0.99 > T_max (0.88) is strictly INFEASIBLE");
+  const lowExtremePlan = buildLanguageAllocationPlan(0.05, offsetProfile, chimiProfile, testSections);
+  assert(lowExtremePlan.allocationStatus === "INFEASIBLE", "Target 0.05 < T_min (0.12) is strictly INFEASIBLE");
+  const clampedPlan = buildLanguageAllocationPlan(0.86, offsetProfile, chimiProfile, testSections);
+  assert(clampedPlan.allocationStatus === "CLAMPED", "Target 0.86 near T_max is CLAMPED");
+
+  // Band Clipping Verification at Edges:
+  const edgePlan = buildLanguageAllocationPlan(0.95, offsetProfile, chimiProfile, testSections);
+  assert(edgePlan.globalSoftBand.min === 0.90, "Soft band min is 0.90");
+  assert(edgePlan.globalSoftBand.max === 1.00, "Soft band max is clamped to 1.00 (not 1.00+)");
+  assert(edgePlan.globalHardBand.min === 0.83, "Hard band min is 0.83 (0.95 - 0.12)");
+  assert(edgePlan.globalHardBand.max === 1.00, "Hard band max is clamped to 1.00 (not 1.07)");
 
   // Predicted vs Observed Variable Decoupling Test:
   allocPlan.observedEnglishRatio = 0.68;
   assert(allocPlan.observedEnglishRatio !== undefined, "observedEnglishRatio can be recorded post-generation");
   assert(allocPlan.observedEnglishRatio !== allocPlan.predictedEnglishRatio, "predictedEnglishRatio (planned) and observedEnglishRatio (actual AST) are distinct variables");
-  totalPassed += 15;
+  totalPassed += 26;
 
   // -------------------------------------------------------------
   // TEST 3: Prompt Hygiene (ZERO Negative Example Leaks)
