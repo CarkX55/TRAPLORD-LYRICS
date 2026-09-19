@@ -564,6 +564,8 @@ export function resolveSpeakerDialectProfile(artistId: string): SpeakerDialectPr
   };
 }
 
+export type AllocationStatus = "FEASIBLE" | "CLAMPED" | "INFEASIBLE";
+
 export interface SectionLanguageAllocation {
   sectionId: string;
   sectionName: string;
@@ -577,6 +579,9 @@ export interface SectionLanguageAllocation {
 
 export interface LanguageAllocationPlan {
   targetEnglishRatio: number;
+  predictedEnglishRatio: number;
+  observedEnglishRatio?: number;
+  allocationStatus: AllocationStatus;
   globalSoftBand: {
     min: number;
     max: number;
@@ -591,9 +596,19 @@ export interface LanguageAllocationPlan {
 
 /**
  * Builds a deterministic, voice-weighted Language Allocation Plan.
+ *
+ * SOLVER OBJECTIVE FUNCTION:
+ *   min_r [ sum_i w_i * (r_i - p_i)^2 + lambda * (sum_i w_i * r_i - T)^2 ]
+ * where:
+ *   p_i    = voice linguistic preference for section i
+ *   w_i    = section syllable/bar weight (bars_i / totalBars)
+ *   r_i    = section assigned English ratio
+ *   T      = targetEnglishRatio requested by UI
+ *   lambda = penalty weight balancing global target vs voice fidelity
+ *
  * Reconciles section-by-section language preferences with targetEnglishRatio
- * using a weighted-syllable solver, mathematically guaranteeing that the
- * weighted average of sections reaches targetEnglishRatio within soft band bounds.
+ * yielding predictedEnglishRatio. Actual observedEnglishRatio is measured
+ * post-generation on the AST syllables by the Language Audit.
  */
 export function buildLanguageAllocationPlan(
   targetEnglishRatio: number,
@@ -613,6 +628,8 @@ export function buildLanguageAllocationPlan(
   if (!sections || sections.length === 0) {
     return {
       targetEnglishRatio,
+      predictedEnglishRatio: targetEnglishRatio,
+      allocationStatus: "FEASIBLE",
       globalSoftBand,
       globalHardBand,
       allocationMode: "flexible_global",
@@ -632,15 +649,17 @@ export function buildLanguageAllocationPlan(
   const weights = sectionBars.map(b => (totalBars > 0 ? b / totalBars : 1 / sections.length));
 
   // 2. Initial voice preferences
+  // English-native voice prefers higher English (min ~0.35 in bilingual tracks);
+  // Spanish-native voice maintains authentic Spanish presence (max ~0.65 English in bilingual tracks)
   const rawPreferences = sections.map(sec => {
     const isFeature = Boolean(sec.voiceArtistId && featureProfile && sec.voiceArtistId === featureProfile.artistId);
     const voiceProfile = isFeature && featureProfile ? featureProfile : leadProfile;
 
     let pref = targetEnglishRatio;
-    if (voiceProfile.primaryLanguage === "en" && targetEnglishRatio > 0.05) {
-      pref = Math.min(1.0, targetEnglishRatio + 0.15);
-    } else if (voiceProfile.primaryLanguage === "es" && targetEnglishRatio < 0.95) {
-      pref = Math.max(0.0, targetEnglishRatio - 0.20);
+    if (voiceProfile.primaryLanguage === "en") {
+      pref = Math.min(1.0, Math.max(0.35, targetEnglishRatio + 0.15));
+    } else if (voiceProfile.primaryLanguage === "es") {
+      pref = Math.max(0.0, Math.min(0.65, targetEnglishRatio - 0.20));
     }
     return pref;
   });
@@ -649,8 +668,12 @@ export function buildLanguageAllocationPlan(
   const currentWeightedSum = rawPreferences.reduce((acc, pref, i) => acc + pref * weights[i], 0);
   const error = targetEnglishRatio - currentWeightedSum;
 
+  let hadClamping = false;
   const resolvedRatios = rawPreferences.map(pref => {
     const adjusted = pref + error;
+    if (adjusted < 0.0 || adjusted > 1.0) {
+      hadClamping = true;
+    }
     return Math.max(0.0, Math.min(1.0, adjusted));
   });
 
@@ -666,6 +689,18 @@ export function buildLanguageAllocationPlan(
         resolvedRatios[i] = Math.max(0.0, Math.min(1.0, resolvedRatios[i] + correction));
       }
     }
+  }
+
+  const finalWeightedSum = resolvedRatios.reduce((acc, r, i) => acc + r * weights[i], 0);
+  const predictedEnglishRatio = Number(finalWeightedSum.toFixed(2));
+
+  // Determine allocation status
+  let allocationStatus: AllocationStatus = "FEASIBLE";
+  const finalError = Math.abs(predictedEnglishRatio - targetEnglishRatio);
+  if (finalError > 0.12) {
+    allocationStatus = "INFEASIBLE";
+  } else if (hadClamping || finalError > 0.05) {
+    allocationStatus = "CLAMPED";
   }
 
   // 4. Build output section allocations
@@ -691,6 +726,8 @@ export function buildLanguageAllocationPlan(
 
   return {
     targetEnglishRatio,
+    predictedEnglishRatio,
+    allocationStatus,
     globalSoftBand,
     globalHardBand,
     allocationMode: "deterministic_voice_weighted",

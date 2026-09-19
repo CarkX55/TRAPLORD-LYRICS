@@ -585,6 +585,11 @@ export async function POST(req: NextRequest) {
       );
       const repairPlan = evaluateRepairability(auditContext);
 
+      // Record observed English ratio post-generation on actual AST syllables
+      if (languageDNA.allocationPlan && auditContext.languageAnalysis) {
+        languageDNA.allocationPlan.observedEnglishRatio = Number((auditContext.languageAnalysis.englishPercent / 100).toFixed(2));
+      }
+
       finalRaw = stage2Lyrics;
       lyrics = candidateLyrics;
       finalAST = candidateAST;

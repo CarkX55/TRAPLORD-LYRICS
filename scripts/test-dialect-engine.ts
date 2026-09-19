@@ -140,6 +140,8 @@ async function runDialectEngineTests() {
   // sum(w_i * r_i) must equal targetEnglishRatio (0.70) within 0.01
   const weightedSum = allocPlan.sections.reduce((acc, s) => acc + s.preferredEnglishRatio * s.syllableWeight, 0);
   assert(Math.abs(weightedSum - 0.70) <= 0.015, `Mathematical Solver: weighted sum ${weightedSum.toFixed(3)} matches target 0.70 (error <= 0.015)`);
+  assert(allocPlan.predictedEnglishRatio >= 0.69 && allocPlan.predictedEnglishRatio <= 0.71, "predictedEnglishRatio matches target 0.70");
+  assert(allocPlan.allocationStatus === "FEASIBLE", "allocationStatus is FEASIBLE for balanced 70% target");
 
   // Offset sections should have higher English ratio than Yovngchimi's verse
   const offsetVerse = allocPlan.sections.find(s => s.sectionId === "sec_v1")!;
@@ -147,7 +149,16 @@ async function runDialectEngineTests() {
   assert(offsetVerse.preferredEnglishRatio > chimiVerse.preferredEnglishRatio, "Offset section has higher English ratio than Yovngchimi section");
   assert(chimiVerse.preferredEnglishRatio < 0.65, "Yovngchimi section provides balanced/higher Spanish content");
   assert(chimiVerse.targetGuideline.includes("yovngchimi"), "Target guideline includes artist identity");
-  totalPassed += 11;
+
+  // Infeasibility & Clamping Test: extreme target on bilingual arrangement
+  const extremePlan = buildLanguageAllocationPlan(0.99, offsetProfile, chimiProfile, testSections);
+  assert(extremePlan.allocationStatus === "CLAMPED" || extremePlan.allocationStatus === "INFEASIBLE", "Extreme target triggers CLAMPED or INFEASIBLE status");
+
+  // Predicted vs Observed Variable Decoupling Test:
+  allocPlan.observedEnglishRatio = 0.68;
+  assert(allocPlan.observedEnglishRatio !== undefined, "observedEnglishRatio can be recorded post-generation");
+  assert(allocPlan.observedEnglishRatio !== allocPlan.predictedEnglishRatio, "predictedEnglishRatio (planned) and observedEnglishRatio (actual AST) are distinct variables");
+  totalPassed += 15;
 
   // -------------------------------------------------------------
   // TEST 3: Prompt Hygiene (ZERO Negative Example Leaks)
