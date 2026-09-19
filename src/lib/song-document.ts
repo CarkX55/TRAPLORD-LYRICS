@@ -64,7 +64,7 @@ export function formatSectionHeader(name: string, voiceOrHint?: string): string 
 export interface SectionSpec {
   id: string;
   name: string;
-  type: "intro" | "verse" | "hook" | "bridge" | "outro" | "beat_drop";
+  type: "intro" | "verse" | "hook" | "bridge" | "outro" | "beat_drop" | string;
   voiceId: string;
   targetBars?: number;
   minBars?: number;
@@ -78,7 +78,7 @@ export interface SectionSpec {
 export function resolveSectionSpec(
   structureSections: Array<{ name: string; type: string }>,
   sectionVoices: Array<{ sectionName: string; bars?: number; voice?: string }> | undefined,
-  targetType: "hook" | "verse" | "intro" | "bridge" | "outro"
+  targetType: "hook" | "verse" | "intro" | "bridge" | "outro" | "beat_drop" | "chorus" | string
 ): SectionSpec {
   const matchingSections = structureSections.filter(s => {
     const lower = s.name.toLowerCase();

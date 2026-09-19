@@ -1208,8 +1208,19 @@ export function getFlowPocketOptionById(id: string): FlowPocketOption | undefine
   return FLOW_POCKET_OPTIONS.find(f => f.id === id);
 }
 
-// ===== INTRO STYLES (AMERICAN BOUNCY WARMUP & MORE) =====
-export type IntroStyleId = "auto" | "bouncy_warmup" | "studio_banter" | "pre_drop_hype" | "minimal_pad";
+// ===== INTRO STYLES (EXPANDED TRAP ARCHETYPES) =====
+export type IntroStyleId =
+  | "auto"
+  | "bouncy_warmup"
+  | "phone_call"
+  | "acappella_drop"
+  | "lighter_flick"
+  | "movie_skit"
+  | "chopped_screwed"
+  | "producer_tag"
+  | "studio_banter"
+  | "pre_drop_hype"
+  | "minimal_pad";
 
 export interface IntroStyleOption {
   id: IntroStyleId;
@@ -1239,6 +1250,60 @@ export const INTRO_STYLE_OPTIONS: IntroStyleOption[] = [
     description: "Calentamiento de Atlanta (Gunna/Turbo). 80-90% ad-libs afinados entre paréntesis, pausas '...', llamada al productor y tensión previa al drop.",
     sunoAcousticTag: "Atmospheric filtered synths, autotune ad-libs warmup, swung delay, beat drop cue",
     instruction: "Calentamiento vocal rítmico (Atlanta Bouncy). La intro debe consistir casi en su totalidad (80-90%) en ad-libs afinados entre paréntesis '(Yeah...)', '(Woah...)', '(Skrrt...)', elipsis '...' para sostener vocales, saludo/interacción con el productor ('Turn me up', 'Wheezy outta here') y aviso previo al drop.",
+  },
+  {
+    id: "phone_call",
+    label: "Nota de Voz / Jail Call",
+    badge: "Voice Note",
+    icon: "📱",
+    description: "Audio con filtro telefónico/cárcel o nota de WhatsApp (Anuel/Morad/Drake). Mensaje crudo con beep y ruido de fondo antes de entrar la base.",
+    sunoAcousticTag: "Telephone filter, muffled voice note, lo-fi pad, phone beep fx",
+    instruction: "Intro estilo llamada telefónica o nota de voz de cárcel/WhatsApp (estilo Morad / Anuel AA / Drake). Las frases deben ir entre comillas o paréntesis con indicador de llamada: ej: (Beep... 'Oye hermano, graba esto que salgo en nada...'). Sonido lo-fi filtrado, sin rima estructurada, mensaje crudo y callejero antes del beat drop.",
+  },
+  {
+    id: "acappella_drop",
+    label: "A Capella al Drop",
+    badge: "A Capella Drop",
+    icon: "🎙️",
+    description: "Voz completamente seca y desnuda sin batería ni melodía (21 Savage / Duki / Cole). Barras directas que culminan en un Beat Drop demoledor.",
+    sunoAcousticTag: "A cappella spoken solo, dry raw vocal, no beat, sudden explosive drop",
+    instruction: "Intro a capella pura (estilo 21 Savage / Duki / J. Cole). 2 a 4 compases hablados o rapeados a capella sin batería ni sintetizador. Voz seca, cruda e intimidante, terminando con una advertencia justo antes de que caiga el bombo y el 808.",
+  },
+  {
+    id: "lighter_flick",
+    label: "Mechero & Exhalación",
+    badge: "Lighter Flick",
+    icon: "🔥",
+    description: "Chasquido de encendedor y bocanada de humo (Lil Wayne / Travis Scott / Wiz). Toser levemente, prender el porro y soltar la primera barra.",
+    sunoAcousticTag: "Lighter flick fx, smoke exhale, deep ambient synth swell, heavy 808 drop cue",
+    instruction: "Intro icónica con sonido de encendedor y exhalación de humo (estilo Lil Wayne / Travis Scott / Wiz Khalifa). La intro abre con fx de encendedor y respiración: ej: *(Click... fffff... shhh)*, seguido de una exhalación profunda, tos leve o carraspeo *(Cough... yeah)* y un comentario relajado mientras el sinte se hincha hacia el drop.",
+  },
+  {
+    id: "movie_skit",
+    label: "Sample Cine / Noticiero",
+    badge: "Movie Skit",
+    icon: "🎬",
+    description: "Diálogo de película mafiosa, noticiero o audio documental retro (Dark Trap / UK Drill / Modo Diablo). Ambientación oscura antes del beat.",
+    sunoAcousticTag: "Vintage cinematic movie dialogue sample, vinyl crackle, dark orchestral strings, ominous build",
+    instruction: "Intro cinematográfica con sample dramático o recorte de noticias/película de culto (estilo Dark Trap / UK Drill / Modo Diablo). 2 a 3 líneas solemnes o amenazantes en tono de locutor o personaje entre comillas: ej: “La policía reporta disturbios en el bloque...”, con textura de vinilo o sirenas lejanas antes del bajo.",
+  },
+  {
+    id: "chopped_screwed",
+    label: "Chopped & Screwed (Houston)",
+    badge: "Chopped & Slowed",
+    icon: "📼",
+    description: "Voz ralentizada y bajada de tono al estilo Houston (Travis Scott / Rocky / Don Toliver). Paradas de cinta (tape stop) y repeticiones tartamudeadas.",
+    sunoAcousticTag: "Chopped and screwed pitch shifted deep vocal, tape stop fx, slowed reverb, heavy sluggish 808",
+    instruction: "Intro Chopped & Screwed estilo Houston / Texas (Travis Scott / A$AP Rocky / DJ Screw). Voz con pitch grave y ralentizada, con palabras tartamudeadas y efectos de frenada de cinta: ej: *(S-S-Slowed down... deep pitch)*, *(Lean in the cup... cup...)*, psicodélica y pesada antes de que el ritmo rompa.",
+  },
+  {
+    id: "producer_tag",
+    label: "Producer Tag & Roll Call",
+    badge: "Producer Tag",
+    icon: "🏷️",
+    description: "Firma icónica del productor con delay y roll call de artistas (Metro Boomin / Bizarrap / Murda). Tag memorable, gritos de cabina y subidón al drop.",
+    sunoAcousticTag: "Signature producer tag, reversed reverb riser, artist roll call shout, stutter snare roll",
+    instruction: "Intro con Producer Tag protagónico y roll call de artistas (estilo Metro Boomin / Bizarrap / Murda Beatz). Arranca con el tag distintivo del productor entre comillas con eco (ej: “Metro Boomin want some more”, “Biza!”), seguido del rapero proclamando su presencia: ej: *(Yeah, TrapLord in the building)* y un riser de batería hacia el drop.",
   },
   {
     id: "studio_banter",

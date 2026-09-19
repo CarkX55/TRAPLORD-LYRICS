@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { Search, X, Check, ChevronDown, Sparkles, Mic2, Users, Flame, Zap } from "lucide-react";
 import { ARTISTS_DATA, getArtistById, type Artist } from "@/lib/trap-data";
+import { getFlowProfile } from "@/lib/artist-flow-profiles";
 
 export interface SectionVoiceComboboxProps {
   value: string;
@@ -426,6 +427,17 @@ export function SectionVoiceCombobox({
                               </span>
                             )}
                           </div>
+
+                          {(() => {
+                            const flow = getFlowProfile(artist.id);
+                            if (!flow?.sunoVocalTimbre) return null;
+                            return (
+                              <div className="mt-1 flex items-center gap-1 text-[9px] text-slime/90 font-mono bg-slime/5 px-1.5 py-0.5 rounded border border-slime/20 truncate">
+                                <Mic2 className="w-2.5 h-2.5 shrink-0 text-slime" />
+                                <span className="truncate">Suno: {flow.sunoVocalTimbre}</span>
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
                     })}

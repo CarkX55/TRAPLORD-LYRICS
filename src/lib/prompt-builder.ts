@@ -43,7 +43,7 @@ export interface SectionVoiceAssignment {
   customKeyword?: string; // optional custom word or phrase to repeat
   hookStyle?: string; // "auto" | "melodic" | "mantra" | "punchy" | "call_response" | "anthemic"
   hookMood?: string; // "auto" | moodId from MOODS
-  introStyle?: IntroStyleId; // "auto" | "bouncy_warmup" | "studio_banter" | "pre_drop_hype" | "minimal_pad"
+  introStyle?: IntroStyleId; // archetypes from INTRO_STYLE_OPTIONS in trap-data.ts
 }
 
 
@@ -91,6 +91,105 @@ export interface PromptParams {
   flowPocketMode?: "auto" | "bouncy" | "triplets" | "heavy";
   semanticAnchor?: SemanticAnchor;
   languageDNA?: LanguageDNA;
+}
+
+export interface VocalGuideResult {
+  artistName: string;
+  vocalGuide: string;
+  fullHeaderTag: string;
+}
+
+/**
+ * Resuelve la guía vocal concisa optimizada para Suno AI a partir del artista o rol asignado.
+ * Guía al modelo de Suno con timbre, género vocal, autotune, efectos y cadencia.
+ */
+export function resolveArtistVocalGuide(
+  voiceId: string = "auto",
+  options: {
+    mainArtistId?: string;
+    featureArtistId?: string;
+    sectionType?: string;
+    sectionName?: string;
+    isChorus?: boolean;
+    isIntro?: boolean;
+    isTrading2x2?: boolean;
+    isHype?: boolean;
+    introStyle?: IntroStyleId;
+  } = {}
+): VocalGuideResult {
+  const mainArtist = options.mainArtistId ? getArtistById(options.mainArtistId) : null;
+  const featArtist = options.featureArtistId ? getArtistById(options.featureArtistId) : null;
+  const mainName = mainArtist?.name ?? "Lead";
+  const featName = featArtist?.name ?? "Feature";
+
+  const getGuideForId = (id?: string): string => {
+    if (!id || id === "none") return "male vocal, modern autotune";
+    const profile = getFlowProfile(id);
+    if (profile?.sunoVocalTimbre) return profile.sunoVocalTimbre;
+    const dna = getMusicalDNAForArtist(id);
+    if (dna?.vocal?.sunoVocalTimbre) return dna.vocal.sunoVocalTimbre;
+    return "male vocal, modern autotune bounce";
+  };
+
+  let artistName = mainName;
+  let vocalGuide = getGuideForId(options.mainArtistId);
+
+  const isChorus = options.isChorus || options.sectionType === "chorus" || options.sectionType === "hook" || options.sectionName?.toLowerCase().includes("chorus") || options.sectionName?.toLowerCase().includes("hook") || options.sectionName?.toLowerCase().includes("estribillo");
+  const isIntro = options.isIntro || options.sectionType === "intro" || options.sectionName?.toLowerCase().includes("intro");
+
+  if (voiceId === "main" || voiceId === "auto") {
+    artistName = mainName;
+    vocalGuide = getGuideForId(options.mainArtistId);
+  } else if (voiceId === "feature") {
+    artistName = featName;
+    vocalGuide = getGuideForId(options.featureArtistId);
+  } else if (voiceId === "both") {
+    artistName = `${mainName} & ${featName}`;
+    vocalGuide = "dual vocals in unison, wide stereo mix, stacked autotune harmonies";
+  } else if (voiceId === "trading_2x2" || options.isTrading2x2) {
+    artistName = `${mainName} & ${featName}`;
+    vocalGuide = "trading bars 2x2, rapid vocal back-and-forth, contrasting vocal flows";
+  } else if (voiceId === "hype" || options.isHype) {
+    artistName = mainName;
+    vocalGuide = "hype man ad-libs, raw energetic background shouts, filtered vocal effect";
+  } else if (voiceId.startsWith("instrumental:")) {
+    const instName = voiceId.replace("instrumental:", "");
+    return {
+      artistName: instName,
+      vocalGuide: "instrumental solo",
+      fullHeaderTag: instName,
+    };
+  } else {
+    const assignedArtist = getArtistById(voiceId);
+    if (assignedArtist) {
+      artistName = assignedArtist.name;
+      vocalGuide = getGuideForId(assignedArtist.id);
+    }
+  }
+
+  // Contextual nuance for Chorus / Intro
+  if (isChorus && voiceId !== "both" && voiceId !== "trading_2x2") {
+    const primaryTimbre = vocalGuide.split(",")[0]?.trim() || "melodic male vocal";
+    vocalGuide = `${primaryTimbre}, layered stereo autotune harmonies, anthemic vocal stack`;
+  } else if (isIntro && voiceId !== "hype") {
+    const primaryTimbre = vocalGuide.split(",")[0]?.trim() || "spoken male vocal";
+    if (options.introStyle && options.introStyle !== "auto") {
+      const introOpt = getIntroStyleOptionById(options.introStyle);
+      if (introOpt?.sunoAcousticTag) {
+        vocalGuide = `${primaryTimbre}, ${introOpt.sunoAcousticTag}`;
+      } else {
+        vocalGuide = `${primaryTimbre}, spoken whisper intro, filtered vocal texture`;
+      }
+    } else {
+      vocalGuide = `${primaryTimbre}, spoken whisper intro, filtered vocal texture`;
+    }
+  }
+
+  return {
+    artistName,
+    vocalGuide,
+    fullHeaderTag: `${artistName} - ${vocalGuide}`,
+  };
 }
 
 export function getSunoSectionHint(
@@ -242,33 +341,43 @@ export function buildSystemPrompt(params: PromptParams): string {
         return lines;
       }
 
-      let voice = artist?.name ?? "Lead";
-      let sectionArtistId = params.artistId;
       let isTrading2x2 = false;
       const voiceAssign = params.sectionVoices?.find(v => v.sectionName === s.name);
+      if (voiceAssign?.voice === "trading_2x2" || (s.name.toLowerCase().includes("trading") && !!featureArtist)) {
+        isTrading2x2 = true;
+      }
+      const isHype = voiceAssign?.voice === "hype";
+
+      if (voiceAssign?.voice?.startsWith("instrumental:")) {
+        lines.push(`[${voiceAssign.voice.replace("instrumental:", "")}] — 🚫 NO LYRICS (Solo de producción instrumental para Suno AI)`);
+        return lines;
+      }
+
+      const vocalGuideResult = resolveArtistVocalGuide(
+        voiceAssign?.voice ?? (s.name.toLowerCase().includes("feature") && featureArtist ? "feature" : isTrading2x2 ? "trading_2x2" : "auto"),
+        {
+          mainArtistId: params.artistId,
+          featureArtistId: params.featureArtistId,
+          sectionType: s.type,
+          sectionName: s.name,
+          isChorus,
+          isIntro,
+          isTrading2x2,
+          isHype,
+          introStyle: voiceAssign?.introStyle,
+        }
+      );
+
+      let voice = vocalGuideResult.artistName;
+      let sectionArtistId = params.artistId;
       if (voiceAssign) {
         const v = voiceAssign.voice;
-        if (v === "main") { voice = artist?.name ?? "Lead"; sectionArtistId = params.artistId; }
-        else if (v === "feature" && featureArtist) { voice = featureArtist.name; sectionArtistId = featureArtist.id; }
-        else if (v === "both") voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
-        else if (v === "trading_2x2") {
-          voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"} (Trading Bars 2x2)`;
-          isTrading2x2 = true;
-        }
-        else if (v === "hype") voice = `${artist?.name ?? "Lead"} (Ad-libs only)`;
-        else if (v.startsWith("instrumental:")) {
-          lines.push(`[${v.replace("instrumental:", "")}] — 🚫 NO LYRICS (Solo de producción instrumental para Suno AI)`);
-          return lines;
-        }
-        else {
+        if (v === "feature" && featureArtist) sectionArtistId = featureArtist.id;
+        else if (v !== "main" && v !== "both" && v !== "trading_2x2" && v !== "hype" && !v.startsWith("instrumental:")) {
           const assignedArtist = getArtistById(v);
-          if (assignedArtist) { voice = assignedArtist.name; sectionArtistId = assignedArtist.id; }
+          if (assignedArtist) sectionArtistId = assignedArtist.id;
         }
-      } else if (s.name.toLowerCase().includes("trading") && featureArtist) {
-        voice = `${artist?.name ?? "Lead"} & ${featureArtist.name} (Trading Bars 2x2)`;
-        isTrading2x2 = true;
       } else if (s.name.toLowerCase().includes("feature") && featureArtist) {
-        voice = featureArtist.name;
         sectionArtistId = featureArtist.id;
       }
 
@@ -396,18 +505,30 @@ export function buildSystemPrompt(params: PromptParams): string {
         ? chorusOverrideHint
         : (isIntro && introOverrideHint)
         ? introOverrideHint
-        : getSunoSectionHint(s.type, sectionArtistId, params.moodId, params.bpmVibe, isDetailedSuno);
-      const perfTag = basePerfHint ? `, ${basePerfHint}` : "";
-      const bouncyTag = (params.flowPocketMode === "bouncy" && !perfTag.includes("bouncy")) ? ", swung bouncy off-beat pocket, elastic 808 bounce" : "";
+        : "";
+      const perfTag = (basePerfHint && !vocalGuideResult.vocalGuide.includes(basePerfHint)) ? `, ${basePerfHint}` : "";
+      const bouncyTag = (params.flowPocketMode === "bouncy" && !vocalGuideResult.vocalGuide.includes("bouncy")) ? ", swung bouncy off-beat pocket, elastic 808 bounce" : "";
 
-      lines.push(`[${s.name}: ${voice}${perfTag}${repTag}${bouncyTag}] — ${bars}${dynamicNote}${densityInstruction}${langOverrideInstruction}${repInstruction}`);
+      lines.push(`[${s.name}: ${vocalGuideResult.artistName} - ${vocalGuideResult.vocalGuide}${perfTag}${repTag}${bouncyTag}] — ${bars}${dynamicNote}${densityInstruction}${langOverrideInstruction}${repInstruction}`);
 
-      // Beat Drop cues
+      // Beat Drop cues tailored to Trap intro archetypes
       if (isIntro) {
         let introStyleId = voiceAssign?.introStyle;
         if (!introStyleId && params.flowPocketMode === "bouncy") introStyleId = "bouncy_warmup";
         if (introStyleId === "bouncy_warmup" || introStyleId === "pre_drop_hype") {
           lines.push(`[Beat Drop: Heavy 808 sub bass drop, explosive beat drop] — 🚫 NO LYRICS (Entrada contundente de las baterías y el bajo 808)`);
+        } else if (introStyleId === "acappella_drop") {
+          lines.push(`[Beat Drop: Explosive sudden 808 sub bass drop, hard hitting drums] — 🚫 NO LYRICS (Drop demoledor tras el a capella seco)`);
+        } else if (introStyleId === "phone_call") {
+          lines.push(`[Beat Drop: Phone hangup click, sudden 808 drop, full beat explosion] — 🚫 NO LYRICS (Cuelga la llamada y rompe el beat con 808)`);
+        } else if (introStyleId === "lighter_flick") {
+          lines.push(`[Beat Drop: Heavy 808 sub bass drop, smoke clears, deep bassline] — 🚫 NO LYRICS (Drop pesado tras la exhalación de humo)`);
+        } else if (introStyleId === "movie_skit") {
+          lines.push(`[Beat Drop: Dramatic 808 drop, cinema sub bass boom, full drums] — 🚫 NO LYRICS (Entrada demoledora tras el sample cinematográfico)`);
+        } else if (introStyleId === "chopped_screwed") {
+          lines.push(`[Beat Drop: Tape stop fx, slowed sluggish 808 bass drop] — 🚫 NO LYRICS (Frenada de cinta y drop pesado ralentizado)`);
+        } else if (introStyleId === "producer_tag") {
+          lines.push(`[Beat Drop: Snare riser buildup, explosive 808 drop, full drums] — 🚫 NO LYRICS (Explosión tras el producer tag y roll call)`);
         } else if (useDynamicForm && songFormStyle === "beat_drop") {
           lines.push(`[Beat Drop: Heavy 808 drop, distorted bassline] — 🚫 NO LYRICS (Drop del beat con 808 pesado)`);
         }
@@ -629,6 +750,42 @@ Sigue esta estructura compás a compás:
 2. **Compás 2 y 3 (Ping-Pong de Ad-libs Afinados):** Ad-libs rítmicos entre paréntesis con comas y puntos suspensivos que flotan sobre el pad antes de la batería: ej: *(Yeah, yeah...)*, *(Woah, woah... skrrt)*, *(Mmm... racks)*, *(Facts)*.
 3. **Compás 4 (Pre-Drop Stutter & Tensión):** Repetición rítmica de fragmentos o monosílabos acelerados y aviso del drop: ej: *(Hold up... hold up... [Beat Drop])* o *(Yeah... yeah... let's get it! [Beat Drop])*.
 4. **Regla de Oro:** El 80-90% de las líneas deben ser ad-libs entre paréntesis. Menos palabras = más espacio y rebote.`;
+    } else if (effectiveIntroStyle === "phone_call") {
+      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: NOTA DE VOZ / JAIL CALL
+La sección [Intro] debe recrear una llamada telefónica o nota de audio cruda (estilo Morad / Anuel AA / Drake):
+1. Comienza con sonido o pitido de llamada entre paréntesis: ej: *(Beep... tono de llamada)* o *(Directo desde el módulo 4)*.
+2. Frases habladas con tono de teléfono, sin métrica forzada ni rimas estructuradas, expresando lealtad, calle o mensaje directo: ej: “Oye hermano, dile a la gente que no se duerma, que la calle está caliente...”.
+3. Cierre abrupto con sonido de colgar o aviso justo antes del drop: ej: *(Click... se corta la llamada)* seguido del [Beat Drop].`;
+    } else if (effectiveIntroStyle === "acappella_drop") {
+      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: ENTRADA A CAPELLA AL DROP
+La sección [Intro] debe ser completamente a capella, con voz seca y sin batería (estilo 21 Savage / Duki / J. Cole):
+1. De 2 a 4 compases de rapeo o declamación directo al micrófono sin música ni melodía de fondo.
+2. Tono firme, pausado e intimidante, dejando que cada palabra retumbe en el silencio.
+3. El último verso remata en seco y conecta inmediatamente con el [Beat Drop: Explosive sudden 808 sub bass drop].`;
+    } else if (effectiveIntroStyle === "lighter_flick") {
+      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: MECHERO & EXHALACIÓN (LIGHTER FLICK)
+La sección [Intro] recrea el icónico ritual de estudio de Lil Wayne, Travis Scott y Wiz Khalifa:
+1. Compás 1: Sonido de chispa de mechero y calada entre paréntesis: *(Click... shhh... prendiendo)*.
+2. Compás 2: Exhalación profunda de humo, carraspeo o tos relajada: *(Exhala humo... cough... yeah)*.
+3. Compás 3 y 4: Frase casual y reflexiva que rompe el silencio mientras el pad y el bajo se hinchan: ej: *(“Sube el humo, ya no miramos pa' abajo...”)* y caída demoledora en el [Beat Drop].`;
+    } else if (effectiveIntroStyle === "movie_skit") {
+      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: SAMPLE CINEMATOGRÁFICO / NOTICIERO
+La sección [Intro] abre como una película de culto o crónica de sucesos (estilo Dark Trap / UK Drill / Modo Diablo):
+1. Sample de diálogo o locución de noticiero entre comillas con efecto de vinilo o sirenas lejanas: ej: “Última hora: las autoridades confirman incidentes en el sector sur...”.
+2. Tono oscuro, cinematográfico y amenazante que establece la narrativa del track.
+3. Entrada del artista con un murmullo o risa sarcástica antes de que explote el [Beat Drop].`;
+    } else if (effectiveIntroStyle === "chopped_screwed") {
+      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: CHOPPED & SCREWED (HOUSTON SLOWED)
+La sección [Intro] recrea la psicodelia y pesadez del sonido Screw de Texas (Travis Scott / A$AP Rocky / Don Toliver):
+1. Voz ralentizada con pitch grave y tartamudeo rítmico: ej: *(S-S-Slowed down... en la nave)*, *(Tr-Tr-TrapLord...)*.
+2. Efecto de cinta frenándose (tape stop fx) y repetición de palabras en eco denso: *(Yeah... yeah... chopped)*.
+3. El ritmo cae pesado y ralentizado en el [Beat Drop].`;
+    } else if (effectiveIntroStyle === "producer_tag") {
+      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: PRODUCER TAG & ROLL CALL
+La sección [Intro] arranca con la firma legendaria del productor y la presentación del artista (Metro Boomin / Bizarrap / Murda Beatz):
+1. Tag del productor reververado entre comillas: ej: “If Young Metro don't trust you I'm gon' shoot you”, “Bizarrap!”, o el tag del beatmaker asignado.
+2. Roll call del intérprete reclamando su territorio: ej: *(TrapLord en los controles... let's go!)*.
+3. Riser de caja/hi-hats que acelera en tensión hasta reventar en el [Beat Drop].`;
     } else if (effectiveIntroStyle === "studio_banter") {
       introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: STUDIO BANTER / CHARLA DE CABINA
 La sección [Intro] debe sentirse como una toma real en el estudio (estilo Future / 21 Savage / Drake):
@@ -759,7 +916,7 @@ Sigue esta estructura sin omitir ni añadir secciones:
 ${structurePlan}
 
 # 📋 FORMATO DE SALIDA ESTRICTO (SUNO AI NATIVE)
-1. Encabezados de sección EXCLUSIVAMENTE entre corchetes estándar: [Intro: Detail], [Verse 1: Artist, Hint], [Chorus: Artist, Hint], [Pre-Chorus], [Post-Chorus], [Bridge], [Interlude], [Beat Drop], [Outro].
+1. Encabezados de sección EXCLUSIVAMENTE entre corchetes estándar con guía vocal de timbre para Suno: [Intro: Artist - vocal descriptors], [Verse 1: Artist - vocal descriptors], [Chorus: Artist - vocal descriptors], [Pre-Chorus], [Post-Chorus], [Bridge], [Interlude], [Beat Drop], [Outro].
 2. NUNCA uses encabezados markdown '###' ni escribas líneas separadas como '*Intérprete:*' porque Suno intentará cantarlas.
 3. Ad-libs secundarios SIEMPRE entre paréntesis: (Yeah!), (Brrr!).
 4. ⚡ REGLA ESTRICTA DE BARRAS / COMPASES: Una barra cantada equivale EXACTAMENTE a una línea de texto. Si la sección especifica 'N barras' (ej: 8 barras, 16 barras, 4 barras), DEBES generar EXACTAMENTE ese número de líneas cantadas para esa sección. No omitas compases ni agregues líneas de más.
@@ -918,35 +1075,71 @@ export function buildSunoStylePrompt(params: SunoStylePromptParams): string {
 
 /**
  * Limpiador quirúrgico de encabezados de sección para Suno AI v4.5.
- * Elimina cualquier instrucción, conteo de barras residual o Markdown '###'.
+ * Elimina cualquier instrucción ajena, conteo de barras residual o Markdown '###',
+ * PRESERVANDO la guía vocal y el timbre asignado al artista dentro de los corchetes:
+ * ej: [Verse 1: Duki - male vocal, deep raspy auto-tune, aggressive triplet flow].
  */
-export function cleanSunoBracketHeaders(lyrics: string): string {
+export function cleanSunoBracketHeaders(
+  lyrics: string,
+  options?: {
+    artistId?: string;
+    featureArtistId?: string;
+    sectionVoices?: SectionVoiceAssignment[];
+  }
+): string {
   if (!lyrics) return "";
-  return lyrics
+  const cleaned = lyrics
     // Eliminar Markdown headers: ### [Section] -> [Section] o ### Section
     .replace(/^#{1,6}[ \t]*(\[[^\]]+\])/gm, "$1")
     .replace(/^#{1,6}[ \t]+/gm, "")
     // Eliminar Markdown bold/italic envolviendo corchetes SOLO en la misma línea (sin consumir saltos de línea \n):
     .replace(/^[ \t]*[*_]{1,3}[ \t]*(\[[^\]]+\])[ \t]*[*_]{0,3}/gm, "$1")
     .replace(/(\[[^\]]+\])[ \t]*[*_]{1,3}/g, "$1")
-    // Limpiar notas residuales pegadas al corchete: e.g. [Chorus: ...] — 8 barras → [REGLA...]
+    // Limpiar notas residuales pegadas al corchete: e.g. [Chorus: ...] — 8 barras → [REGLA...] o [VOZ AUTORIZADA: ...]
     .replace(/^(\[[^\]]+\])[ \t]*[—–-][ \t]*.*$/gm, "$1")
     .replace(/^(\[[^\]]+\])[ \t]*→.*$/gm, "$1")
+    .replace(/\[[ \t]*(?:VOZ AUTORIZADA|REGLA|MODO HYPE)[^\]]*\]/gi, "")
     // Limpiar notas de intérprete tipo *Intérprete:*
     .replace(/^\*+(?:Int[ée]rprete?|Interpr[èe]te?):\s*([^*\n]+)\*+$/gim, "")
     .replace(/^(?:Int[ée]rprete?|Interpr[èe]te?):\s*.+$/gim, "")
-    // Limpiar descripciones de estilo, cómo cantar, o tags técnicos dentro del corchete
-    .replace(/\[([A-Za-z0-9_ \-]+)(?::\s*([^,\]\n]+))?(?:,[^\]\n]*)*\]/g, (match, sec, artistName) => {
-      const cleanSec = sec.trim();
-      if (artistName && artistName.trim()) {
-        const cleanArtist = artistName
-          .replace(/\s*[—–-].*$/g, "")
-          .replace(/\s*\((?:RIP|QEPD)\)/gi, "")
-          .replace(/\s*\((?:Ad-libs only|Hype Man[^)]*)\)/gi, "")
-          .trim();
-        return formatSectionHeader(cleanSec, cleanArtist);
+    // Limpiar metadatos espurios dentro de los corchetes preservando la guía vocal:
+    .replace(/\[([^\]\n]+)\]/g, (match, inner) => {
+      let content = inner.trim();
+      // Eliminar conteo de barras residual dentro del corchete: e.g. " — 8 barras", " — 16 bars", " - 4 compases"
+      content = content.replace(/\s*[—–-]\s*\d+\s*(?:barras?|bars?|compases?).*$/i, "");
+      // Eliminar notas de instrucciones residuales dentro del corchete: e.g. "→ [REGLA...]", "[VOZ AUTORIZADA...]"
+      content = content.replace(/\s*[—–-]?\s*(?:→\s*)?\[?(?:REGLA|VOZ AUTORIZADA|MODO HYPE|NO LYRICS|REPETICI[ÓO]N)[^\]]*\]?/gi, "");
+      // Eliminar tags mortuorios
+      content = content.replace(/\s*\((?:RIP|QEPD)\)/gi, "");
+      // Limpiar asteriscos o backticks internos
+      content = content.replace(/[*_`]/g, "");
+      // Normalizar espacios
+      content = content.replace(/[ \t]{2,}/g, " ").trim();
+
+      // Enriquecimiento automático si solo tiene el nombre y no tiene guía vocal "-" ni ","
+      if (options?.artistId && !content.includes("-") && !content.includes(",")) {
+        const colonIdx = content.indexOf(":");
+        if (colonIdx !== -1) {
+          const secName = content.slice(0, colonIdx).trim();
+          const voicePart = content.slice(colonIdx + 1).trim();
+          const va = options.sectionVoices?.find(v => v.sectionName.toLowerCase() === secName.toLowerCase());
+          const isChorus = secName.toLowerCase().includes("chorus") || secName.toLowerCase().includes("hook") || secName.toLowerCase().includes("estribillo");
+          const isIntro = secName.toLowerCase().includes("intro");
+          const guide = resolveArtistVocalGuide(va?.voice ?? "auto", {
+            mainArtistId: options.artistId,
+            featureArtistId: options.featureArtistId,
+            sectionName: secName,
+            isChorus,
+            isIntro,
+            introStyle: va?.introStyle,
+          });
+          if (guide.vocalGuide) {
+            content = `${secName}: ${voicePart} - ${guide.vocalGuide}`;
+          }
+        }
       }
-      return formatSectionHeader(cleanSec);
+
+      return `[${content}]`;
     })
     // Limpiar backticks de código markdown
     .replace(/`{1,3}/g, "")
@@ -961,6 +1154,8 @@ export function cleanSunoBracketHeaders(lyrics: string): string {
     // Limpiar saltos de línea triples
     .replace(/^\s*[\r\n]{2,}/gm, "\n\n")
     .trim();
+
+  return cleaned;
 }
 
 // ========================================================================
@@ -1168,21 +1363,41 @@ export function buildStage2GhostwriterPrompt(
   // Estructura limpia y autoridad de voces
   const structurePlan = params.structure.sections.map(s => {
     const va = params.sectionVoices?.find(v => v.sectionName === s.name);
-    let voice = artist?.name ?? "Lead";
     const isHype = va?.voice === "hype";
-    if (va?.voice === "feature" && featureArtist) voice = featureArtist.name;
-    else if (va?.voice === "both") voice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
+    const isChorus = s.type === "chorus" || s.type === "hook";
+    const isIntro = s.type === "intro";
+    const isTrading2x2 = va?.voice === "trading_2x2" || (s.name.toLowerCase().includes("trading") && !!featureArtist);
 
-    if (s.type === "chorus" || s.type === "hook") {
-      return `[${s.name}: ${voice}] — (REPETICIÓN OBLIGATORIA: Copia textualmente el GANCHO APROBADO oficial; la letra cantada debe ser idéntica al 100%, admitiendo variación interpretativa en ad-libs)`;
+    const guide = resolveArtistVocalGuide(
+      va?.voice ?? (s.name.toLowerCase().includes("feature") && featureArtist ? "feature" : isTrading2x2 ? "trading_2x2" : "auto"),
+      {
+        mainArtistId: params.artistId,
+        featureArtistId: featureArtist?.id,
+        sectionType: s.type,
+        sectionName: s.name,
+        isChorus,
+        isIntro,
+        isTrading2x2,
+        isHype,
+        introStyle: va?.introStyle,
+      }
+    );
+
+    if (isChorus) {
+      return `[${s.name}: ${guide.fullHeaderTag}] — (REPETICIÓN OBLIGATORIA: Copia textualmente el GANCHO APROBADO oficial; la letra cantada debe ser idéntica al 100%, admitiendo variación interpretativa en ad-libs)`;
     }
 
-    if (isHype || (s.type === "intro" && (va?.introStyle === "bouncy_warmup" || isHype))) {
-      return `[${s.name}: ${voice}] — 4 compases (Modo Hype Man: 🚫 PROHIBIDO ESCRIBIR VERSOS NARRATIVOS O LÍNEAS CANTADAS. Debe ser EXCLUSIVAMENTE 3 a 5 ad-libs y grunts entre paréntesis: ej: (Yeah... turn me up), (Hold up...), rematando con ([Beat Drop]))`;
+    if (isIntro && va?.introStyle && va.introStyle !== "auto") {
+      const opt = getIntroStyleOptionById(va.introStyle);
+      return `[${s.name}: ${guide.fullHeaderTag}] — 4 compases [ARQUETIPO INTRO: ${opt?.label ?? va.introStyle}] (${opt?.instruction ?? ""})`;
+    }
+
+    if (isHype || (isIntro && isHype)) {
+      return `[${s.name}: ${guide.fullHeaderTag}] — 4 compases (Modo Hype Man: 🚫 PROHIBIDO ESCRIBIR VERSOS NARRATIVOS O LÍNEAS CANTADAS. Debe ser EXCLUSIVAMENTE 3 a 5 ad-libs y grunts entre paréntesis: ej: (Yeah... turn me up), (Hold up...), rematando con ([Beat Drop]))`;
     }
 
     const bars = va?.bars ? `${va.bars} barras` : (s.type === "verse" ? "8-10 barras" : "4-8 barras");
-    return `[${s.name}: ${voice}] — ${bars} [VOZ AUTORIZADA: ${voice}]`;
+    return `[${s.name}: ${guide.fullHeaderTag}] — ${bars} [VOZ AUTORIZADA: ${guide.artistName}]`;
   }).join("\n");
 
   const userTopicsList = [params.customTopic, ...params.topics].filter(Boolean);
@@ -1263,13 +1478,17 @@ Como Director Vocal, incorpora la capa de performance con criterio musical:
    - Los ad-libs deben respetar el idioma predominante de la barra para no desbalancear el porcentaje de Spanglish fijado.
 
 ================================================================================
-# 📜 CONTRATO 5: FORMATO DE SALIDA & HIGIENE DE CORCHETES (OUTPUT CONTRACT)
+# 📜 CONTRATO 5: FORMATO DE SALIDA & GUÍA VOCAL SUNO (OUTPUT & VOCAL CONTRACT)
 ================================================================================
-- Encabezados estrictos entre corchetes limpios con ÚNICAMENTE el tipo de sección y el nombre del artista:
-  Ejemplos válidos: [Intro: ${artist?.name ?? "Lead"}], [Verse 1: ${artist?.name ?? "Lead"}], [Chorus: ${artist?.name ?? "Lead"}], [Outro: ${artist?.name ?? "Lead"}].
-- 🚫 PROHIBIDO incluir estilos, acústica, bpm o notas de cómo cantar dentro de los corchetes (ej: PROHIBIDO [Chorus: ${artist?.name ?? "Lead"}, Hypnotic mantra, autotune]).
+- ⚡ GUÍA VOCAL OBLIGATORIA EN ENCABEZADOS: Dado que Suno AI ya no reconoce timbres solo por el nombre del artista, cada encabezado de sección DEBE incluir el nombre del artista acompañado de sus descriptores vocales (timbre, género vocal, autotune y entrega) para modelar acústicamente la voz en Suno.
+  Fórmula: [Sección: Artista - Descriptores de timbre y estilo vocal]
+  Ejemplos válidos:
+  - [Intro: ${artist?.name ?? "Lead"} - spoken whisper intro, filtered ambient vocal]
+  - [Verse 1: ${artist?.name ?? "Lead"} - ${resolveArtistVocalGuide("main", { mainArtistId: params.artistId }).vocalGuide}]
+  - [Chorus: ${artist?.name ?? "Lead"} - layered stereo autotune harmonies, anthemic vocal stack]
+  ${featureArtist ? `- [Verse 2: ${featureArtist.name} - ${resolveArtistVocalGuide("feature", { featureArtistId: featureArtist.id }).vocalGuide}]` : ""}
 - Cada compás equivale EXACTAMENTE a una línea de texto con sus ad-libs.
-- Devuelve ÚNICAMENTE la letra completa de la canción estructurada, sin comentarios, introducciones ni notas fuera de los corchetes.`;
+- Devuelve ÚNICAMENTE la letra completa de la canción estructurada con estos corchetes acústicos, sin comentarios, introducciones ni notas fuera de los corchetes.`;
 }
 
 /**
@@ -1330,9 +1549,9 @@ ${callResponseSections.length > 0 ? `- Secciones con Call & Response obligatorio
    - El borrador ya tiene el balance de inglés y español fijado. Los ad-libs y réplicas entre paréntesis DEBEN escribirse en el idioma predominante de la barra o canción (${params.languageDNA?.primaryLanguage === "en" ? "inglés con toques breves de actitud en español" : "español con toques en inglés"}).
    - PROHIBIDO inundar la letra con ad-libs que cambien drásticamente el porcentaje de Spanglish.
 
-5. **LIMPIEZA TOTAL DE ENCABEZADOS (SOLO NOMBRE DEL ARTISTA):**
-   - Todos los encabezados de sección deben contener EXCLUSIVAMENTE el tipo de sección y el nombre del artista: ej: '[Verse 1: ${artist?.name ?? "Lead"}]', '[Chorus: ${artist?.name ?? "Lead"}]'.
-   - Queda PROHIBIDO incluir cómo debe cantar el artista, estilos o notas técnicas dentro de los corchetes. Elimina cualquier texto residual de instrucciones como '— 8 barras → [REGLA...]'.
+5. **PRESERVACIÓN Y REFINAMIENTO DE GUÍAS VOCALES EN ENCABEZADOS (SUNO NATIVE):**
+   - Todos los encabezados de sección DEBEN mantener el formato [Sección: Artista - Descriptores vocales] para que Suno modele adecuadamente la voz del intérprete (ej: '[Verse 1: ${artist?.name ?? "Lead"} - ${resolveArtistVocalGuide("main", { mainArtistId: params.artistId }).vocalGuide}]').
+   - Elimina cualquier texto residual de instrucciones ajenas fuera o dentro del corchete como '— 8 barras → [REGLA...]' o '[VOZ AUTORIZADA: ...]', pero PRESERVA rigurosamente la guía vocal del artista dentro del corchete.
 
 6. **PRESERVACIÓN DE INTRO HYPE MAN:**
    - Si la [Intro] contiene ad-libs o tiene asignado 'Hype Man', MANTENLA exclusivamente como grunts, shouts y ad-libs entre paréntesis preparando el beat drop. Queda PROHIBIDO agregar oraciones completas o versos narrativos cantados en la intro.

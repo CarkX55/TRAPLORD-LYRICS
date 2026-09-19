@@ -360,7 +360,11 @@ export async function POST(req: NextRequest) {
       const rawLyrics = await callLLM(singlePrompt, body, temperature);
       const dMs = Date.now() - t0;
       finalRaw = rawLyrics;
-      lyrics = cleanSunoBracketHeaders(rawLyrics);
+      lyrics = cleanSunoBracketHeaders(rawLyrics, {
+        artistId: body.artistId,
+        featureArtistId: body.featureArtistId,
+        sectionVoices: body.sectionVoices,
+      });
       pipelineStagesCompleted = ["single_section_regenerated"];
       stageLogs.push({
         stageId: "regenerate_section",
@@ -381,7 +385,11 @@ export async function POST(req: NextRequest) {
       const rawLyrics = await callLLM(singlePrompt, body, temperature);
       const dMs = Date.now() - t0;
       finalRaw = rawLyrics;
-      lyrics = cleanSunoBracketHeaders(rawLyrics);
+      lyrics = cleanSunoBracketHeaders(rawLyrics, {
+        artistId: body.artistId,
+        featureArtistId: body.featureArtistId,
+        sectionVoices: body.sectionVoices,
+      });
       pipelineStagesCompleted = ["legacy_single_pass"];
       stageLogs.push({
         stageId: "legacy_single_pass",
@@ -476,7 +484,11 @@ export async function POST(req: NextRequest) {
         rawResponse: stage2Lyrics,
       });
 
-      let candidateLyrics = cleanSunoBracketHeaders(stage2Lyrics);
+      let candidateLyrics = cleanSunoBracketHeaders(stage2Lyrics, {
+        artistId: body.artistId,
+        featureArtistId: body.featureArtistId,
+        sectionVoices: body.sectionVoices,
+      });
       let candidateAST = parseRawLyricsToAST(candidateLyrics);
 
       // --- AUDITORÍA DE FUGA DE METADATOS (USER EXPLICIT PRECEDENCE) ---
@@ -519,7 +531,11 @@ export async function POST(req: NextRequest) {
           const dRepairMs = Date.now() - tRepair;
           if (patchedText && patchedText.trim()) {
             finalRaw = patchedText;
-            lyrics = cleanSunoBracketHeaders(patchedText);
+            lyrics = cleanSunoBracketHeaders(patchedText, {
+              artistId: body.artistId,
+              featureArtistId: body.featureArtistId,
+              sectionVoices: body.sectionVoices,
+            });
             finalAST = parseRawLyricsToAST(lyrics);
             pipelineStagesCompleted.push("exceptional_repair_calibrated");
             stageLogs.push({

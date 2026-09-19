@@ -41,7 +41,7 @@ import {
   type SongSection, type SongStructure, type SectionTemplate, type FlowPocketOption, type IntroStyleOption, type IntroStyleId
 } from "@/lib/trap-data";
 import type { HookVariationOption } from "@/app/api/hook-variations/route";
-import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, cleanSunoBracketHeaders, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
+import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, cleanSunoBracketHeaders, resolveArtistVocalGuide, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
 import { ArtistSearchCombobox } from "@/components/artist-search-combobox";
 import { SectionVoiceCombobox } from "@/components/section-voice-combobox";
 import { SunoBudgetCard } from "@/components/suno-budget-card";
@@ -653,7 +653,7 @@ export default function TrapGhostPage() {
         setRefTrackAnalysis(data.refTrackSummary);
       }
 
-      const cleanLyrics = cleanSunoBracketHeaders(data.lyrics);
+      const cleanLyrics = cleanSunoBracketHeaders(data.lyrics, { artistId, featureArtistId: featureArtist?.id, sectionVoices });
       const readiness = analyzeSunoReadiness(cleanLyrics);
       setLyrics(cleanLyrics);
       const doc = data.songDocument || parseRawLyricsToAST(cleanLyrics);
@@ -702,17 +702,17 @@ export default function TrapGhostPage() {
       geminiApiKey, geminiModel, producerName, refTrackOpen, refTrackLyrics, dynamicSongForm,
       dynamismMode, adlibStyle, situationalPresetId, customSections, isCustomStructure, flowPocketMode]);
 
-  // ===== Copy for Suno AI (Clean Bracketed Format) =====
+  // ===== Copy for Suno AI (Clean Bracketed Format with Vocal Guides) =====
   const handleCopySuno = useCallback(async () => {
     if (!lyrics) return;
     try {
-      const clean = cleanSunoBracketHeaders(lyrics);
+      const clean = cleanSunoBracketHeaders(lyrics, { artistId, featureArtistId: featureArtist?.id, sectionVoices });
       await navigator.clipboard.writeText(clean);
-      toast.success("⚡ Letra copiada limpia con metatags (lista para Suno AI)");
+      toast.success("⚡ Letra copiada con guías vocales para Suno AI");
     } catch {
       toast.error("No se pudo copiar");
     }
-  }, [lyrics]);
+  }, [lyrics, artistId, featureArtist, sectionVoices]);
 
   // ===== Copy lyrics (raw) =====
   const handleCopy = useCallback(async () => {
@@ -2927,15 +2927,18 @@ export default function TrapGhostPage() {
                                     });
                                   }}
                                 >
-                                  <SelectTrigger className={`bg-black/40 h-7 text-[10px] w-[145px] sm:w-[170px] ${introStyleId === "bouncy_warmup" ? "border-amber-400/80 text-amber-300 font-semibold bg-amber-400/10 shadow-xs" : introStyleId !== "auto" ? "border-slime/60 text-slime font-medium" : "text-muted-foreground"}`}>
+                                  <SelectTrigger className={`bg-black/40 h-7 text-[10px] w-[155px] sm:w-[185px] ${introStyleId !== "auto" ? "border-amber-400/80 text-amber-300 font-semibold bg-amber-400/10 shadow-xs" : "text-muted-foreground"}`}>
                                     <SelectValue placeholder="Estilo Intro" />
                                   </SelectTrigger>
-                                  <SelectContent>
+                                  <SelectContent className="max-h-72">
                                     {INTRO_STYLE_OPTIONS.map(opt => (
                                       <SelectItem key={opt.id} value={opt.id}>
-                                        <span className="flex items-center gap-1.5">
-                                          <span>{opt.icon}</span> {opt.label}
-                                        </span>
+                                        <div className="flex items-center justify-between w-full gap-2">
+                                          <span className="flex items-center gap-1.5">
+                                            <span>{opt.icon}</span> <span>{opt.label}</span>
+                                          </span>
+                                          <span className="text-[9px] text-muted-foreground/70 font-mono px-1 rounded bg-white/5">{opt.badge}</span>
+                                        </div>
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
@@ -3035,6 +3038,30 @@ export default function TrapGhostPage() {
                                 </div>
                               )
                             )}
+
+                            {canHaveBars && (() => {
+                              const guide = resolveArtistVocalGuide(assign?.voice ?? "auto", {
+                                mainArtistId: artistId,
+                                featureArtistId: featureArtist?.id,
+                                sectionType: sec.type,
+                                sectionName: sec.name,
+                                isChorus,
+                                isIntro,
+                                isTrading2x2: assign?.voice === "trading_2x2",
+                                isHype: assign?.voice === "hype",
+                                introStyle: assign?.introStyle,
+                              });
+                              return (
+                                <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground/80 px-1 pt-1 border-t border-border/15 font-mono overflow-hidden">
+                                  <span className="text-slime/90 shrink-0 font-semibold flex items-center gap-1">
+                                    <Mic className="w-2.5 h-2.5 text-slime" /> Guía Suno:
+                                  </span>
+                                  <span className="truncate text-foreground/80" title={`[${sec.name}: ${guide.fullHeaderTag}]`}>
+                                    [{sec.name}: {guide.fullHeaderTag}]
+                                  </span>
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}
