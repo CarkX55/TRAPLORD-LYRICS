@@ -236,7 +236,7 @@ async function runFactorialHarnessTests() {
 
   assert(packages.blindedLyrics.length === 2, "blindedLyrics package contains 2 items");
   assert(packages.blindedAudio.length === 2, "blindedAudio package contains 2 items");
-  assert(packages.keyManifest.length === 2, "keyManifest contains 2 unblinding items");
+  assert(packages.blindKey.length === 2, "blindKey package contains 2 unblinding items");
 
   // Verify strict physical isolation of modality
   for (const lyricItem of packages.blindedLyrics) {

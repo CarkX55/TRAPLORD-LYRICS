@@ -360,7 +360,7 @@ export interface BlindedAudioItem {
   rubricVersion: "v1";
 }
 
-export interface KeyManifestItem {
+export interface BlindKeyItem {
   sampleId: string;
   fixtureId: string;
   condition: FactorialCondition;
@@ -368,25 +368,27 @@ export interface KeyManifestItem {
   parentGenerationId: string;
   replicateId: number;
 }
+export type KeyManifestItem = BlindKeyItem; // Backward compatibility alias
 
 export interface BlindedEvaluationPackages {
   blindedLyrics: BlindedLyricItem[];
   blindedAudio: BlindedAudioItem[];
-  keyManifest: KeyManifestItem[];
+  blindKey: BlindKeyItem[];
+  keyManifest?: BlindKeyItem[]; // Backward compatibility alias
 }
 
 /**
  * Creates physically segregated evaluation packages:
  * - blindedLyrics: contains ONLY sampleId, lyricsText, rubricVersion (zero audioUrl)
  * - blindedAudio: contains ONLY sampleId, audioUrl, rubricVersion (zero lyricsText)
- * - keyManifest: private mapping table for unblinding in Statistical Analysis Plan
+ * - blindKey: private mapping table for unblinding in Statistical Analysis Plan
  */
 export function createBlindedEvaluationPackages(
   manifests: GenerationManifest[]
 ): BlindedEvaluationPackages {
   const blindedLyrics: BlindedLyricItem[] = [];
   const blindedAudio: BlindedAudioItem[] = [];
-  const keyManifest: KeyManifestItem[] = [];
+  const blindKey: BlindKeyItem[] = [];
 
   for (const m of manifests) {
     if (m.lyricEvaluationEligibility === "ELIGIBLE" && m.lyricsText) {
@@ -405,7 +407,7 @@ export function createBlindedEvaluationPackages(
       });
     }
 
-    keyManifest.push({
+    blindKey.push({
       sampleId: m.sampleId,
       fixtureId: m.fixtureId,
       condition: m.condition,
@@ -418,7 +420,8 @@ export function createBlindedEvaluationPackages(
   return {
     blindedLyrics,
     blindedAudio,
-    keyManifest,
+    blindKey,
+    keyManifest: blindKey,
   };
 }
 
