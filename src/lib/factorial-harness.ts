@@ -352,6 +352,93 @@ export function forkStep3Branches(
 }
 
 // -------------------------------------------------------------
+// Step 3 Technical Failure Telemetry & Pair Observability
+// -------------------------------------------------------------
+
+export interface Step3TechnicalFailureTelemetry {
+  controlBranchesInitiated: number;
+  controlBranchesFailed: number;
+  controlBranchTechnicalFailureRate: number | null; // null if denominator === 0
+  interventionBranchesInitiated: number;
+  interventionBranchesFailed: number;
+  interventionBranchTechnicalFailureRate: number | null; // null if denominator === 0
+  totalPairsInitiated: number;
+  evaluablePairs: number;
+  failedPairs: number;
+  pairTechnicalFailureRate: number | null; // null if denominator === 0
+}
+
+/**
+ * Computes symmetric technical failure rates for Step 3 twin branches and pairs.
+ * Reflects operational cost of intervention vs control and pair evaluability.
+ */
+export function computeStep3TechnicalFailureTelemetry(
+  manifests: GenerationManifest[]
+): Step3TechnicalFailureTelemetry {
+  const step3Manifests = manifests.filter(
+    m => m.branchId === "repair_control" || m.branchId === "repair_intervention"
+  );
+
+  const controlBranches = step3Manifests.filter(m => m.branchId === "repair_control");
+  const interventionBranches = step3Manifests.filter(m => m.branchId === "repair_intervention");
+
+  const controlBranchesFailed = controlBranches.filter(
+    m => m.lyricPipelineStatus === "FAILED" || m.audioRenderStatus === "FAILED"
+  ).length;
+
+  const interventionBranchesFailed = interventionBranches.filter(
+    m => m.lyricPipelineStatus === "FAILED" || m.audioRenderStatus === "FAILED"
+  ).length;
+
+  // Group pairs by parentGenerationId
+  const pairsByParent = new Map<string, { control?: GenerationManifest; intervention?: GenerationManifest }>();
+  for (const m of step3Manifests) {
+    if (!pairsByParent.has(m.parentGenerationId)) {
+      pairsByParent.set(m.parentGenerationId, {});
+    }
+    const pair = pairsByParent.get(m.parentGenerationId)!;
+    if (m.branchId === "repair_control") pair.control = m;
+    if (m.branchId === "repair_intervention") pair.intervention = m;
+  }
+
+  const totalPairsInitiated = pairsByParent.size;
+  let evaluablePairs = 0;
+
+  for (const pair of pairsByParent.values()) {
+    const ctrlEval =
+      pair.control &&
+      pair.control.lyricPipelineStatus === "COMPLETED" &&
+      pair.control.audioRenderStatus === "COMPLETED";
+    const intEval =
+      pair.intervention &&
+      pair.intervention.lyricPipelineStatus === "COMPLETED" &&
+      pair.intervention.audioRenderStatus === "COMPLETED";
+
+    if (ctrlEval && intEval) {
+      evaluablePairs++;
+    }
+  }
+
+  const failedPairs = totalPairsInitiated - evaluablePairs;
+
+  return {
+    controlBranchesInitiated: controlBranches.length,
+    controlBranchesFailed,
+    controlBranchTechnicalFailureRate:
+      controlBranches.length > 0 ? controlBranchesFailed / controlBranches.length : null,
+    interventionBranchesInitiated: interventionBranches.length,
+    interventionBranchesFailed,
+    interventionBranchTechnicalFailureRate:
+      interventionBranches.length > 0 ? interventionBranchesFailed / interventionBranches.length : null,
+    totalPairsInitiated,
+    evaluablePairs,
+    failedPairs,
+    pairTechnicalFailureRate:
+      totalPairsInitiated > 0 ? failedPairs / totalPairsInitiated : null,
+  };
+}
+
+// -------------------------------------------------------------
 // Blind Protocol & Physical Modality Segregation (§3, §8)
 // -------------------------------------------------------------
 

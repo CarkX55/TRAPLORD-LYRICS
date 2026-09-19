@@ -13,10 +13,12 @@ import {
   forkStep3Branches,
   createBlindedEvaluationPackages,
   assertNeverRatedBothModalities,
+  computeStep3TechnicalFailureTelemetry,
   type BenchmarkFixture,
   type FactorialPlanItem,
   type LLMAttemptLog,
   type GenerationManifest,
+  type Step3TechnicalFailureTelemetry,
 } from "../src/lib/factorial-harness";
 import {
   type SongDocument,
@@ -292,6 +294,61 @@ async function runFactorialHarnessTests() {
     `Factorial plan and blinding packages generated in ${avgDurationMs.toFixed(3)}ms (budget: <5ms)`
   );
   totalPassed += 1;
+
+  // -------------------------------------------------------------
+  // TEST 7: Step 3 Technical Symmetry & Failure Telemetry
+  // -------------------------------------------------------------
+  console.log("\n--- TEST 7: Step 3 Technical Symmetry & Failure Telemetry ---");
+  // Subtest 7.1: Both branches succeed in 2 pairs
+  const testAST1 = createSampleSongDocument();
+  const testAST2 = createSampleSongDocument();
+  const forkPair1 = forkStep3Branches(plan[0], "parent_001", testAST1, surgicalPatch, initialAttempts);
+  const forkPair2 = forkStep3Branches(plan[1], "parent_002", testAST2, surgicalPatch, initialAttempts);
+
+  const perfectManifests = [
+    forkPair1.controlManifest,
+    forkPair1.interventionManifest,
+    forkPair2.controlManifest,
+    forkPair2.interventionManifest,
+  ];
+
+  const telemetryPerfect = computeStep3TechnicalFailureTelemetry(perfectManifests);
+  assert(telemetryPerfect.controlBranchesInitiated === 2, "2 control branches initiated");
+  assert(telemetryPerfect.interventionBranchesInitiated === 2, "2 intervention branches initiated");
+  assert(telemetryPerfect.controlBranchesFailed === 0, "0 control branches failed");
+  assert(telemetryPerfect.interventionBranchesFailed === 0, "0 intervention branches failed");
+  assert(telemetryPerfect.controlBranchTechnicalFailureRate === 0, "controlBranchTechnicalFailureRate is 0.0");
+  assert(telemetryPerfect.interventionBranchTechnicalFailureRate === 0, "interventionBranchTechnicalFailureRate is 0.0");
+  assert(telemetryPerfect.totalPairsInitiated === 2, "totalPairsInitiated is 2");
+  assert(telemetryPerfect.evaluablePairs === 2, "evaluablePairs is 2");
+  assert(telemetryPerfect.failedPairs === 0, "failedPairs is 0");
+  assert(telemetryPerfect.pairTechnicalFailureRate === 0, "pairTechnicalFailureRate is 0.0");
+  totalPassed += 10;
+
+  // Subtest 7.2: One intervention branch fails technically (e.g. audio render failed)
+  const flawedManifests = [
+    forkPair1.controlManifest,
+    forkPair1.interventionManifest,
+    forkPair2.controlManifest,
+    { ...forkPair2.interventionManifest, audioRenderStatus: "FAILED" as const, audioEvaluationEligibility: "INELIGIBLE" as const },
+  ];
+
+  const telemetryFlawed = computeStep3TechnicalFailureTelemetry(flawedManifests);
+  assert(telemetryFlawed.controlBranchesFailed === 0, "0 control branches failed");
+  assert(telemetryFlawed.interventionBranchesFailed === 1, "1 intervention branch failed");
+  assert(telemetryFlawed.controlBranchTechnicalFailureRate === 0, "controlBranchTechnicalFailureRate is 0.0");
+  assert(telemetryFlawed.interventionBranchTechnicalFailureRate === 0.5, "interventionBranchTechnicalFailureRate is 0.5 (50%)");
+  assert(telemetryFlawed.evaluablePairs === 1, "only 1 pair is evaluable (pair 2 broken by intervention failure)");
+  assert(telemetryFlawed.failedPairs === 1, "1 pair failed technically");
+  assert(telemetryFlawed.pairTechnicalFailureRate === 0.5, "pairTechnicalFailureRate is 0.5 (50%)");
+  totalPassed += 7;
+
+  // Subtest 7.3: Zero denominator rule (null when no Step 3 branches)
+  const emptyTelemetry = computeStep3TechnicalFailureTelemetry([]);
+  assert(emptyTelemetry.controlBranchTechnicalFailureRate === null, "zero denominator control rate is null");
+  assert(emptyTelemetry.interventionBranchTechnicalFailureRate === null, "zero denominator intervention rate is null");
+  assert(emptyTelemetry.pairTechnicalFailureRate === null, "zero denominator pair rate is null");
+  totalPassed += 3;
 
   console.log("\n=======================================================");
   console.log(`📊 ALL FACTORIAL HARNESS TESTS PASSED: ${totalPassed} ASSERTS VERIFIED | 0 FAILED`);
