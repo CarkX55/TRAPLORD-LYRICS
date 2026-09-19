@@ -16,7 +16,7 @@ import { getMusicalDNAForArtist, getSectionModulatedTexture, ARTIST_PRESETS, typ
 import { HOOK_STRATEGIES, recommendHookStrategy, type HookStrategyType } from "./hook-engine";
 import type { SemanticAnchor } from "./motif-engine";
 import type { LanguageDNA } from "./language-dna";
-import { formatSectionHeader, resolveSectionSpec } from "./song-document";
+import { formatSectionHeader, resolveSectionSpec, stripMetaReasoning } from "./song-document";
 
 export { getRhymeTier, getHookDensityProfile, type HookDensityProfile };
 
@@ -1086,7 +1086,8 @@ export function cleanSunoBracketHeaders(
   }
 ): string {
   if (!lyrics) return "";
-  const cleaned = lyrics
+  const sanitized = stripMetaReasoning(lyrics);
+  const cleaned = sanitized
     // Eliminar Markdown headers: ### [Section] -> [Section] o ### Section
     .replace(/^#{1,6}[ \t]*(\[[^\]]+\])/gm, "$1")
     .replace(/^#{1,6}[ \t]+/gm, "")
@@ -1257,7 +1258,7 @@ export function buildStage1ToplinePrompt(
 
   const userTopicsList = [params.customTopic, ...params.topics].filter(Boolean);
   const topicsBlock = userTopicsList.length > 0
-    ? `- **Temáticas Elegidas por el Usuario**: ${userTopicsList.join(", ")}`
+    ? `- **Temáticas Elegidas por el Usuario**: ${userTopicsList.join(", ")}\n- **ENTIDADES EXPLÍCITAS DEL USUARIO (PRESERVACIÓN INVIOLABLE)**: Las temáticas pedidas por el usuario (${userTopicsList.join(", ")}) son elecciones deliberadas e inviolables. Queda TERMINANTEMENTE PROHIBIDO censurarlas, reemplazarlas por perífrasis genéricas o considerarlas como 'contaminación corporativa'.`
     : "- **Temática**: Estilo libre de trap y calle.";
 
   return `Eres el Topliner y Diseñador de Ganchos (Hook Architect) más cotizado del Trap y Rap contemporáneo.
@@ -1304,7 +1305,8 @@ ${hookVariationsEnabled ? `
 
 ${flowSkeletonSummary ? `\n# 📐 GUÍA DE RITMO Y CADENCIA GLOBAL (BEAT-FIRST):\n${flowSkeletonSummary}\n` : ""}
 # 📋 FORMATO DE SALIDA ESTRICTO:
-Devuelve EXCLUSIVAMENTE UN ÚNICO bloque [Chorus: ${hookVoice}] de exactamente ${targetBars} compases limpios (SOLO el nombre de la sección y del artista, SIN notas de estilo ni acústica dentro del corchete):
+Devuelve EXCLUSIVAMENTE UN ÚNICO bloque [Chorus: ${hookVoice}] de exactamente ${targetBars} compases limpios (SOLO el nombre de la sección y del artista, SIN notas de estilo ni acústica dentro del corchete).
+Está TERMINANTEMENTE PROHIBIDO incluir introducciones, conclusiones, explicaciones de cambios o frases como "Letra ajustada:", "Se ha resuelto el problema" o "He modificado...". Comienza directamente en el corchete:
 [Chorus: ${hookVoice}]
 Línea 1 (Ad-lib)
 Línea 2 (Ad-lib)
@@ -1440,10 +1442,11 @@ ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 
 🚫 REGLAS DE VOCABULARIO Y AUTENTICIDAD:
 1. **Cero Palabras Inyectadas / Cero Atrezzo Artificial:** Desarrolla la narrativa y metáforas ÚNICAMENTE a través de las temáticas elegidas por el usuario y el vocabulario natural de ${artist?.name ?? "el artista"}. Queda terminantemente prohibido meter objetos no pedidos.
-2. **Memoria Negativa Inter-Estrofas:** Si usas un concepto o metáfora en el Verso 1, no lo repitas en el Verso 2. Haz que la historia avance con consecuencias.
-3. **Cero Clichés Baratos de IA:** Evita rimas escolares automáticas (suerte/muerte, pena/vena, etc.) y frases gastadas como "el asfalto no perdona" o "haciendo money sin parar". Prioriza la escena física y el peso de calle real.
-4. **Higiene de Privacidad:** NUNCA calques biografía personal íntima, familiares fallecidos ni nombres de pandillas reales concretas de la infancia del artista.
-5. **Higiene de Metadatos de Sistema:** Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la bio del artista (como 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
+2. **Entidades Explícitas del Usuario (Preservación Inviolable):** Las temáticas pedidas por el usuario (${userTopicsList.length > 0 ? userTopicsList.join(", ") : "temas seleccionados"}) son elecciones deliberadas e inviolables. Queda TERMINANTEMENTE PROHIBIDO censurarlas, cambiarlas por perífrasis genéricas o considerarlas como 'contaminación corporativa'.
+3. **Memoria Negativa Inter-Estrofas:** Si usas un concepto o metáfora en el Verso 1, no lo repitas en el Verso 2. Haz que la historia avance con consecuencias.
+4. **Cero Clichés Baratos de IA:** Evita rimas escolares automáticas (suerte/muerte, pena/vena, etc.) y frases gastadas como "el asfalto no perdona" o "haciendo money sin parar". Prioriza la escena física y el peso de calle real.
+5. **Higiene de Privacidad:** NUNCA calques biografía personal íntima, familiares fallecidos ni nombres de pandillas reales concretas de la infancia del artista.
+6. **Higiene de Metadatos de Sistema:** Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la bio del artista (como 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
 
 ================================================================================
 # 📜 CONTRATO 2: NARRATIVA, ESTRUCTURA & HYPE MAN (NARRATIVE CONTRACT)
@@ -1503,7 +1506,7 @@ Como Director Vocal, incorpora la capa de performance con criterio musical:
   - [Chorus: ${artist?.name ?? "Lead"} - layered stereo autotune harmonies, anthemic vocal stack]
   ${featureArtist ? `- [Verse 2: ${featureArtist.name} - ${resolveArtistVocalGuide("feature", { featureArtistId: featureArtist.id }).vocalGuide}]` : ""}
 - Cada compás equivale EXACTAMENTE a una línea de texto con sus ad-libs.
-- Devuelve ÚNICAMENTE la letra completa de la canción estructurada con estos corchetes acústicos, sin comentarios, introducciones ni notas fuera de los corchetes.`;
+- Devuelve ÚNICAMENTE la letra completa de la canción estructurada con estos corchetes acústicos. Está TERMINANTEMENTE PROHIBIDO incluir introducciones, conclusiones, explicaciones de cambios o frases como "Letra ajustada:", "Se ha resuelto el problema" o "He modificado...". Comienza directamente en el primer corchete de la canción.`;
 }
 
 /**

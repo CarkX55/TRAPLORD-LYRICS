@@ -599,7 +599,17 @@ export async function POST(req: NextRequest) {
         try {
           const tRepair = Date.now();
           const target = repairPlan.targetBars[0];
-          const patchInstruction = `Ajusta estas barras específicas de la canción resolviendo este problema detectado ("${target.reason}") manteniendo rima, métrica y flow:\n${candidateLyrics}`;
+          const userTopicsClause = userExplicitTerms.length > 0
+            ? `\nPRESERVACIÓN DE TEMÁTICA DEL USUARIO: Los términos [${userExplicitTerms.join(", ")}] fueron solicitados explícitamente por el usuario. Son entidades temáticas legítimas e inviolables. NO los consideres como error ni los censures ni los sustituyas por perífrasis genéricas.`
+            : "";
+          const patchInstruction = `Eres un Cirujano Lírico de Trap de élite. Tu misión es corregir las barras problemáticas resolviendo este defecto detectado: "${target.reason}", manteniendo rima, métrica y flow.
+REGLAS ESTRICTAS DE SALIDA:
+1. Devuelve ÚNICAMENTE la letra completa de la canción con el arreglo integrado.
+2. PROHIBIDO terminantemente incluir explicaciones, introducciones, justificaciones, listas de cambios o frases como "Letra ajustada:", "Se ha resuelto el problema" o "He modificado...".
+3. Comienza directamente con la primera etiqueta de sección de la canción (ej. [Intro...]).${userTopicsClause}
+
+CANCIÓN A CORREGIR:
+${candidateLyrics}`;
           const patchedText = await callLLM(patchInstruction, body, 0.65);
           const dRepairMs = Date.now() - tRepair;
           if (patchedText && patchedText.trim()) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFlowProfile } from "@/lib/artist-flow-profiles";
 import { getRhymeTier } from "@/lib/prompt-builder";
+import { stripMetaReasoning } from "@/lib/song-document";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // increased for auto-iterate (up to 3 iterations)
@@ -217,17 +218,9 @@ function avgScore(reports: AgentResult[]): number {
   return Math.round(reports.reduce((sum, r) => sum + r.score, 0) / reports.length);
 }
 
-// Clean LLM output to ensure pure clean lyrics
+// Clean LLM output to ensure pure clean lyrics without reasoning preambles
 function cleanLyricsOutput(text: string): string {
-  let cleaned = text.trim();
-  // Remove markdown code fences
-  cleaned = cleaned.replace(/^```(?:text|markdown|lyrics)?\s*/i, "").replace(/\s*```$/i, "");
-  // Remove any conversational preamble before the first section tag
-  const firstTagIdx = cleaned.search(/(?:###\s*)?\[/);
-  if (firstTagIdx > 0) {
-    cleaned = cleaned.slice(firstTagIdx);
-  }
-  return cleaned.trim();
+  return stripMetaReasoning(text);
 }
 
 // ===== REWRITER (uses all 4 agents' feedback) =====

@@ -4,6 +4,7 @@ import {
   type SongBar,
   stringifyASTToSunoLyrics,
   validateMutation,
+  isMetaReasoningLine,
 } from "@/lib/song-document";
 import {
   type RepairOperation,
@@ -123,6 +124,8 @@ ${operation.preserveWords && operation.preserveWords.length > 0 ? `- Palabras o 
 3. Prohibido usar clichés genéricos ("fuego/juego", "el asfalto no perdona", "contando money").
 4. Incorpora detalles físicos reales, marcas o actitud cruda callejera.
 5. Los ad-libs secundarios deben ir entre paréntesis.
+6. PRESERVACIÓN DE TEMÁTICAS DEL USUARIO: Si se indican palabras o conceptos pedidos por el usuario (${operation.preserveWords && operation.preserveWords.length > 0 ? operation.preserveWords.join(", ") : "temática elegida"}), son elecciones deliberadas. NUNCA las censures ni las sustituyas por perífrasis genéricas.
+7. CERO METARRAZONAMIENTO O EXPLICACIONES: PROHIBIDO incluir introducciones, explicaciones, viñetas, justificaciones del cambio o frases como "Letra ajustada:" o "Se ha resuelto el problema". Devuelve ÚNICAMENTE el array JSON.
 
 DEBES devolver EXCLUSIVAMENTE un array JSON con las nuevas líneas de texto cantado (sin markdown, sin explicaciones):
 [
@@ -189,8 +192,22 @@ DEBES devolver EXCLUSIVAMENTE un array JSON con las nuevas líneas de texto cant
 
     if (replacementLines.length === 0) {
       return NextResponse.json(
-        { error: "No se pudieron extraer las nuevas barras de la respuesta del modelo." },
+        { error: "No se pudieron extraer las nuevas barras de la respuesta del modelo.", status: "REPAIR_ABORTED" },
         { status: 502 }
+      );
+    }
+
+    // Invariant: Zero Reasoning Leakage. Reject if LLM returned meta-reasoning or explanations.
+    const hasReasoningLeak = replacementLines.some(isMetaReasoningLine);
+    if (hasReasoningLeak) {
+      console.warn("[patch] Meta-reasoning leak detected in replacement lines. Aborting repair safely.");
+      return NextResponse.json(
+        {
+          error: "El modelo devolvió explicaciones/metacomentarios en lugar de barras cantadas. Reparación abortada de forma segura (REPAIR_ABORTED).",
+          reasoningLeakDetected: true,
+          status: "REPAIR_ABORTED",
+        },
+        { status: 422 }
       );
     }
 

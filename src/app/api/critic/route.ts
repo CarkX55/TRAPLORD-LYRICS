@@ -72,6 +72,7 @@ ${barListing}
    - genericnessPenalty: Penalización por clichés de IA ("el asfalto no perdona", "fuego/juego/cielo", "contando money"). (0 = original y fresco, 100 = puro cliché).
    - cohesion: Fluidez de transición entre verso, puente y estribillo.
 2. Identifica entre 1 y 3 compases individuales débiles que requieran REPARACIÓN QUIRÚRGICA (NO sugieras barras que tengan 🔒 BLOQUEADO).
+3. PRESERVACIÓN DE TEMAS Y MARCAS DEL USUARIO: Si la canción contiene marcas, criptomonedas, tokens o términos legítimos asociados a la temática (ej. "Cardano", "Rolex"), NO los consideres como 'contaminación corporativa' ni name-dropping forzado si encajan en la escena callejera.
 
 DEBES devolver EXCLUSIVAMENTE un JSON válido con esta estructura exacta (sin markdown, sin texto extra fuera del JSON):
 {

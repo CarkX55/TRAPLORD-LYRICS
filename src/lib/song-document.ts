@@ -405,11 +405,102 @@ export function bindHookContractToAST(
 }
 
 /**
+ * Detects whether a text line is meta-reasoning, conversational commentary, or justification
+ * emitted by an LLM instead of genuine musical lyrics.
+ */
+export function isMetaReasoningLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+
+  const reasoningPatterns = [
+    /^(?:se ha resuelto|he resuelto|se resolvi[óo]|se corrigi[óo]|he corregido)\b/i,
+    /^(?:esta modificaci[óo]n|estos cambios|modificaciones realizadas|cambios aplicados|cambios realizados)\b/i,
+    /^(?:letra ajustada|letra corregida|versi[óo]n ajustada|versi[óo]n corregida|versi[óo]n final|letra final|letra mejorada|texto ajustado|texto corregido)\s*:/i,
+    /^(?:aqu[íi] est[áa]|aqu[íi] tienes|a continuaci[óo]n presento|a continuaci[óo]n se presenta)\b/i,
+    /^(?:here is the|here are the|revised lyrics|adjusted lyrics|final lyrics|changes made|modifications)\b/i,
+    /^(?:i have modified|i have replaced|i resolved|this modification|i have corrected)\b/i,
+    /^(?:explicaci[óo]n|justificaci[óo]n|motivo del cambio|nota del autor|notas?)\s*:/i,
+    /^\d+\.\s*(?:elimina|mantiene|sustituye|ajusta|corrige|cambia|preserva|evita|añade|agrega|reemplaza)\b/i,
+    /^[-*]\s*(?:elimina|mantiene|sustituye|ajusta|corrige|cambia|preserva|evita|añade|agrega|reemplaza)\b/i,
+    /^(?:elimina la contaminaci[óo]n|mantiene m[ée]trica|mantiene la rima|name-dropping forzado|trasfondo cripto)\b/i,
+    /^(?:sustituyendo la menci[óo]n|eliminando la menci[óo]n|conserva el mismo n[úu]mero|conserva el trasfondo)\b/i,
+  ];
+
+  return reasoningPatterns.some((pattern) => pattern.test(trimmed));
+}
+
+/**
+ * Strips any conversational preamble, meta-reasoning blocks, or explanation headers
+ * from raw LLM output before it is parsed into the SongDocument AST.
+ * Handles cases like:
+ * - Prose preamble before first bracket
+ * - "[Verse 1]\nSe ha resuelto...\nLetra ajustada:\n\n[Intro: ...]"
+ * - "Letra ajustada:\n\n[Intro: ...]"
+ */
+export function stripMetaReasoning(rawText: string): string {
+  if (!rawText) return "";
+  let text = rawText.trim();
+
+  // 1. Remove Markdown code block wrappers
+  text = text.replace(/^```(?:text|markdown|lyrics)?\s*/i, "").replace(/\s*```$/i, "").trim();
+
+  // 2. Check for explicit transition delimiters like "Letra ajustada:", "Letra corregida:", "Revised lyrics:", etc.
+  const delimiterRegex = /(?:^|\n)\s*(?:letra ajustada|letra corregida|versi[óo]n ajustada|versi[óo]n corregida|versi[óo]n final|letra final|letra mejorada|texto ajustado|texto corregido|adjusted lyrics|revised lyrics|final lyrics)\s*:\s*\n+/i;
+  const delimiterMatch = text.match(delimiterRegex);
+  if (delimiterMatch && delimiterMatch.index !== undefined) {
+    const afterDelimiter = text.slice(delimiterMatch.index + delimiterMatch[0].length).trim();
+    if (afterDelimiter.includes("[")) {
+      text = afterDelimiter;
+    }
+  }
+
+  // 3. Detect fake initial section tags that precede meta-reasoning blocks.
+  // E.g., [Verse 1]\nSe ha resuelto el problema... \n\n[Intro: ...]
+  const lines = text.split(/\r?\n/);
+  const firstLine = lines[0]?.trim() || "";
+  if (/^\[[^\]]+\]$/.test(firstLine)) {
+    const nextNonEmptyLines = lines.slice(1).map((l) => l.trim()).filter(Boolean);
+    const hasReasoningAtStart = nextNonEmptyLines.slice(0, 4).some(isMetaReasoningLine);
+    if (hasReasoningAtStart) {
+      let nextSectionIndex = -1;
+      for (let i = 1; i < lines.length; i++) {
+        const l = lines[i].trim();
+        if (/^\[[^\]]+\]/.test(l)) {
+          const subLines = lines.slice(i + 1).map((sl) => sl.trim()).filter(Boolean);
+          if (!subLines.slice(0, 3).some(isMetaReasoningLine)) {
+            nextSectionIndex = i;
+            break;
+          }
+        }
+      }
+      if (nextSectionIndex !== -1) {
+        text = lines.slice(nextSectionIndex).join("\n").trim();
+      }
+    }
+  }
+
+  // 4. Remove any loose conversational preamble before the first genuine section bracket
+  const firstBracketIdx = text.search(/(?:###\s*)?\[/);
+  if (firstBracketIdx > 0) {
+    const preamble = text.slice(0, firstBracketIdx).trim();
+    if (preamble.split(/\r?\n/).some(isMetaReasoningLine) || !preamble.includes("\n\n")) {
+      text = text.slice(firstBracketIdx).trim();
+    }
+  }
+
+  // 5. Remove any meta-section headers like [Explicación], [Notas], etc.
+  text = text.replace(/^\[(?:Explicaci[óo]n|Notas?|Justificaci[óo]n|Cambios?|Reasoning|Notes)[^\]]*\]\s*[\s\S]*?(?=\[(?:Intro|Verse|Chorus|Hook|Bridge|Outro|Beat Drop))/i, "");
+
+  return text.trim();
+}
+
+/**
  * Parses raw lyric text into a structured SongDocument AST.
  * Preserves existing bar IDs and locks if provided.
  */
 export function parseRawLyricsToAST(rawLyrics: string, existingDoc?: SongDocument): SongDocument {
-  const lines = rawLyrics.split(/\r?\n/);
+  const sanitized = stripMetaReasoning(rawLyrics);
+  const lines = sanitized.split(/\r?\n/);
   const sections: SongSectionDoc[] = [];
 
   let currentSection: SongSectionDoc | null = null;
@@ -427,6 +518,11 @@ export function parseRawLyricsToAST(rawLyrics: string, existingDoc?: SongDocumen
   for (const rawLine of lines) {
     const trimmed = rawLine.trim();
     if (!trimmed) continue;
+
+    // Never parse meta-reasoning, explanations, or justification lines as song bars
+    if (isMetaReasoningLine(trimmed)) {
+      continue;
+    }
 
     // Check for section header [Section Name: Details] with optional trailing bar text
     const headerMatch = trimmed.match(/^\[([^\]]+)\](?:\s*(.*))?$/);
@@ -533,13 +629,15 @@ export function parseRawLyricsToAST(rawLyrics: string, existingDoc?: SongDocumen
     currentSection.bars.push(bar);
   }
 
+  const validSections = sections.filter((s) => s.bars.length > 0);
+
   return {
     schemaVersion: 1,
     id: existingDoc?.id ?? `song_${Math.random().toString(36).substring(2, 9)}`,
     versionId: existingDoc ? `v_${Date.now()}` : "v_1",
     createdAt: existingDoc?.createdAt ?? Date.now(),
     updatedAt: Date.now(),
-    sections,
+    sections: validSections.length > 0 ? validSections : sections,
   };
 }
 
