@@ -1,5 +1,13 @@
 import { getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, getDirtyLevel, getRepetitionPatternById, getHookStyleOptionById, getIntroStyleOptionById, MOODS, getSituationalPresetById, getFlowPocketOptionById, type SongStructure, type BpmVibe, type BeatType, type FlowPocketOption, type IntroStyleId, type IntroStyleOption } from "./trap-data";
-import { getFlowProfile, getBreathInstruction, getCadenceLabel, type FlowProfile } from "./artist-flow-profiles";
+import {
+  getFlowProfile,
+  getBreathInstruction,
+  getCadenceLabel,
+  getRhymeTier,
+  getHookDensityProfile,
+  type FlowProfile,
+  type HookDensityProfile,
+} from "./artist-flow-profiles";
 import { getArtistReference, type ArtistReference } from "./artist-references";
 import type { TrackAnalysis } from "./track-analyzer";
 import { getSceneById, type SituationalScene } from "./scene-engine";
@@ -9,20 +17,7 @@ import type { SemanticAnchor } from "./motif-engine";
 import type { LanguageDNA } from "./language-dna";
 import { formatSectionHeader, resolveSectionSpec } from "./song-document";
 
-/**
- * Derives the rhyme tier from the artist's defaultRhymeScheme.
- * TIER 1 = technical multi-syllabic required (Eminem, Kendrick, J. Cole, Takeoff, Recycled J — rs_internal).
- * TIER 2 = balanced: mix multi + single (Drake, Migos, Gunna, Travis — rs_abab, rs_triplets).
- * TIER 3 = street/direct: 1-syllable OK if it hits (Yung Beef, 21 Savage, Carti, Chief Keef, Future, Pop Smoke, Gucci — rs_aabb, rs_monorhyme, rs_free).
- */
-export function getRhymeTier(artistId: string): 1 | 2 | 3 {
-  const profile = getFlowProfile(artistId);
-  if (!profile) return 2;
-  const scheme = profile.defaultRhymeScheme;
-  if (scheme === "rs_internal") return 1;
-  if (scheme === "rs_abab" || scheme === "rs_triplets") return 2;
-  return 3;
-}
+export { getRhymeTier, getHookDensityProfile, type HookDensityProfile };
 
 export interface LockedSection {
   name: string;
@@ -1212,7 +1207,11 @@ export function buildFeatureContrastProfile(leadArtistId: string, featureArtistI
  * Diseña el estribillo / hook central con musicalidad, fraseo completo y el estilo auténtico del artista.
  * Prohíbe las restricciones telegráficas artificiales y los atrezzos inyectados.
  */
-export function buildStage1ToplinePrompt(params: PromptParams, flowSkeletonSummary?: string): string {
+export function buildStage1ToplinePrompt(
+  params: PromptParams,
+  flowSkeletonSummary?: string,
+  hookVariationsEnabled: boolean = true
+): string {
   const artist = getArtistById(params.artistId);
   const featureArtist = params.featureArtistId ? getArtistById(params.featureArtistId) : null;
   const flowProfile = getFlowProfile(params.artistId);
@@ -1279,7 +1278,13 @@ ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 - 🚫 PROHIBIDO usar asteriscos * o ** ni formato Markdown en los ad-libs. Usa ÚNICAMENTE paréntesis planos normales: (Yeah), (Facts), (Uh).
 
 ${hookInstructionBlock}
-
+${hookVariationsEnabled ? `
+# 🌊 ESPACIO RÍTMICO Y DENSIDAD PREFERIDA (ADAPTIVE HOOK FLOW):
+- **Preferencia Métrica**: ${getHookDensityProfile(params.artistId).instructionPrompt}
+- **Respiración y Silencios**: ${getHookDensityProfile(params.artistId).pausePreference >= 0.4 ? "Prioriza silencios generosos, espacio para el bajo 808 y fraseo elástico." : "Métrica continua con rimas enlazadas."}
+- **Frecuencia de Ad-libs**: ${getHookDensityProfile(params.artistId).adlibDensity >= 0.4 ? "Ad-libs rítmicos en contratiempo con actitud." : "Ad-libs comedidos y selectivos."}
+- **Regla Blanda**: Trata estas directivas como preferencias de bolsillo y respiración para el gancho, no como cuotas matemáticas fijas.
+` : ""}
 # 🏀 REGLAS DE ARQUITECTURA TOPLINE (MÚSICA REAL DE ESTUDIO):
 1. **FRASEO MUSICAL Y BARRAS COMPLETAS:**
    - Escribe compases que fluyan con ritmo natural, swing y musicalidad real.

@@ -112,6 +112,7 @@ interface GenerateBody {
   thinkingBudget?: number; // 0: disabled/instant, 1024-2048: balanced, 4096-8192: deep study, -1: auto
   useLegacySinglePass?: boolean;
   writingCellsEnabled?: boolean;
+  hookVariationsEnabled?: boolean;
 }
 
 // Unified LLM Caller honoring strictly the user's selected model with progressive retry
@@ -344,6 +345,7 @@ export async function POST(req: NextRequest) {
       flowSkeletonSummary?: string;
       writingCellsCount?: number;
       writingCellsEnabled?: boolean;
+      hookVariationsEnabled?: boolean;
       plannedVerseIntents?: PlannedVerseIntent[];
     } | undefined = undefined;
     let pipelineStagesCompleted: string[] = [];
@@ -424,8 +426,9 @@ export async function POST(req: NextRequest) {
       const performanceArc = generatePerformanceArc(structure, body.moodId, mainDNA);
       const flowSkeleton = generateFlowSkeleton(performanceArc, mainDNA, flowProfile, structure, body.flowPocketMode);
 
-      // --- PASADA 1: Topliner & Contrato de Gancho (Hooks & Mantras) ---
-      const stage1Prompt = buildStage1ToplinePrompt(promptParams, flowSkeleton.globalIntentionSummary);
+      // --- PASADA 1: Topliner & Contrato de Gancho (Hooks & Mantras con Factorial Flag) ---
+      const hookVariationsEnabled = body.hookVariationsEnabled !== false;
+      const stage1Prompt = buildStage1ToplinePrompt(promptParams, flowSkeleton.globalIntentionSummary, hookVariationsEnabled);
       const t1 = Date.now();
       const stage1Topline = await callLLM(stage1Prompt, body, 0.82);
       const d1Ms = Date.now() - t1;
@@ -487,6 +490,7 @@ export async function POST(req: NextRequest) {
         flowSkeletonSummary: flowSkeleton.globalIntentionSummary,
         writingCellsCount: allWritingCells.length,
         writingCellsEnabled,
+        hookVariationsEnabled,
         plannedVerseIntents,
       };
 

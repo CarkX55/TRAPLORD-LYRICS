@@ -595,3 +595,88 @@ const ALL_PROFILES = { ...FLOW_PROFILES, ...ADDITIONAL_FLOW_PROFILES };
 export function getFlowProfileFull(artistId: string): FlowProfile | null {
   return ALL_PROFILES[artistId] ?? null;
 }
+
+// ========================================================================
+// HOOK DENSITY PROFILES & RHYME TIERS (Paso 2: Hook Variations Adaptativas)
+// ========================================================================
+
+export interface HookDensityProfile {
+  tier: 1 | 2 | 3;
+  syllablesPerBar: {
+    min: number;
+    typical: number;
+    max: number;
+  };
+  pausePreference: number;   // 0.0 - 1.0 (probabilidad preferida de pausas/respiración)
+  adlibDensity: number;      // 0.0 - 1.0 (densidad preferida de ad-libs)
+  instructionPrompt: string; // Directiva elástica formulada como preferencia blanda
+}
+
+/**
+ * Categorizes an artist into Rhyme Tiers:
+ * - TIER 1 = technical (multi-syllable, internal rhymes, rapid/complex flow: Eminem, Kendrick, etc.)
+ * - TIER 2 = balanced (mix multi + single, melodic cadence: Drake, Travis, Gunna, Future, etc.)
+ * - TIER 3 = street / bounce / direct (short punchy bars, minimal syllable clutter: 21 Savage, Carti, Yeat, Chief Keef, Yung Beef, etc.)
+ */
+export function getRhymeTier(artistId: string): 1 | 2 | 3 {
+  const profile = getFlowProfile(artistId);
+  if (!profile) return 2;
+  const scheme = profile.defaultRhymeScheme;
+  if (scheme === "rs_internal") return 1;
+  if (scheme === "rs_abab" || scheme === "rs_triplets") return 2;
+  return 3;
+}
+
+/**
+ * Resolves the adaptive Hook Density Profile for an artist.
+ * Formulates guidelines as soft, elastic preferences (typical ~X syllables) without rigid quotas.
+ */
+export function getHookDensityProfile(artistId: string): HookDensityProfile {
+  const profile = getFlowProfile(artistId);
+  const tier = getRhymeTier(artistId);
+
+  if (tier === 1) {
+    const typical = profile?.syllablesPerBar ? Math.max(12, Math.min(16, profile.syllablesPerBar)) : 14;
+    return {
+      tier: 1,
+      syllablesPerBar: {
+        min: Math.max(8, typical - 4),
+        typical,
+        max: typical + 4,
+      },
+      pausePreference: 0.20,
+      adlibDensity: 0.25,
+      instructionPrompt: `Densidad técnica fluida (~${typical} sílabas por compás, rango elástico: ${Math.max(8, typical - 4)}-${typical + 4}). Prioriza rimas internas multi-silábicas y fraseo continuo sin cuotas rígidas.`,
+    };
+  }
+
+  if (tier === 2) {
+    const typical = profile?.syllablesPerBar ? Math.max(8, Math.min(12, profile.syllablesPerBar)) : 10;
+    return {
+      tier: 2,
+      syllablesPerBar: {
+        min: Math.max(6, typical - 3),
+        typical,
+        max: typical + 3,
+      },
+      pausePreference: 0.35,
+      adlibDensity: 0.35,
+      instructionPrompt: `Densidad melódica equilibrada (~${typical} sílabas por compás, rango elástico: ${Math.max(6, typical - 3)}-${typical + 3}). Groove amplio, notas sostenidas y espacio para el bajo 808 sin cuotas rígidas.`,
+    };
+  }
+
+  // Tier 3: Street / Bounce / Minimal
+  const typical = profile?.syllablesPerBar ? Math.max(5, Math.min(8, profile.syllablesPerBar)) : 7;
+  return {
+    tier: 3,
+    syllablesPerBar: {
+      min: Math.max(3, typical - 3),
+      typical,
+      max: typical + 3,
+    },
+    pausePreference: 0.50,
+    adlibDensity: 0.45,
+    instructionPrompt: `Densidad directa y espaciosa (~${typical} sílabas por compás, rango elástico: ${Math.max(3, typical - 3)}-${typical + 3}). Frases cortas y contundentes con pausas amplias y ad-libs de contratiempo sin cuotas rígidas.`,
+  };
+}
+

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getArtistById, getDirtyLevel, ARTISTS_DATA } from "@/lib/trap-data";
-import { getFlowProfile } from "@/lib/artist-flow-profiles";
+import { getFlowProfile, getHookDensityProfile } from "@/lib/artist-flow-profiles";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
 
     const artist = getArtistById(effectiveArtistId);
     const flowProfile = getFlowProfile(effectiveArtistId);
+    const hookDensity = getHookDensityProfile(effectiveArtistId);
     const dirty = getDirtyLevel(body.dirtyLevel ?? 2);
     const singerName = rawSinger || artist?.name || "Lead";
 
@@ -73,11 +74,11 @@ ${body.conceptOrLyrics ? `- Contexto de la Canción:\n${body.conceptOrLyrics.sli
 - Estás escribiendo EXCLUSIVAMENTE el [Chorus / Hook / Estribillo] para ${singerName}.
 - NO escribas un Pre-Chorus, ni una Intro, ni un Verso. La salida debe ser 100% un Estribillo pegadizo y bailable.
 
-# 🏀 REGLAS MÉTRICAS DE REBOTE (AMERICAN BOUNCE & SPACE):
-- Cada compás debe tener MÁXIMO entre 3 y 5 palabras (4 a 6 sílabas).
+# 🏀 MÉTRICA Y ESPACIO RÍTMICO ADAPTATIVO (FLOW-BASED HOOK):
+- Preferencia métrica: ${hookDensity.instructionPrompt}
 - Usa comas ',' y puntos suspensivos '...' para notas sostenidas, swing y pausas elásticas.
-- Incluye ad-libs rítmicos de contrarrespuesta entre paréntesis en cada compás: (Yeah!), (Skrrt!), (Facts!).
-- Prohibido redactar oraciones continuas largas o párrafos narrativos.
+- Incluye ad-libs rítmicos de contrarrespuesta entre paréntesis en los acentos: (Yeah!), (Skrrt!), (Facts!).
+- Prohibido redactar oraciones continuas planas o párrafos narrativos.
 
 # ESTILOS DE LAS 3 VARIANTES REQUERIDAS:
 1. "mantra": [MANTRA HIPNÓTICO] — Repetición pesada de una palabra/frase clave (3-4 veces con cadencia y comas para Suno), ultra pegadizo y bailable.

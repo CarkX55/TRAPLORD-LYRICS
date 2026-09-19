@@ -64,6 +64,7 @@ export interface GenerationProcessLog {
     flowSkeletonSummary?: string;
     writingCellsCount?: number;
     writingCellsEnabled?: boolean;
+    hookVariationsEnabled?: boolean;
     plannedVerseIntents?: PlannedVerseIntent[];
   };
 }
