@@ -7,7 +7,8 @@ export type HookStrategyType =
   | "call_response"    // Dialectic tension between lead vocal and background response
   | "melodic_phrase"   // Open vowel chains, sustained notes with '...', emotional contour
   | "punchline_refrain"// Hard direct statement with impact on beat 1 followed by silence
-  | "triplet_ostinato";// 3 bars of rapid rhythmic motif + 1 bar payoff release
+  | "triplet_ostinato" // 3 bars of rapid rhythmic motif + 1 bar payoff release
+  | "anthemic";        // Massive anthemic chorus, crowd gang vocals, epic stadium energy
 
 export interface HookDNA {
   anchorLength: number;         // 2-4 words
@@ -90,15 +91,30 @@ export const HOOK_STRATEGIES: Record<HookStrategyType, HookStrategyDefinition> =
 - Barra 4: Rotura de ritmo: frase corta, seca y abierta que funciona como resolución (payoff) hacia el compás siguiente.
 - Repite el patrón en las barras 5 a 8 con mayor fuerza en los ad-libs de fondo.`,
   },
+  anthemic: {
+    id: "anthemic",
+    label: "Himno de Estadio",
+    tagline: "Coros masivos de multitud (gang vocals), energía gigante y melodía coreable para conciertos.",
+    sunoAcousticTag: "Massive anthemic chorus, crowd gang vocals, epic stadium energy, layered unison chants",
+    instructionPrompt: `ESTRATEGIA DE CORO: HIMNO DE ESTADIO (ANTHEMIC)
+- Diseña el estribillo con coros masivos de multitud (gang vocals) y exclamaciones épicas diseñadas para que un estadio entero las grite al unísono.
+- Melodía coreable de alta energía, líneas con punch vocal épico y remates grupales.
+- Barras 5 a 8: Eleva la escala sonora al máximo con capas estéreo masivas y ad-libs de multitud.
+- PROHIBIDO versos narrativos largos; cada línea debe sentirse como un cántico de estadio inmortal.`,
+  },
 };
 
 /**
- * Recommends the optimal Hook Strategy based on the artist's Musical DNA.
+ * Recommends the optimal Hook Strategy based on the artist's Musical DNA and UI selection.
  */
 export function recommendHookStrategy(cadenceType: string, hookStyle?: string): HookStrategyType {
-  if (hookStyle === "repetitive") return "mantra";
-  if (hookStyle === "simple_punchy") return "punchline_refrain";
-  if (hookStyle === "melodic") return "melodic_phrase";
+  if (hookStyle === "mantra" || hookStyle === "repetitive") return "mantra";
+  if (hookStyle === "punchy" || hookStyle === "simple_punchy") return "punchline_refrain";
+  if (hookStyle === "melodic" || hookStyle === "melodic_phrase") return "melodic_phrase";
+  if (hookStyle === "call_response") return "call_response";
+  if (hookStyle === "anthemic") return "anthemic";
+  if (hookStyle === "anaphora") return "anaphora";
+  if (hookStyle === "triplet_ostinato" || hookStyle === "triplet") return "triplet_ostinato";
 
   switch (cadenceType) {
     case "bounce_sparse":

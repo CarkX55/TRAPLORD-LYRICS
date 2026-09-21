@@ -262,16 +262,16 @@ export function buildSpanglishInstruction(percent: number): {
     organicRule = "IDIOMA: 100% Español puro. Prohibido usar frases o palabras en inglés (salvo marcas registradas). Las rimas, la métrica y la jerga deben fluir con naturalidad en español.";
   } else if (englishPct <= 20) {
     vibeLabel = `🇪🇸 Español dominante con Loanwords (${spanishPct}% ES / ${englishPct}% EN)`;
-    organicRule = `CODE-SWITCHING ORGÁNICO: Español dominante. Escribe las estrofas y narrativa en español, pero integra anglicismos callejeros y loanwords auténticos de la cultura urbana (drip, opps, motion, racks, plug, flex) en puntos rítmicos naturales. Los estribillos en español.`;
+    organicRule = `CODE-SWITCHING ORGÁNICO: Español dominante. Escribe las estrofas y narrativa en español, pero integra anglicismos callejeros y loanwords auténticos de la cultura urbana (drip, opps, motion, racks, plug, flex) en puntos rítmicos naturales. Los estribillos en español. Prohibido repetir una fórmula mecánica de '[inglés] + [español]' en cada línea; la alternancia debe sonar natural.`;
   } else if (englishPct <= 45) {
     vibeLabel = `🔌 Español con Rhyme Anchors en inglés (${spanishPct}% ES / ${englishPct}% EN)`;
-    organicRule = `CODE-SWITCHING ORGÁNICO: Base en español con remates y anclas de rima en inglés. Desarrolla la frase en español y cierra el compás con punchlines o terminaciones en inglés. Mezcla fluida y musical como Eladio Carrión o Myke Towers.`;
+    organicRule = `CODE-SWITCHING ORGÁNICO: Base en español con remates y anclas de rima en inglés. Desarrolla la frase en español y cierra el compás con punchlines o terminaciones en inglés. Mezcla fluida y musical como Eladio Carrión o Myke Towers. Prohibido el patrón mecánico repetitivo línea por línea.`;
   } else if (englishPct <= 65) {
     vibeLabel = `⚖️ Spanglish balanceado 50/50 (${spanishPct}% ES / ${englishPct}% EN)`;
-    organicRule = `CODE-SWITCHING ORGÁNICO (50/50): Alternancia constante y fluida. Alterna barras completas en inglés y español o realiza cambios de código a mitad de compás. Las rimas deben cruzar ambos idiomas con total naturalidad estilo Kidd Keo / Eladio.`;
+    organicRule = `CODE-SWITCHING ORGÁNICO DINÁMICO (50/50): Alternancia constante y fluida. Alterna barras completas en inglés y español o realiza cambios de código a mitad de compás con total naturalidad estilo Kidd Keo / Eladio. 🚫 PROHIBIDA LA FÓRMULA MECÁNICA: Queda terminantemente prohibido repetir en cada compás el esquema artificial de '[palabra en inglés] + [frase en español]'. El cambio de idioma debe ser espontáneo y variado.`;
   } else if (englishPct <= 85) {
     vibeLabel = `🇺🇸 Inglés dominante con barras en español (${englishPct}% EN / ${spanishPct}% ES)`;
-    organicRule = `CODE-SWITCHING ORGÁNICO: Inglés americano dominante (75-80%). Estructura principal en inglés con puentes, remates o frases callejeras directas en español.`;
+    organicRule = `CODE-SWITCHING ORGÁNICO: Inglés americano dominante (75-80%). Estructura principal en inglés con puentes, remates o frases callejeras directas en español. Mezcla orgánica sin plantillas rígidas por compás.`;
   } else if (englishPct < 100) {
     vibeLabel = `🇺🇸 Inglés casi puro (${englishPct}% EN / ${spanishPct}% ES)`;
     organicRule = `IDIOMA: 90% Inglés americano (US Trap). Prácticamente todo en inglés con algún modismo aislado en español.`;
@@ -1225,10 +1225,35 @@ export function buildStage1ToplinePrompt(
 ): string {
   const artist = getArtistById(params.artistId);
   const featureArtist = params.featureArtistId ? getArtistById(params.featureArtistId) : null;
-  const flowProfile = getFlowProfile(params.artistId);
   const spanglish = buildSpanglishInstruction(params.spanglishPercent);
   const dirty = getDirtyLevel(params.dirtyLevel ?? 2);
-  const mainDNA = getMusicalDNAForArtist(params.artistId);
+
+  // 1. Resolver especificación canónica y artista real del Hook
+  const hookSpec = resolveSectionSpec(params.structure.sections, params.sectionVoices, "hook");
+  const targetBars = hookSpec.targetBars || 8;
+  let hookVoice = artist?.name ?? "Lead";
+  let hookArtistId = params.artistId;
+  if (hookSpec.voiceId === "feature" && featureArtist) {
+    hookVoice = featureArtist.name;
+    hookArtistId = featureArtist.id;
+  } else if (hookSpec.voiceId === "both") {
+    hookVoice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
+  } else if (hookSpec.voiceId && hookSpec.voiceId !== "auto" && hookSpec.voiceId !== "main") {
+    const assignedArtist = getArtistById(hookSpec.voiceId);
+    if (assignedArtist) {
+      hookVoice = assignedArtist.name;
+      hookArtistId = assignedArtist.id;
+    }
+  }
+
+  const hookArtist = getArtistById(hookArtistId) ?? artist;
+  const hookDNA = getMusicalDNAForArtist(hookArtistId);
+  const hookFlowProfile = getFlowProfile(hookArtistId);
+
+  // 2. Resolver esquema de rima del hook (UI override o nativo del artista)
+  const customScheme = params.rhymeSchemeId && params.rhymeSchemeId !== "rs_free" ? getRhymeSchemeById(params.rhymeSchemeId) : null;
+  const hookRhymeSchemeId = customScheme?.id ?? hookFlowProfile?.defaultRhymeScheme ?? "rs_aabb";
+  const hookRhymeScheme = getRhymeSchemeById(hookRhymeSchemeId);
 
   // Hook Strategy: Check if the user explicitly chose a style or repetition pattern
   const hookVa = params.sectionVoices?.find(v => v.sectionName.toLowerCase().includes("chorus") || v.sectionName.toLowerCase().includes("hook"));
@@ -1238,38 +1263,36 @@ export function buildStage1ToplinePrompt(
   let hookInstructionBlock = "";
   if (userExplicitHookStyle || userExplicitRepPattern) {
     const recommendedStrategy = recommendHookStrategy(
-      mainDNA.flow.cadenceType,
+      hookDNA.flow.cadenceType,
       userExplicitHookStyle
     );
     const strategyConfig = HOOK_STRATEGIES[recommendedStrategy];
     hookInstructionBlock = `
 # 🔁 PATRÓN DE GANCHO SELECCIONADO POR EL USUARIO: ${strategyConfig.label.toUpperCase()}
+- **Intérprete Asignado**: ${hookArtist?.name ?? "Lead"}
 - **Instrucción de Estrategia**: ${strategyConfig.instructionPrompt}
+- **Esquema de Rima Obligatorio**: ${hookRhymeScheme?.label ?? "AABB"} (${hookRhymeScheme?.description ?? ""})
 - **⚡ ARQUITECTURA SIMÉTRICA 4+4 (EARWORM FRAMEWORK)**:
-  * Compases 1-4 (Motivo Núcleo): Establece el ancla melódica o mantra con 1-2 líneas motrices potentes y rimas multi-silábicas.
+  * Compases 1-4 (Motivo Núcleo): Establece el ancla melódica o mantra con 1-2 líneas motrices potentes con rimas audibles.
   * Compases 5-8 (Elevación & Cierre): Retoma el motivo variando la segunda mitad, elevando la textura vocal y rematando en la barra 8 con un payoff definitivo.`;
   } else {
     // AUTO MODE = ARQUITECTURA ORGÁNICA BASADA EN EL FLOW DEL ARTISTA + 4+4 EARWORM FRAMEWORK
     const recommendedStrategy = recommendHookStrategy(
-      mainDNA.flow.cadenceType,
-      flowProfile?.hookStyle
+      hookDNA.flow.cadenceType,
+      hookFlowProfile?.hookStyle
     );
     const strategyConfig = HOOK_STRATEGIES[recommendedStrategy];
     hookInstructionBlock = `
-# 🎵 ARQUITECTURA DE GANCHO: AUTÉNTICA DE ${artist?.name ?? "EL ARTISTA"} (${strategyConfig.label.toUpperCase()})
+# 🎵 ARQUITECTURA DE GANCHO: AUTÉNTICA DE ${hookArtist?.name ?? "EL ARTISTA"} (${strategyConfig.label.toUpperCase()})
+- **Intérprete Asignado**: ${hookArtist?.name ?? "Lead"}
+- **Cadencia y Motor Rítmico**: Flow ${hookFlowProfile?.cadence?.toUpperCase() ?? "STACCATO"} (${hookFlowProfile?.speedLabel ?? "natural"}). ${hookFlowProfile?.cadenceInstruction ?? ""}
+- **Esquema de Rima Obligatorio**: ${hookRhymeScheme?.label ?? "AABB"} (${hookRhymeScheme?.description ?? ""})
 - **Estrategia Rítmica del Artista**: ${strategyConfig.instructionPrompt}
 - **⚡ ARQUITECTURA SIMÉTRICA 4+4 (EARWORM FRAMEWORK — ESTRICTA)**:
-  * **Compases 1 a 4 (Motivo Núcleo / Anclaje Hipnótico)**: Establece 1 o 2 líneas motrices de anclaje (hook phrase/mantra), con rima asonante multi-silábica o paralelismo rítmico. Dale groove y rebote con espacio para el bajo 808.
+  * **Compases 1 a 4 (Motivo Núcleo / Anclaje Hipnótico)**: Establece 1 o 2 líneas motrices de anclaje (hook phrase/mantra), con rima audible y groove bailable con espacio para el bajo 808.
   * **Compases 5 a 8 (Elevación, Variación & Payoff)**: Retoma el motivo melódico de los compases 1-4, elevando la tensión vocal, variando el remate lírico o intensificando los ad-libs, resolviendo en el compás 8 con un payoff definitivo o corte seco.
   * **🚫 PROHIBIDO ESTRIBILLO COMO MINI-VERSO NARRATIVO**: Queda TERMINANTEMENTE PROHIBIDO escribir el estribillo como 8 líneas inconexas de una historia. El estribillo NO es una estrofa ni un relato de 8 acciones cronológicas; es un OBJETO RÍTMICO Y MELÓDICO MEMORABLE (earworm) que se graba en la cabeza por repetición, simetría y tensión.`;
   }
-
-  // Resolver especificación canónica del Hook desde la estructura
-  const hookSpec = resolveSectionSpec(params.structure.sections, params.sectionVoices, "hook");
-  const targetBars = hookSpec.targetBars || 8;
-  let hookVoice = artist?.name ?? "Lead";
-  if (hookSpec.voiceId === "feature" && featureArtist) hookVoice = featureArtist.name;
-  else if (hookSpec.voiceId === "both") hookVoice = `${artist?.name ?? "Lead"} & ${featureArtist?.name ?? "Feature"}`;
 
   const kw = hookVa?.customKeyword?.trim();
 
@@ -1285,7 +1308,7 @@ export function buildStage1ToplinePrompt(
   const topicIntents = userTopicsList.map(classifyTopicIntent);
   const namedEntities = topicIntents.filter(t => t.kind === "named_entity").map(t => t.value);
   const abstractThemes = topicIntents.filter(t => t.kind === "abstract_theme").map(t => t.value);
-  const goldExamples = getCompositionalGoldExamples(params.artistId);
+  const goldExamples = getCompositionalGoldExamples(hookArtistId);
 
   const topicsBlock = userTopicsList.length > 0
     ? `- **Temáticas Elegidas por el Usuario**: ${userTopicsList.join(", ")}
@@ -1296,12 +1319,12 @@ ${abstractThemes.length > 0 ? `- **Temas Abstractos (Preservación Semántica)**
   return `Eres el Topliner y Diseñador de Ganchos (Hook Architect) más cotizado del Trap y Rap contemporáneo.
 Tu misión en esta sesión de estudio es componer EXCLUSIVAMENTE UN ÚNICO [Chorus / Hook] canónico para la canción con total musicalidad y autenticidad callejera. NO escribas versos, intros ni repeticiones todavía.
 
-# 🎯 PROYECTO & ADN DEL ARTISTA
-- Artista Principal: ${artist?.name ?? "Lead"} (${artist?.origin ?? "Trap"})
-- Timbre & Entrega Vocal: ${mainDNA.vocal.sunoVocalTimbre} | Rango Melódico: ${mainDNA.vocal.melodicRange}
-- Motor Rítmico de Flow: Cadencia ${mainDNA.flow.cadenceType} (${mainDNA.flow.avgSyllablesPerBar.join("-")} sílabas por compás) | Velocidad/Sensación: ${flowProfile?.speedLabel ?? "natural trap pocket"}
-${flowProfile?.cadenceInstruction ? `- Instrucción de Cadencia: ${flowProfile.cadenceInstruction}` : ""}
-${featureArtist ? `- Feature: ${featureArtist.name} (${featureArtist.origin})` : ""}
+# 🎯 PROYECTO & ADN DEL ARTISTA DEL GANCHO
+- Artista del Estribillo: ${hookArtist?.name ?? "Lead"} (${hookArtist?.origin ?? "Trap"})
+- Timbre & Entrega Vocal: ${hookDNA.vocal.sunoVocalTimbre} | Rango Melódico: ${hookDNA.vocal.melodicRange}
+- Motor Rítmico de Flow: Cadencia ${hookDNA.flow.cadenceType} (${hookDNA.flow.avgSyllablesPerBar.join("-")} sílabas por compás) | Velocidad/Sensación: ${hookFlowProfile?.speedLabel ?? "natural trap pocket"}
+${hookFlowProfile?.cadenceInstruction ? `- Instrucción de Cadencia: ${hookFlowProfile.cadenceInstruction}` : ""}
+${featureArtist && hookArtistId !== featureArtist.id ? `- Feature en el tema: ${featureArtist.name} (${featureArtist.origin})` : ""}
 - Tempo: ${params.bpmVibe.range} BPM (${params.bpmVibe.label})
 - Nivel de Actitud / Dirty: ${dirty.label} (${dirty.badge})
 ${topicsBlock}${sceneBlock}
@@ -1322,9 +1345,9 @@ ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 ${hookInstructionBlock}
 ${hookVariationsEnabled ? `
 # 🌊 ESPACIO RÍTMICO Y DENSIDAD PREFERIDA (ADAPTIVE HOOK FLOW):
-- **Preferencia Métrica**: ${getHookDensityProfile(params.artistId).instructionPrompt}
-- **Respiración y Silencios**: ${getHookDensityProfile(params.artistId).pausePreference >= 0.4 ? "Prioriza silencios generosos, espacio para el bajo 808 y fraseo elástico." : "Métrica continua con rimas enlazadas."}
-- **Frecuencia de Ad-libs**: ${getHookDensityProfile(params.artistId).adlibDensity >= 0.4 ? "Ad-libs rítmicos en contratiempo con actitud." : "Ad-libs comedidos y selectivos."}
+- **Preferencia Métrica**: ${getHookDensityProfile(hookArtistId).instructionPrompt}
+- **Respiración y Silencios**: ${getHookDensityProfile(hookArtistId).pausePreference >= 0.4 ? "Prioriza silencios generosos, espacio para el bajo 808 y fraseo elástico." : "Métrica continua con rimas enlazadas."}
+- **Frecuencia de Ad-libs**: ${getHookDensityProfile(hookArtistId).adlibDensity >= 0.4 ? "Ad-libs rítmicos en contratiempo con actitud." : "Ad-libs comedidos y selectivos."}
 - **Regla Blanda**: Trata estas directivas como preferencias de bolsillo y respiración para el gancho, no como cuotas matemáticas fijas.
 ` : ""}
 # 💎 ANCLAS COMPOSITIVAS NEUTRALES (TÉCNICA DE ESTUDIO):
@@ -1334,22 +1357,23 @@ ${goldExamples.map(g => `- **${g.technique}** (${g.description}):\n  Barra 1: "$
 1. **FRASEO MUSICAL Y BARRAS COMPLETAS:**
    - Escribe compases que fluyan con ritmo natural, swing y musicalidad real.
    - Queda TERMINANTEMENTE PROHIBIDO sonar a telegrama inconexo o lista de palabras sueltas. El estribillo debe tener melodía, sentido y pegada.
-2. **VOCABULARIO ORGÁNICO & COHERENCIA ESCÉNICA (CERO ATREZZO ARTIFICIAL):**
-   - Desarrolla el gancho basándote en las temáticas elegidas por el usuario, el escenario físico seleccionado y el vocabulario callejero natural de ${artist?.name ?? "el artista"}.
-   - Queda TERMINANTEMENTE PROHIBIDO inventar o forzar objetos de atrezzo artificiales desconectados de la escena (como marcas o palabras de adorno no pedidas).
-   - Higiene de Metadatos: Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la ficha bio del artista (ej: 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
-3. **AUTONOMÍA Y PRESUPUESTO DE AD-LIBS:**
+2. **VOCABULARIO ORGÁNICO & LIBRE (CERO ATREZZO ARTIFICIAL):**
+   - Desarrolla el gancho basándote en las temáticas elegidas por el usuario y el escenario físico seleccionado.
+   - El vocabulario es 100% libre. Queda TERMINANTEMENTE PROHIBIDO forzar marcas o atrezzo artificial no pedido por el usuario.
+   - Higiene de Metadatos: Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la bio del artista (ej: 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
+3. **AD-LIBS LIMPIOS Y UNIVERSALES:**
    - Cada compás debe tener fuerza propia dentro del groove.
-   - En el Estribillo/Chorus mantén los ad-libs en nivel moderado o bajo (máximo 1-2 compases seguidos con ad-lib) para que el gancho respire y la melodía central sea el foco.
-   - Queda PROHIBIDO incluir traducciones literales entre idiomas entre paréntesis.
-   - Los ad-libs entre paréntesis (Ad-lib) cumplen función musical en contratiempo: réplicas de actitud, colas melódicas o acentos rítmicos: (Yeah), (Facts), (Uh).
+   - En el Estribillo/Chorus mantén los ad-libs universales y comedidos en contratiempo: (Yeah), (Facts), (Uh), (Hold up), (Never), (No cap).
+   - Máximo 1-2 compases seguidos con ad-lib para que la melodía central y el bajo 808 respiren con fuerza.
+   - Queda PROHIBIDO incluir traducciones literales entre idiomas entre paréntesis o saturar con muletillas repetitivas.
 4. **FLOW CARACTERÍSTICO DEL ARTISTA (SIN NAME-DROPPING NI BIOGRAFÍA PERSONAL):**
-   - El rapeo y la melodía del gancho DEBEN capturar de forma inconfundible el flow, la métrica, la cadencia y el bolsillo rítmico del artista original (${artist?.name ?? "el artista"}) para que al interpretarse en Suno suene con su pegada y estilo característicos.
-   - 🚫 REGLA DE ORO DE PRIVACIDAD & HIGIENE: Queda TERMINANTEMENTE PROHIBIDO mencionar el nombre del artista ("soy ${artist?.name ?? "X"}", "aquí ${artist?.name ?? "X"}") ni de otros artistas reales en la letra cantada o ad-libs. Tampoco calques anécdotas autobiográficas íntimas, familiares fallecidos ni nombres de bandas callejeras reales de su infancia. El parecido debe ser 100% por el FLOW, la MÉTRICA y la ACTITUD MUSICAL.
-5. **CERO RIMAS FORZADAS, SLANT RHYMES & CERO SERMÓN MORAL:**
-   - Slant Rhymes & Rima Asertiva: Usa rimas asonantes multi-silábicas (vowel-matching) y rimas internas fluidas. Queda TERMINANTEMENTE PROHIBIDO forzar consonancias absurdas o infantiles de guardería (*gelato/zapato*, *cuarto/parto*).
+   - El rapeo y la melodía del gancho DEBEN capturar de forma inconfundible el flow, la métrica, la cadencia y el bolsillo rítmico de ${hookArtist?.name ?? "el artista"} (${hookFlowProfile?.cadence?.toUpperCase() ?? "STACCATO"}) para que al interpretarse en Suno suene con su pegada y estilo característicos.
+   - 🚫 REGLA DE ORO DE PRIVACIDAD & HIGIENE: Queda TERMINANTEMENTE PROHIBIDO mencionar el nombre del artista ("soy ${hookArtist?.name ?? "X"}", "aquí ${hookArtist?.name ?? "X"}") ni de otros artistas reales en la letra cantada o ad-libs. Tampoco calques anécdotas autobiográficas íntimas, familiares fallecidos ni nombres de bandas callejeras reales de su infancia. El parecido debe ser 100% por el FLOW, la MÉTRICA y la ACTITUD MUSICAL.
+5. **RIMA AUDIBLE REAL & NATURALIDAD DE ESTUDIO (CERO ENCASILLAMIENTO):**
+   - Esquema de Rima Obligatorio: El estribillo DEBE rimar según el esquema asignado ${hookRhymeScheme?.label ?? "AABB"} (${hookRhymeScheme?.description ?? ""}). Queda prohibida la prosa suelta sin rima.
+   - Fonética de Rima de Estudio: Utiliza rimas consonantes naturales o rimas asonantes multi-silábicas (slant rhymes / vowel-matching como 'fuego/ceros' o 'pista/prisa'). Prohibidas consonancias forzadas e infantiles de guardería (*gelato/zapato*, *cuarto/parto*).
+   - Naturalidad de Estudio: Quedan terminantemente prohibidas las frases ortopédicas o traducciones automáticas de máquina (ej: 'piso frío el suelo', 'cuarzo fino'). Escribe con fluidez y sintaxis natural.
    - Show, Don't Preach: Queda PROHIBIDO usar eslóganes morales abstractos trillados de autoayuda (ej: "la lealtad no se vende", "lealtad hasta la tumba", "el dinero no compra la felicidad"). El estribillo debe construirse sobre imágenes sensoriales vivas, actitud cruda o una tensión física real.
-   - Argot Callejero Auténtico: Queda prohibido el lenguaje infantil o traducciones literales como "con el amigo" o "no sentimos temor". Usa "con mi socio", "con mi hermano", "sin pestañear".
 
 ${flowSkeletonSummary ? `\n# 📐 GUÍA DE RITMO Y CADENCIA GLOBAL (BEAT-FIRST):\n${flowSkeletonSummary}\n` : ""}
 # 📋 FORMATO DE SALIDA ESTRICTO:
@@ -1462,8 +1486,38 @@ export function buildStage2GhostwriterPrompt(
       }
     );
 
+    const isFeature = va?.voice === "feature" || (va?.voice === "auto" && s.name.toLowerCase().includes("feature") && !!featureArtist);
+    const sectionArtistId = isFeature && featureArtist ? featureArtist.id : params.artistId;
+    const sectionFlow = getFlowProfile(sectionArtistId);
+    const sectionRhymeId = customScheme?.id ?? sectionFlow?.defaultRhymeScheme ?? "rs_aabb";
+    const sectionRhyme = getRhymeSchemeById(sectionRhymeId);
+
+    const exactBars = va?.bars || (s.type === "verse" ? 8 : (s.type === "intro" || s.type === "outro") ? 4 : 8);
+    const barDirective = va?.bars ? `EXACTAMENTE ${va.bars} líneas cantadas` : `${exactBars} compases`;
+    const densityDirective = va?.density
+      ? ` | DENSIDAD: ${va.density === "sparse" ? "Sparse (3-5 pal/b)" : va.density === "normal" ? "Normal (5-8 pal/b)" : va.density === "dense" ? "Dense (8-11 pal/b)" : "X-Dense (12+ pal/b)"}`
+      : "";
+    const repPattern = va?.repetitionPattern && va.repetitionPattern !== "none" ? getRepetitionPatternById(va.repetitionPattern) : undefined;
+    const repDirective = repPattern ? ` | PATRÓN: ${repPattern.label}` : "";
+
     if (isChorus) {
-      return `[${s.name}: ${guide.fullHeaderTag}] — (REPETICIÓN OBLIGATORIA: Copia textualmente el GANCHO APROBADO oficial; la letra cantada debe ser idéntica al 100%, admitiendo variación interpretativa en ad-libs)`;
+      const hookVa = params.sectionVoices?.find(v => v.sectionName.toLowerCase().includes("chorus") || v.sectionName.toLowerCase().includes("hook"));
+      const hookMoodObj = hookVa?.hookMood && hookVa.hookMood !== "auto" ? MOODS.find(m => m.id === hookVa.hookMood) : undefined;
+      const hookStyleObj = hookVa?.hookStyle && hookVa.hookStyle !== "auto" ? getHookStyleOptionById(hookVa.hookStyle) : undefined;
+      const moodNote = hookMoodObj ? ` [CONTRASTE MOOD: ${hookMoodObj.label}]` : "";
+      const styleNote = hookStyleObj ? ` [ESTILO: ${hookStyleObj.label}]` : "";
+      return `[${s.name}: ${guide.fullHeaderTag}] — (REPETICIÓN OBLIGATORIA: Copia textualmente el GANCHO APROBADO oficial; la letra cantada debe ser idéntica al 100%, admitiendo variación interpretativa en ad-libs)${styleNote}${moodNote}`;
+    }
+
+    if (isTrading2x2 && featureArtist) {
+      const mainFlow = getFlowProfile(params.artistId);
+      const featFlow = getFlowProfile(featureArtist.id);
+      const mainRhyme = getRhymeSchemeById(customScheme?.id ?? mainFlow?.defaultRhymeScheme ?? "rs_aabb");
+      const featRhyme = getRhymeSchemeById(customScheme?.id ?? featFlow?.defaultRhymeScheme ?? "rs_aabb");
+      return `[${s.name}: ${guide.fullHeaderTag}] — ${barDirective} [TRADING 2x2: Bloques alternados de 2 compases con corte vocal]
+  * Bloque 1 (2 compases): [${artist?.name ?? "Lead"}] Flow ${mainFlow?.cadence?.toUpperCase()} (${mainRhyme?.label ?? "AABB"}) [Vocal Cut]
+  * Bloque 2 (2 compases): [${featureArtist.name}] Flow ${featFlow?.cadence?.toUpperCase()} (${featRhyme?.label ?? "AABB"}) [Vocal Cut]
+  * Continuar alternando en bloques de 2 compases hasta completar ${barDirective}.`;
     }
 
     if (isIntro && va?.introStyle && va.introStyle !== "auto") {
@@ -1482,10 +1536,10 @@ export function buildStage2GhostwriterPrompt(
       return `[${s.name}: ${guide.fullHeaderTag}] — 4 compases (Modo Hype Man: 🚫 PROHIBIDO ESCRIBIR VERSOS NARRATIVOS O LÍNEAS CANTADAS. Debe ser EXCLUSIVAMENTE 3 a 5 ad-libs y grunts entre paréntesis: ej: (Yeah... turn me up), (Hold up...), rematando con ([Beat Drop]))`;
     }
 
-    const bars = va?.bars ? `${va.bars} barras` : (s.type === "verse" ? "8-10 barras" : "4-8 barras");
-    return `[${s.name}: ${guide.fullHeaderTag}] — ${bars} [VOZ AUTORIZADA: ${guide.artistName}]`;
+    return `[${s.name}: ${guide.fullHeaderTag}] — ${barDirective}${densityDirective}${repDirective} [VOZ: ${guide.artistName} | FLOW: ${sectionFlow?.cadence?.toUpperCase() ?? "STACCATO"} (${sectionFlow?.speedLabel ?? "natural"}) | RIMA: ${sectionRhyme?.label ?? "AABB"} (${sectionRhyme?.description ?? ""})]`;
   }).join("\n");
 
+  const currentMood = MOODS.find(m => m.id === params.moodId) ?? { id: params.moodId, label: params.moodId, description: "" };
   const userTopicsList = [params.customTopic, ...params.topics].filter(Boolean);
   const framingData = resolveSemanticSceneFraming(params.topics, params.customTopic, params.situationalPresetId);
   const framing = framingData.framing;
@@ -1532,21 +1586,35 @@ ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 2. **Entidades Explícitas del Usuario (Preservación Inviolable):** Las temáticas pedidas por el usuario (${userTopicsList.length > 0 ? userTopicsList.join(", ") : "temas seleccionados"}) son elecciones deliberadas e inviolables. Queda TERMINANTEMENTE PROHIBIDO censurarlas, cambiarlas por perífrasis genéricas o considerarlas como 'contaminación corporativa'.
 3. **Memoria Negativa Radical & Cero Checklisting Inter-Estrofas:**
    - Prohibido rotar mecánicamente los mismos dominios metafóricos: si en el Verso 1 usas una analogía deportiva / de baloncesto (ej: Shaq), en el Verso 2 queda TERMINANTEMENTE PROHIBIDO volver a usar otra analogía de baloncesto (cero Kobe, cero NBA). Si en el Verso 1 hablas de coches, en el Verso 2 explora la mesa, el dinero en mano, la patrulla o la tensión entre socios.
-   - Prohibido el checklisting en bucle: NUNCA repitas la misma lista de ingredientes (teléfonos + jarabe + baloncesto) en cada estrofa como si fuera una plantilla. Cada verso debe traer objetos, ángulos y consecuencias completamente diferentes.
-4. **Cero Rimas Forzadas de Relleno & Maestría de Slant Rhymes (Multi-syllabic Vowel Matching):**
-   - Queda TERMINANTEMENTE PROHIBIDO forzar palabras o frases inconexas y absurdas solo para cerrar una rima consonante (ej: meter "salimos del zapato" para rimar con "gelato", o "contándolo en el parto" para rimar con "tercer cuarto").
-   - Utiliza RIMAS MULTI-SILÁBICAS ASONANTES (Slant Rhymes / Vowel Matching) como hacen los letristas de élite: coincidencia del patrón vocálico (ej: a-a-o ➔ candado / disparo / asfalto; e-a ➔ cerca / cuenta / frena) y rimas internas cruzadas a contratiempo.
-   - Si una palabra en posición de rima no suena 100% orgánica, creíble y con peso callejero en la escena, DESCÁRTALA de inmediato y reformula el compás. En el trap de estudio se premia la musicalidad del groove y la actitud mil veces más que un pareado escolar forzado.
+   - Prohibido el checklisting en bucle: NUNCA repitas la misma lista de ingredientes en cada estrofa como si fuera una plantilla. Cada verso debe traer objetos, ángulos y consecuencias completamente diferentes.
+4. **Rima Audible Real & Slant Rhymes Multi-silábicas (Cero Prosa Suelta):**
+   - Cada compás DEBE rimar según el esquema asignado a su artista o sección (AABB, ABAB, Triplets o Monorrima).
+   - Queda TERMINANTEMENTE PROHIBIDO escribir prosa partida en líneas sin rima sonora audible.
+   - Utiliza rimas consonantes naturales o rimas asonantes multi-silábicas (slant rhymes / vowel-matching: *fuego/ceros*, *pista/prisa*, *candado/disparo*).
+   - Quedan prohibidas las consonancias escolares forzadas de relleno o rimas infantiles.
    - Evita clichés trillados de IA: "suerte / muerte", "pena / vena", "el asfalto no perdona", "haciendo money sin parar".
 5. **Show, Don't Preach (Cero Sermón Moral de 'Lealtad'):**
    - Queda PROHIBIDO repetir palabras abstractas morales ("lealtad", "respeto", "traición") como eslóganes en cada sección ("la lealtad no se vende", "lealtad hasta la tumba").
-   - Muestra la lealtad a través de HECHOS Y CONDUCTAS físicas concretas (guardar silencio ante el fiscal, dividir el fardo en partes iguales, no desbloquear la pantalla), NUNCA predicándola como autoayuda.
-6. **Argot Callejero Auténtico vs. Traducciones Infantiles / Clínicas:**
-   - Prohibidas traducciones literales o construcciones infantiles de libro de texto: NUNCA uses "con el amigo", "en la zona de castigo", "no sentimos temor", "no hay mudanza". Usa el argot callejero orgánico y con filo: "con mi socio", "con mi hermano", "con la banda", "sin pestañear", "las cuentas claras".
-   - Queda PROHIBIDO usar términos formales, administrativos, jurídicos o clínicos de más de 4 sílabas (como "interrogatorio", "inversión financiera", "procedimiento policial"). Usa el vocabulario callejero conciso y con peso ("la estatal", "el fiscal", "el calabozo").
-7. **Flow Característico Sin Name-Dropping Ni Biografía Personal:**
+   - Muestra las vivencias a través de HECHOS Y CONDUCTAS físicas concretas, NUNCA predicándolas como sermones de autoayuda.
+6. **Libertad de Vocabulario, Tono Regional y Naturalidad de Estudio (Cero Encasillamiento):**
+   - Queda totalmente prohibido encasillar a la IA con listas obligatorias de palabras o vetos artificiales. El vocabulario es 100% libre y guiado orgánicamente por la temática del usuario.
+   - Adopta el tono y cadencia regional nativa del artista (${artist?.origin ?? "calle"}) con fluidez callejera humana creíble (ej: modismos orgánicos de PR, Argentina, España, Atlanta/Spanglish según corresponda).
+   - Cero construcciones ortopédicas o calcos de Google Translate: Prohibido redactar frases invertidas antinaturales (*'piso frío el suelo'*, *'cuarzo fino'*, *'corriendo en la cama'*). Las barras deben sonar a como habla y rapea un artista real en una cabina de grabación profesional.
+7. **Dinámica Lírica según el Mood (${currentMood.label.toUpperCase()}):**
+${currentMood.id === "agresivo" || currentMood.id === "oscuro" || currentMood.id === "menacing"
+  ? "   - Actitud Staccato Amenazante & Punchlines Cortantes: Compases secos de alta tensión, ataques rápidos con silencios cortados, ad-libs agresivos en contratiempo y barras de confrontación directa."
+  : currentMood.id === "flex" || currentMood.id === "fiesta" || currentMood.id === "confident"
+  ? "   - Bounce Elástico & Swagger Arrogante: Ritmo saltarín y bailable, barras de lujo y victoria con cadencia relajada pero dominante, rimas pegadizas de club y ad-libs de celebración tipo (Yeah), (Facts)."
+  : currentMood.id === "melancolico" || currentMood.id === "romantico" || currentMood.id === "nostalgic" || currentMood.id === "dreamy"
+  ? "   - Fraseo Melódico Arrastrado & Emoción Vulnerable: Entrega vocal con autotune etéreo/melódico, líneas que se alargan en el compás con '...', rimas asonantes envolventes y referencias emocionales profundas sin sonar infantil."
+  : "   - Realismo Testimonial Crudo & Reflexivo: Narrativa grounded en vivencias reales, detalles físicos del asfalto/bloque, ritmo metódico y sobrio, rimas asonantes densas y cero caricatura."}
+8. **Arquitectura Narrativa de los Versos (Adaptativa):**
+${currentMood.id === "flex" || currentMood.id === "fiesta"
+  ? "   - Estilo Libre de Flex & Barras de Impacto: Compases centrados en punchlines potentes, juegos de palabras, actitud dominante y barras de lujo sin atarse rígidamente a una historia cronológica continua."
+  : "   - Celdas de 4 Compases con Causa-Efecto Cinematográfica: Cada 4 compases desarrollan una micro-escena coherente (Setup -> Detalle Físico -> Tensión/Giro -> Punchline/Remate), conectadas con causalidad física tangible para evitar saltos inconexos de tema."}
+9. **Flow Característico Sin Name-Dropping Ni Biografía Personal:**
    - La canción debe sonar y fluir idéntica al rapeo característico de los artistas elegidos (${artist?.name ?? "Lead"}${featureArtist ? ` y ${featureArtist.name}` : ""}) — su cadencia, métrica, sílabas por compás, síncopa y actitud musical. Pero está TERMINANTEMENTE PROHIBIDO escribir en las barras o ad-libs los nombres de los artistas ("soy ${artist?.name ?? "X"}", "aquí ${featureArtist?.name ?? "Y"}"), mencionar a otros artistas reales, o calcar tragedias biográficas íntimas, familiares fallecidos o nombres de bandas callejeras reales de su infancia. El oyente debe identificar al artista por su FLOW Y SU VOZ EN SUNO, nunca porque el texto diga su nombre.
-8. **Higiene de Metadatos de Sistema:** Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la bio del artista (como 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
+10. **Higiene de Metadatos de Sistema:** Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la bio del artista (como 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
 
 ================================================================================
 # 📜 CONTRATO 2: NARRATIVA, ESTRUCTURA & HYPE MAN (NARRATIVE CONTRACT)
@@ -1564,9 +1632,13 @@ Si la [Intro] está en modo Hype Man o tiene asignado 'Hype', queda TERMINANTEME
 ================================================================================
 # 📜 CONTRATO 3: FLOW & MOTOR RÍTMICO (FLOW & RHYTHM CONTRACT)
 ================================================================================
-- Flow DNA (${artist?.name}): Cadencia ${mainDNA.flow.cadenceType} (${mainDNA.flow.avgSyllablesPerBar.join("-")} sílabas por compás). Síncopa: ${Math.round(mainDNA.flow.syncopation * 100)}%. Velocidad: ${flowProfile?.speedLabel ?? "natural"}. ${flowProfile?.cadenceInstruction ?? ""}
-${featDNA ? `- Flow Feature (${featureArtist?.name}): Cadencia ${featDNA.flow.cadenceType} (${featDNA.flow.avgSyllablesPerBar.join("-")} sílabas por compás). Velocidad: ${featureFlowProfile?.speedLabel ?? "natural"}. ${featureFlowProfile?.cadenceInstruction ?? ""}` : ""}
+- Flow DNA (${artist?.name}): Cadencia ${flowProfile?.cadence?.toUpperCase() ?? mainDNA.flow.cadenceType} (${mainDNA.flow.avgSyllablesPerBar.join("-")} sílabas/compás). Velocidad: ${flowProfile?.speedLabel ?? "natural"}. Esquema Nativo: ${getRhymeSchemeById(customScheme?.id ?? flowProfile?.defaultRhymeScheme ?? "rs_aabb")?.label ?? "AABB"}. ${flowProfile?.cadenceInstruction ?? ""}
+${featDNA ? `- Flow Feature (${featureArtist?.name}): Cadencia ${featureFlowProfile?.cadence?.toUpperCase() ?? featDNA.flow.cadenceType} (${featDNA.flow.avgSyllablesPerBar.join("-")} sílabas/compás). Velocidad: ${featureFlowProfile?.speedLabel ?? "natural"}. Esquema Nativo: ${getRhymeSchemeById(customScheme?.id ?? featureFlowProfile?.defaultRhymeScheme ?? "rs_aabb")?.label ?? "AABB"}. ${featureFlowProfile?.cadenceInstruction ?? ""}` : ""}
 ${featureContrast ? `${featureContrast.instruction}\n` : ""}- ${rhymeLevelInstruction}
+
+- 🚨 DIRECTIVA DE RIMA OBLIGATORIA: CERO PROSA SUELTA. Cada sección debe respetar el esquema de rima asignado al artista que la interpreta. Todas las barras deben rimar auditivamente (consonante natural o asonante multi-silábica/slant rhyme). Se prohíben líneas huérfanas sin rima.
+
+- 🎚️ FUSIÓN HÍBRIDA DE DENSIDAD: Si la sección especifica una densidad manual de palabras (Sparse 3-5, Normal 5-8, Dense 8-11, X-Dense 12+), adapta la velocidad del artista dentro de ese rango manteniendo sus figuras rítmicas e inflexiones características.
 
 - 🎯 BOLSILLO MÉTRICO ESTRICTO POR COMPÁS (${artist?.name}):
   * Ventana Silábica: ${mainMinSyl} a ${mainMaxSyl} sílabas cantadas por línea (LÍMITE MÁXIMO ABSOLUTO: ${mainCeiling} sílabas).
@@ -1586,9 +1658,6 @@ Cada célula o bloque de 4 compases debe mantener estricta continuidad física y
 - Compás 4: Cierra con una consecuencia tangible o punchline de remate que conecta con el compás siguiente.
 🚫 PROHIBIDO EL TELETRANSPORTE ESCÉNICO: Las barras dentro de cada célula y entre células adyacentes DEBEN estar conectadas por causa-efecto. Si la escena ocurre en la autopista de noche (coches, luces, maleta), NO puedes saltar en el siguiente compás a estar tirando canastas en un pabellón o cantando en una cabina. Si introduces una analogía (ej: deportiva), debe ser una metáfora breve que NO abandone el escenario físico real.
 
-🔄 RIMA Y DENSIDAD VARIABLE:
-Se permiten compases hablados (spoken bars), silencios rítmicos y rimas internas asonantes. La rima nunca debe forzar o gobernar la frase de forma artificial.
-
 ${flowSkeletonSnippet ? `${flowSkeletonSnippet}\n\n` : ""}${writingCellsSnippet ? `${writingCellsSnippet}\n\n` : `🔄 FLOW SWITCHING DINÁMICO EN CADA VERSO:
 En cada verso, ejecuta una progresión dinámica para evitar monotonía:
 1. Pacing & Atmósfera: Entrada espaciosa, ritmo pausado, establece la escena con detalles visuales concretos.
@@ -1599,12 +1668,13 @@ En cada verso, ejecuta una progresión dinámica para evitar monotonía:
 # 📜 CONTRATO 4: CAPA VOCAL, PERFORMANCE & AD-LIBS MASTER (VOCAL CONTRACT)
 ================================================================================
 Como Director Vocal, incorpora la capa de performance con criterio musical:
-1. **Ad-libs con Significación & Regla 2x2 de Performance:**
+1. **Ad-libs Limpios y Universales & Regla 2x2 de Respiración:**
+   - Ad-libs de Actitud Universales: Utiliza ad-libs limpios y efectivos en contratiempo: (Yeah), (Facts), (Uh), (Hold up), (Never), (No cap), o ecos de la última palabra.
    - Regla 2x2 de Respiración: En versos de 8 a 16 barras, alterna compases limpios (2 compases seguidos donde la voz principal y el bajo 808 mandan sin ad-libs de distracción) con compases que llevan ad-libs puntuales en los huecos o contratiempos.
    - LÍMITE DE CONSECUTIVIDAD: Máximo 2 compases seguidos con ad-lib (maxConsecutiveAdlibBars = 2).
    - Deja compases limpios para que la voz principal y el beat respiren con fuerza.
    - Presupuesto por sección: En Versos: moderado (~40-50% de las barras con ad-lib); en Coros: bajo/moderado; en Outro: sutil/sparse.
-   - Prioriza réplicas con personalidad: colas melódicas *(no me busques...)*, réplicas cínicas *(¿quién si no?)*, *(facts)*. PROHIBIDO muletillas vacías repetitivas en bucle.
+   - PROHIBIDO muletillas infantiles o sonidos caricaturescos repetidos en bucle.
 2. **Call & Response Dialéctico:**
    ${callResponseSections.length > 0 ? `- En las secciones ${callResponseSections.join(", ")}, las líneas líderes deben recibir réplicas dialécticas directas en contratiempo: Voz: "Hablan de lealtad pero no los vi..." ➔ Ad-lib: *(nunca)*.` : "- Si hay diálogos o respuestas, hazlos dialécticos con personalidad."}
 3. **Dinámica Acústica Suno AI:**
