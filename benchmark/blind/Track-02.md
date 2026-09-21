@@ -1,0 +1,154 @@
+# Track-02 (Evaluación a Ciegas)
+> **Instrucciones para Revisión Humana**:
+> 1. Marca las barras memorables que te harían detener la reproducción ("¿Coño, esta sí?").
+> 2. Evalúa Generic Substitutability Rate (0 = única de esta escena, 1 = parcial, 2 = intercambiable con cualquier trap).
+> 3. Evalúa Scene Dependency (0 = independiente, 1 = contextual, 2 = inseparable del escenario).
+
+```suno
+[Intro: Future - deep raspy autotune, spoken whisper intro]
+(Pluto... yeah)
+(Burner ready in the trap house)
+(Cash counting all night)
+
+[Verse 1: Future - deep raspy auto-tune, aggressive triplet flow]
+Tengo el burner en la mesa con el dirty cash
+Cuento cien mil racks, nunca miro hacia atrás
+Los opps están mirando desde el callejón
+Tengo a mis kekos listos para la acción
+Plomo en la esquina si intentan cruzar
+Mucho humo en el aire, no puedo parar
+Gang in the building, money on my mind
+Treinta mil dólares en la hoodie design
+Diamonds congelados brillando en el hood
+Saben que en la calle mantengo el mood
+Phones ringing loud pero no voy a contestar
+Haciendo mucho money hasta el amanecer
+Los tiradores esperando la señal
+Cero lealtad en este juego mortal
+Mucho plomo, mucha sangre en el trap
+Todo lo que digo es puro rap
+
+[Chorus: Future - layered autotune harmonies, wide anthemic vocal stack]
+Tengo el burner en la mesa con el dirty cash (cash)
+Cuento cien mil racks, nunca miro hacia atrás (never)
+Los opps están mirando desde el callejón (facts)
+Tengo a mis kekos listos para la acción
+Plomo en la esquina si intentan cruzar
+Mucho humo en el aire, no puedo parar
+Gang in the building, money on my mind
+Treinta mil dólares en la hoodie design
+Diamonds congelados brillando en el hood
+Saben que en la calle mantengo el mood
+Phones ringing loud pero no voy a contestar
+Haciendo mucho money hasta el amanecer
+Los tiradores esperando la señal
+Cero lealtad en este juego mortal
+Mucho plomo, mucha sangre en el trap
+Todo lo que digo es puro rap
+Mucho cash en la mesa, no puedo confiar
+Los opps en la esquina me quieren frenar
+Burner en la mano, contando los racks
+Todo mi corillo sabe de verdad (cash)
+Mucho cash en la mesa, no puedo confiar (never)
+Los opps en la esquina me quieren frenar (facts)
+Burner en la mano, contando los racks
+Todo mi corillo sabe de verdad
+Entro con la tropa quemando la acera
+Cien mil en la cuenta de cualquier manera
+Plomo para el que intente faltar el respeto
+Tengo a todos los míos cuidando el secreto
+El dinero no duerme en la ciudad de cristal
+Caminando en la oscuridad sin mirar el final
+Smoke in the air con la gang en el jet
+Cien mil más en el último bet
+Los opps se esconden cuando baja el fuego
+Yo nunca pierdo cuando entro en el juego
+Cash, money, plomo y lealtad
+Viviendo en el trap toda mi realidad
+Nadie me frena, subiendo de nivel
+Cien mil diamantes brillando en la piel
+Sigo en el bloque con todo mi clan
+Haciendo dinero como manda el plan
+Mucho cash en la mesa, no puedo confiar
+Los opps en la esquina me quieren frenar
+Burner en la mano, contando los racks
+Todo mi corillo sabe de verdad (cash)
+Mucho cash en la mesa, no puedo confiar (never)
+Los opps en la esquina me quieren frenar (facts)
+Burner en la mano, contando los racks
+Todo mi corillo sabe de verdad
+
+[Verse 2: Future - fast articulate triplet flow, rapid pocket]
+Entro con la tropa quemando la acera
+Cien mil en la cuenta de cualquier manera
+Plomo para el que intente faltar el respeto
+Tengo a todos los míos cuidando el secreto
+El dinero no duerme en la ciudad de cristal
+Caminando en la oscuridad sin mirar el final
+Smoke in the air con la gang en el jet
+Cien mil más en el último bet
+Los opps se esconden cuando baja el fuego
+Yo nunca pierdo cuando entro en el juego
+Cash, money, plomo y lealtad
+Viviendo en el trap toda mi realidad
+Nadie me frena, subiendo de nivel
+Cien mil diamantes brillando en la piel
+Sigo en el bloque con todo mi clan
+Haciendo dinero como manda el plan
+
+[Chorus: Future - layered autotune harmonies, wide anthemic vocal stack]
+Tengo el burner en la mesa con el dirty cash (cash)
+Cuento cien mil racks, nunca miro hacia atrás (never)
+Los opps están mirando desde el callejón (facts)
+Tengo a mis kekos listos para la acción
+Plomo en la esquina si intentan cruzar
+Mucho humo en el aire, no puedo parar
+Gang in the building, money on my mind
+Treinta mil dólares en la hoodie design
+Diamonds congelados brillando en el hood
+Saben que en la calle mantengo el mood
+Phones ringing loud pero no voy a contestar
+Haciendo mucho money hasta el amanecer
+Los tiradores esperando la señal
+Cero lealtad en este juego mortal
+Mucho plomo, mucha sangre en el trap
+Todo lo que digo es puro rap
+Mucho cash en la mesa, no puedo confiar
+Los opps en la esquina me quieren frenar
+Burner en la mano, contando los racks
+Todo mi corillo sabe de verdad (cash)
+Mucho cash en la mesa, no puedo confiar (never)
+Los opps en la esquina me quieren frenar (facts)
+Burner en la mano, contando los racks
+Todo mi corillo sabe de verdad
+Entro con la tropa quemando la acera
+Cien mil en la cuenta de cualquier manera
+Plomo para el que intente faltar el respeto
+Tengo a todos los míos cuidando el secreto
+El dinero no duerme en la ciudad de cristal
+Caminando en la oscuridad sin mirar el final
+Smoke in the air con la gang en el jet
+Cien mil más en el último bet
+Los opps se esconden cuando baja el fuego
+Yo nunca pierdo cuando entro en el juego
+Cash, money, plomo y lealtad
+Viviendo en el trap toda mi realidad
+Nadie me frena, subiendo de nivel
+Cien mil diamantes brillando en la piel
+Sigo en el bloque con todo mi clan
+Haciendo dinero como manda el plan
+Mucho cash en la mesa, no puedo confiar
+Los opps en la esquina me quieren frenar
+Burner en la mano, contando los racks
+Todo mi corillo sabe de verdad (cash)
+Mucho cash en la mesa, no puedo confiar (never)
+Los opps en la esquina me quieren frenar (facts)
+Burner en la mano, contando los racks
+Todo mi corillo sabe de verdad
+
+[Outro: Future - echoing vocal fade, sudden cutoff]
+(Yeah... racks on racks)
+(Freebandz)
+(Pluto)
+(Fade out)
+```

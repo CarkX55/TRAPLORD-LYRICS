@@ -1,0 +1,75 @@
+# Track-04 (Evaluación a Ciegas)
+> **Instrucciones para Revisión Humana**:
+> 1. Marca las barras memorables que te harían detener la reproducción ("¿Coño, esta sí?").
+> 2. Evalúa Generic Substitutability Rate (0 = única de esta escena, 1 = parcial, 2 = intercambiable con cualquier trap).
+> 3. Evalúa Scene Dependency (0 = independiente, 1 = contextual, 2 = inseparable del escenario).
+
+```suno
+[Intro: Future - spoken whisper intro, filtered vocal]
+(Yeah... turn the lights down)
+4:37 en el reloj... (shhh)
+La patrulla no apaga las luces en la esquina
+(Look)
+
+[Verse 1: Future - deep raspy autotune, slurred cadence]
+La persiana metálica tocando el suelo
+El zumbido del fridge cortando el hielo
+Tres llamadas perdidas de un número sin nombre
+En este bloque el silencio te descompone
+Tengo la llave del BM en la encimera
+Cenicero colmado de ceniza negra
+La chaqueta impermeable huele a gasolina
+Miro por la mirilla la bombilla vecina
+No me fío del eco que sube en el descansillo
+El ascensor parado en el piso amarillo
+Cuentas de banco llenas pero el aire pesa
+El metal del cerrojo frío en la cabeza
+Dime quién vendió la ruta del coche
+Llevo cuatro cafés aguantando la noche
+Si bajan la escalera no voy a correr
+Preparo el teléfono y dejo caer...
+
+[Chorus: Future - layered autotune harmonies, anthemic dark hook]
+El teléfono vibra contra el cristal (vibra)
+Luces azules cruzando el portal (no miro)
+Saben que tengo la llave del BM
+Pero esta noche nadie nos defiende
+El teléfono vibra contra el cristal (vibra)
+Luces azules cruzando el portal
+Cuento los pasos bajando la acera
+Paranoia fría que no se congela
+
+[Verse 2: Future - intense focused delivery, urgent cadence]
+Se corta la llamada de golpe en la mesa
+Se escucha un portazo que rompe la pieza
+Cerraron la puerta del coche abajo
+Miro entre las ranuras buscando el atajo
+Ya no parpadean las luces de freno
+Alguien bajó en la esquina con el rostro sereno
+No era la policía buscando el fardo
+Era el vecino del cuarto aparcando tardo
+La sangre me baja, se suelta el cerrojo
+Pero la desconfianza no cierra los ojos
+Guardo el teléfono dentro del bolsillo
+Limpio la ceniza que mancha el pasillo
+Si vuelven a sonar las cuatro de nuevo
+Ya estaré lejos donde no haya fuego
+Cojo la chaqueta y apago el salón
+El miedo es un negocio de pura precisión
+
+[Chorus: Future - layered autotune harmonies, anthemic dark hook]
+El teléfono vibra contra el cristal (vibra)
+Luces azules cruzando el portal (no miro)
+Saben que tengo la llave del BM
+Pero esta noche nadie nos defiende
+El teléfono vibra contra el cristal (vibra)
+Luces azules cruzando el portal
+Cuento los pasos bajando la acera
+Paranoia fría que no se congela
+
+[Outro: Future - echoing vocal fade, heavy 808 sub bass]
+(Apaga la estática...)
+Las llaves en la mano
+El motor se escucha lejos en la lluvia
+(Gone)
+```

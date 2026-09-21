@@ -1,0 +1,12 @@
+{
+  "scenarioId": "paranoia_nocturna",
+  "scenarioTitle": "Paranoia a las 4 AM",
+  "artistId": "future",
+  "bpm": 135,
+  "structure": "standard",
+  "n": 1,
+  "model": "gemini-2.0-flash",
+  "temperature": 0.72,
+  "topP": 0.95,
+  "timestamp": "2026-09-21T00:04:21.187Z"
+}

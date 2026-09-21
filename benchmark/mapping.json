@@ -1,0 +1,22 @@
+[
+  {
+    "blindId": "Track-01",
+    "trackId": "D",
+    "replicateIndex": 1
+  },
+  {
+    "blindId": "Track-02",
+    "trackId": "A",
+    "replicateIndex": 1
+  },
+  {
+    "blindId": "Track-03",
+    "trackId": "B",
+    "replicateIndex": 1
+  },
+  {
+    "blindId": "Track-04",
+    "trackId": "C",
+    "replicateIndex": 1
+  }
+]
