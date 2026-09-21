@@ -1336,6 +1336,9 @@ ${goldExamples.map(g => `- **${g.technique}** (${g.description}):\n  Barra 1: "$
 4. **FLOW CARACTERÍSTICO DEL ARTISTA (SIN NAME-DROPPING NI BIOGRAFÍA PERSONAL):**
    - El rapeo y la melodía del gancho DEBEN capturar de forma inconfundible el flow, la métrica, la cadencia y el bolsillo rítmico del artista original (${artist?.name ?? "el artista"}) para que al interpretarse en Suno suene con su pegada y estilo característicos.
    - 🚫 REGLA DE ORO DE PRIVACIDAD & HIGIENE: Queda TERMINANTEMENTE PROHIBIDO mencionar el nombre del artista ("soy ${artist?.name ?? "X"}", "aquí ${artist?.name ?? "X"}") ni de otros artistas reales en la letra cantada o ad-libs. Tampoco calques anécdotas autobiográficas íntimas, familiares fallecidos ni nombres de bandas callejeras reales de su infancia. El parecido debe ser 100% por el FLOW, la MÉTRICA y la ACTITUD MUSICAL.
+5. **CERO RIMAS FORZADAS & CERO SERMÓN MORAL ABSTRACTO:**
+   - Sentido sobre rima: Queda TERMINANTEMENTE PROHIBIDO forzar palabras o frases inconexas y absurdas solo para cuadrar una rima consonante. Si una palabra suena artificial en la calle, usa rima asonante.
+   - Show, Don't Preach: Queda PROHIBIDO usar eslóganes morales abstractos trillados de autoayuda (ej: "la lealtad no se vende", "lealtad hasta la tumba", "el dinero no compra la felicidad"). El estribillo debe construirse sobre imágenes sensoriales vivas, actitud cruda o una tensión física real.
 
 ${flowSkeletonSummary ? `\n# 📐 GUÍA DE RITMO Y CADENCIA GLOBAL (BEAT-FIRST):\n${flowSkeletonSummary}\n` : ""}
 # 📋 FORMATO DE SALIDA ESTRICTO:
@@ -1492,13 +1495,24 @@ ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 - Tensión Dramática: ${framing.tension}
 - Función en la Canción: ${framing.dramaticFunction}
 
-🚫 REGLAS DE VOCABULARIO, FLOW Y AUTENTICIDAD:
-1. **Fidelidad al Mundo Configurado por el Usuario (Cero Atrezzo Desconectado):** Desarrolla la narrativa, imaginería y metáforas ancladas firmemente en las temáticas elegidas por el usuario y los elementos físicos de la situación escénica configurada en la pantalla. Queda terminantemente prohibido meter objetos arbitrarios o comerciales fuera de lugar que no pertenezcan ni a la temática ni a la escena seleccionada.
+🚫 REGLAS DE VOCABULARIO, FLOW Y AUTENTICIDAD DE ESTUDIO:
+1. **Fidelidad al Mundo Configurado & No-Reciclaje del Gancho:** Desarrolla la narrativa, imaginería y metáforas ancladas en las temáticas elegidas por el usuario y los elementos físicos de la situación escénica configurada en la pantalla. Los Versos deben avanzar la historia aportando NUEVOS objetos y situaciones. Queda TERMINANTEMENTE PROHIBIDO reciclar o copiar en los versos los mismos objetos físicos que ya aparecen en el Estribillo (si el estribillo ya fijó teléfonos, jarabe o luces, los versos deben explorar otros elementos: la maleta, el motor, la lluvia, el asfalto, las llaves, la celda, el fardo o la desconfianza).
 2. **Entidades Explícitas del Usuario (Preservación Inviolable):** Las temáticas pedidas por el usuario (${userTopicsList.length > 0 ? userTopicsList.join(", ") : "temas seleccionados"}) son elecciones deliberadas e inviolables. Queda TERMINANTEMENTE PROHIBIDO censurarlas, cambiarlas por perífrasis genéricas o considerarlas como 'contaminación corporativa'.
-3. **Memoria Negativa Inter-Estrofas:** Si usas un concepto o metáfora en el Verso 1, no lo repitas en el Verso 2. Haz que la historia avance con consecuencias.
-4. **Cero Clichés Baratos de IA:** Evita rimas escolares automáticas (suerte/muerte, pena/vena, etc.) y frases gastadas como "el asfalto no perdona" o "haciendo money sin parar". Prioriza la escena física y el peso de calle real.
-5. **Flow Característico Sin Name-Dropping Ni Biografía Personal:** La canción debe sonar y fluir idéntica al rapeo característico de los artistas elegidos (${artist?.name ?? "Lead"}${featureArtist ? ` y ${featureArtist.name}` : ""}) — su cadencia, métrica, sílabas por compás, síncopa y actitud musical. Pero está TERMINANTEMENTE PROHIBIDO escribir en las barras o ad-libs los nombres de los artistas ("soy ${artist?.name ?? "X"}", "aquí ${featureArtist?.name ?? "Y"}"), mencionar a otros artistas reales, o calcar tragedias biográficas íntimas, familiares fallecidos o nombres de bandas callejeras reales de su infancia. El oyente debe identificar al artista por su FLOW Y SU VOZ EN SUNO, nunca porque el texto diga su nombre.
-6. **Higiene de Metadatos de Sistema:** Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la bio del artista (como 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
+3. **Memoria Negativa Radical & Cero Checklisting Inter-Estrofas:**
+   - Prohibido rotar mecánicamente los mismos dominios metafóricos: si en el Verso 1 usas una analogía deportiva / de baloncesto (ej: Shaq), en el Verso 2 queda TERMINANTEMENTE PROHIBIDO volver a usar otra analogía de baloncesto (cero Kobe, cero NBA). Si en el Verso 1 hablas de coches, en el Verso 2 explora la mesa, el dinero en mano, la patrulla o la tensión entre socios.
+   - Prohibido el checklisting en bucle: NUNCA repitas la misma lista de ingredientes (teléfonos + jarabe + baloncesto) en cada estrofa como si fuera una plantilla. Cada verso debe traer objetos, ángulos y consecuencias completamente diferentes.
+4. **Cero Rimas Forzadas de Relleno Sin Sentido (Sentido y Flow sobre Consonancia Infantil):**
+   - Queda TERMINANTEMENTE PROHIBIDO forzar palabras o frases inconexas y absurdas solo para cerrar una rima consonante (ej: meter "salimos del zapato" para rimar con "gelato", o "contándolo en el parto" para rimar con "tercer cuarto").
+   - Si una palabra no encaja de forma 100% natural, orgánica y creíble en la escena de calle, DESCÁRTALA. Prioriza rimas asonantes con groove, rimas internas o reformula la barra. En el rap contemporáneo se valora el flow y la actitud mil veces más que una rima consonante escolar forzada.
+   - Evita clichés trillados de IA: "suerte / muerte", "pena / vena", "el asfalto no perdona", "haciendo money sin parar".
+5. **Show, Don't Preach (Cero Sermón Moral de 'Lealtad'):**
+   - Queda PROHIBIDO repetir palabras abstractas morales ("lealtad", "respeto", "traición") como eslóganes en cada sección ("la lealtad no se vende", "lealtad hasta la tumba").
+   - Muestra la lealtad a través de HECHOS Y CONDUCTAS físicas concretas (guardar silencio ante el fiscal, dividir el fardo en partes iguales, no desbloquear la pantalla), NUNCA predicándola como autoayuda.
+6. **Cero Vocabulario Clínico/Burocrático Hiper-Largo:**
+   - Queda PROHIBIDO usar términos formales, administrativos, jurídicos o clínicos de más de 4 sílabas (como "interrogatorio", "inversión financiera", "procedimiento policial"). Usa el vocabulario callejero conciso y con peso ("la estatal", "el juez", "el calabozo").
+7. **Flow Característico Sin Name-Dropping Ni Biografía Personal:**
+   - La canción debe sonar y fluir idéntica al rapeo característico de los artistas elegidos (${artist?.name ?? "Lead"}${featureArtist ? ` y ${featureArtist.name}` : ""}) — su cadencia, métrica, sílabas por compás, síncopa y actitud musical. Pero está TERMINANTEMENTE PROHIBIDO escribir en las barras o ad-libs los nombres de los artistas ("soy ${artist?.name ?? "X"}", "aquí ${featureArtist?.name ?? "Y"}"), mencionar a otros artistas reales, o calcar tragedias biográficas íntimas, familiares fallecidos o nombres de bandas callejeras reales de su infancia. El oyente debe identificar al artista por su FLOW Y SU VOZ EN SUNO, nunca porque el texto diga su nombre.
+8. **Higiene de Metadatos de Sistema:** Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la bio del artista (como 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
 
 ================================================================================
 # 📜 CONTRATO 2: NARRATIVA, ESTRUCTURA & HYPE MAN (NARRATIVE CONTRACT)

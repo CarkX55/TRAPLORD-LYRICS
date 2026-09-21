@@ -238,6 +238,8 @@ export const AUDIT_MORALIZING_TROPES: readonly RegExp[] = [
   /\bla traici[óo]n se paga cara\b/i,
   /\bla lealtad no se vende\b/i,
   /\bla lealtad vale m[áa]s que\b/i,
+  /\blealtad hasta la tumba\b/i,
+  /\bla lealtad se paga con\b/i,
 ];
 
 export const AUDIT_SPORTS_BROADCAST: readonly RegExp[] = [
