@@ -878,11 +878,11 @@ ${pocketGuideline}
 ${params.syllableSync ? "- **Sincronización Silábica**: Métrica estricta y simétrica compás a compás.\n" : ""}${params.phoneticAdlibs ? "- **Ad-libs Fonéticos**: Usa ad-libs fonéticos percusivos (brrr, skrrt, prr, woo, fah).\n" : ""}- **Puntuación Rítmica**: Utiliza comas ',' y puntos suspensivos '...' para marcar los silencios y respiraciones del cantante.
 - **Rimas Orgánicas**: ${customScheme ? `Sigue rigurosamente el esquema ${customScheme.pattern} (${customScheme.label}).` : "Rimas AABB o ABAB fluidas."}
 - **Dinámica Acústica Suno v4.5**: Puedes intercalar etiquetas acústicas como '[Vocal Cut]' en la barra de remate antes del estribillo, '[Beat Drop: Sub bass drop]' o '[Layered Chorus: stereo autotune harmonies]' para abrir coros en estéreo.
-- **Prohibido**: JAMÁS menciones el nombre real o apodo de ningún artista en la letra cantada a menos que sea un ad-lib propio.
+- **Prohibido**: JAMÁS menciones el nombre real o apodo de ningún artista en la letra cantada ni en los ad-libs. El reconocimiento debe ser 100% por el flow, la métrica y la actitud rítmica.
 
 # 🎤 DIRECTIVA GHOSTWRITER UNIVERSAL: ADN MUSICAL, CERO BIOGRAFÍA PRIVADA
-1. **ADN MUSICAL Y MOTOR DE RITMO:** Emula el motor rítmico, el pocket silábico, la acentuación, las pausas y la psicología del artista (${artist?.name ?? "Lead"}), pero aplicados a la ESCENA DRAMÁTICA Y CONCEPTO ACTUAL.
-2. **PROHIBIDO EL COSPLAY BIOGRÁFICO:** Queda TERMINANTEMENTE PROHIBIDO calcar anécdotas autobiográficas íntimas del artista real: no nombres a familiares reales fallecidos, ni antecedentes policiales privados, ni pandillas de su infancia concreta. El artista es un lente estilístico y de cadencia, no un personaje biográfico prestado.
+1. **ADN MUSICAL Y MOTOR DE RITMO:** Emula el motor rítmico, el pocket silábico, la acentuación, las pausas y la actitud del artista (${artist?.name ?? "Lead"}), para que el rapeo en Suno suene idéntico al artista original, pero aplicado al CONCEPTO Y SITUACIÓN ACTUAL.
+2. **CERO NAME-DROPPING & CERO COSPLAY BIOGRÁFICO:** Queda TERMINANTEMENTE PROHIBIDO escribir en las barras o ad-libs el nombre de los artistas ("soy ${artist?.name ?? "X"}") ni calcar anécdotas autobiográficas íntimas del artista real: no nombres a familiares reales fallecidos, ni antecedentes policiales privados, ni pandillas de su infancia concreta. El artista es un motor estilístico y de cadencia, no un personaje biográfico prestado.
 
 # 🚫 FILTRO ANTI-ENCASILLAMIENTO & DIVERSIFICACIÓN LÉXICA (ANTI-CHECKLIST)
 1. **PROHIBIDO EL CHECKLISTING:** No trates los ad-libs, jerga o temas como una lista de compras que deba aparecer en cada compás. Queda terminantemente prohibido rotar los mismos 4 sustantivos en bucle (ej: mencionar weed, crypto, dinero y mujeres en cada estrofa como si fuera una tabla de Excel).
@@ -1263,6 +1263,14 @@ export function buildStage1ToplinePrompt(
 
   const kw = hookVa?.customKeyword?.trim();
 
+  let sceneBlock = "";
+  if (params.situationalPresetId && params.situationalPresetId !== "none") {
+    const sitScene = getSceneById(params.situationalPresetId);
+    if (sitScene) {
+      sceneBlock = `\n- **Escenario Físico & Situación**: ${sitScene.title} (${sitScene.atmosphere}) — Tensión: ${sitScene.conflict}`;
+    }
+  }
+
   const userTopicsList = [params.customTopic, ...params.topics].filter(Boolean);
   const topicIntents = userTopicsList.map(classifyTopicIntent);
   const namedEntities = topicIntents.filter(t => t.kind === "named_entity").map(t => t.value);
@@ -1281,11 +1289,12 @@ Tu misión en esta sesión de estudio es componer EXCLUSIVAMENTE UN ÚNICO [Chor
 # 🎯 PROYECTO & ADN DEL ARTISTA
 - Artista Principal: ${artist?.name ?? "Lead"} (${artist?.origin ?? "Trap"})
 - Timbre & Entrega Vocal: ${mainDNA.vocal.sunoVocalTimbre} | Rango Melódico: ${mainDNA.vocal.melodicRange}
-${flowProfile?.cadenceInstruction ? `- Cadencia y Flow característico: ${flowProfile.cadenceInstruction}` : ""}
+- Motor Rítmico de Flow: Cadencia ${mainDNA.flow.cadenceType} (${mainDNA.flow.avgSyllablesPerBar.join("-")} sílabas por compás) | Velocidad/Sensación: ${flowProfile?.speedLabel ?? "natural trap pocket"}
+${flowProfile?.cadenceInstruction ? `- Instrucción de Cadencia: ${flowProfile.cadenceInstruction}` : ""}
 ${featureArtist ? `- Feature: ${featureArtist.name} (${featureArtist.origin})` : ""}
 - Tempo: ${params.bpmVibe.range} BPM (${params.bpmVibe.label})
 - Nivel de Actitud / Dirty: ${dirty.label} (${dirty.badge})
-${topicsBlock}
+${topicsBlock}${sceneBlock}
 ${params.customDictionary?.trim() ? `- Diccionario de calle del usuario: { ${params.customDictionary.trim()} }` : ""}
 ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 
@@ -1315,15 +1324,18 @@ ${goldExamples.map(g => `- **${g.technique}** (${g.description}):\n  Barra 1: "$
 1. **FRASEO MUSICAL Y BARRAS COMPLETAS:**
    - Escribe compases que fluyan con ritmo natural, swing y musicalidad real.
    - Queda TERMINANTEMENTE PROHIBIDO sonar a telegrama inconexo o lista de palabras sueltas. El estribillo debe tener melodía, sentido y pegada.
-2. **VOCABULARIO ORGÁNICO (CERO PALABRAS INYECTADAS):**
-   - Desarrolla el gancho basándote ÚNICAMENTE en las temáticas elegidas por el usuario y el vocabulario callejero característico de ${artist?.name ?? "el artista"}.
-   - Queda TERMINANTEMENTE PROHIBIDO inventar o forzar objetos de atrezzo artificiales no pedidos (como OLED, mármol, etc.).
+2. **VOCABULARIO ORGÁNICO & COHERENCIA ESCÉNICA (CERO ATREZZO ARTIFICIAL):**
+   - Desarrolla el gancho basándote en las temáticas elegidas por el usuario, el escenario físico seleccionado y el vocabulario callejero natural de ${artist?.name ?? "el artista"}.
+   - Queda TERMINANTEMENTE PROHIBIDO inventar o forzar objetos de atrezzo artificiales desconectados de la escena (como marcas o palabras de adorno no pedidas).
    - Higiene de Metadatos: Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la ficha bio del artista (ej: 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
 3. **AUTONOMÍA Y PRESUPUESTO DE AD-LIBS:**
    - Cada compás debe tener fuerza propia dentro del groove.
    - En el Estribillo/Chorus mantén los ad-libs en nivel moderado o bajo (máximo 1-2 compases seguidos con ad-lib) para que el gancho respire y la melodía central sea el foco.
    - Queda PROHIBIDO incluir traducciones literales entre idiomas entre paréntesis.
    - Los ad-libs entre paréntesis (Ad-lib) cumplen función musical en contratiempo: réplicas de actitud, colas melódicas o acentos rítmicos: (Yeah), (Facts), (Uh).
+4. **FLOW CARACTERÍSTICO DEL ARTISTA (SIN NAME-DROPPING NI BIOGRAFÍA PERSONAL):**
+   - El rapeo y la melodía del gancho DEBEN capturar de forma inconfundible el flow, la métrica, la cadencia y el bolsillo rítmico del artista original (${artist?.name ?? "el artista"}) para que al interpretarse en Suno suene con su pegada y estilo característicos.
+   - 🚫 REGLA DE ORO DE PRIVACIDAD & HIGIENE: Queda TERMINANTEMENTE PROHIBIDO mencionar el nombre del artista ("soy ${artist?.name ?? "X"}", "aquí ${artist?.name ?? "X"}") ni de otros artistas reales en la letra cantada o ad-libs. Tampoco calques anécdotas autobiográficas íntimas, familiares fallecidos ni nombres de bandas callejeras reales de su infancia. El parecido debe ser 100% por el FLOW, la MÉTRICA y la ACTITUD MUSICAL.
 
 ${flowSkeletonSummary ? `\n# 📐 GUÍA DE RITMO Y CADENCIA GLOBAL (BEAT-FIRST):\n${flowSkeletonSummary}\n` : ""}
 # 📋 FORMATO DE SALIDA ESTRICTO:
@@ -1480,12 +1492,12 @@ ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 - Tensión Dramática: ${framing.tension}
 - Función en la Canción: ${framing.dramaticFunction}
 
-🚫 REGLAS DE VOCABULARIO Y AUTENTICIDAD:
-1. **Cero Palabras Inyectadas / Cero Atrezzo Artificial:** Desarrolla la narrativa y metáforas ÚNICAMENTE a través de las temáticas elegidas por el usuario y el vocabulario natural de ${artist?.name ?? "el artista"}. Queda terminantemente prohibido meter objetos no pedidos.
+🚫 REGLAS DE VOCABULARIO, FLOW Y AUTENTICIDAD:
+1. **Fidelidad al Mundo Configurado por el Usuario (Cero Atrezzo Desconectado):** Desarrolla la narrativa, imaginería y metáforas ancladas firmemente en las temáticas elegidas por el usuario y los elementos físicos de la situación escénica configurada en la pantalla. Queda terminantemente prohibido meter objetos arbitrarios o comerciales fuera de lugar que no pertenezcan ni a la temática ni a la escena seleccionada.
 2. **Entidades Explícitas del Usuario (Preservación Inviolable):** Las temáticas pedidas por el usuario (${userTopicsList.length > 0 ? userTopicsList.join(", ") : "temas seleccionados"}) son elecciones deliberadas e inviolables. Queda TERMINANTEMENTE PROHIBIDO censurarlas, cambiarlas por perífrasis genéricas o considerarlas como 'contaminación corporativa'.
 3. **Memoria Negativa Inter-Estrofas:** Si usas un concepto o metáfora en el Verso 1, no lo repitas en el Verso 2. Haz que la historia avance con consecuencias.
 4. **Cero Clichés Baratos de IA:** Evita rimas escolares automáticas (suerte/muerte, pena/vena, etc.) y frases gastadas como "el asfalto no perdona" o "haciendo money sin parar". Prioriza la escena física y el peso de calle real.
-5. **Higiene de Privacidad:** NUNCA calques biografía personal íntima, familiares fallecidos ni nombres de pandillas reales concretas de la infancia del artista.
+5. **Flow Característico Sin Name-Dropping Ni Biografía Personal:** La canción debe sonar y fluir idéntica al rapeo característico de los artistas elegidos (${artist?.name ?? "Lead"}${featureArtist ? ` y ${featureArtist.name}` : ""}) — su cadencia, métrica, sílabas por compás, síncopa y actitud musical. Pero está TERMINANTEMENTE PROHIBIDO escribir en las barras o ad-libs los nombres de los artistas ("soy ${artist?.name ?? "X"}", "aquí ${featureArtist?.name ?? "Y"}"), mencionar a otros artistas reales, o calcar tragedias biográficas íntimas, familiares fallecidos o nombres de bandas callejeras reales de su infancia. El oyente debe identificar al artista por su FLOW Y SU VOZ EN SUNO, nunca porque el texto diga su nombre.
 6. **Higiene de Metadatos de Sistema:** Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la bio del artista (como 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
 
 ================================================================================
@@ -1504,9 +1516,10 @@ Si la [Intro] está en modo Hype Man o tiene asignado 'Hype', queda TERMINANTEME
 ================================================================================
 # 📜 CONTRATO 3: FLOW & MOTOR RÍTMICO (FLOW & RHYTHM CONTRACT)
 ================================================================================
-- Flow DNA (${artist?.name}): Cadencia ${mainDNA.flow.cadenceType} (${mainDNA.flow.avgSyllablesPerBar.join("-")} sílabas por compás). Síncopa: ${Math.round(mainDNA.flow.syncopation * 100)}%. ${flowProfile?.cadenceInstruction ?? ""}
-${featDNA ? `- Flow Feature (${featureArtist?.name}): Cadencia ${featDNA.flow.cadenceType}. ${featureFlowProfile?.cadenceInstruction ?? ""}` : ""}
+- Flow DNA (${artist?.name}): Cadencia ${mainDNA.flow.cadenceType} (${mainDNA.flow.avgSyllablesPerBar.join("-")} sílabas por compás). Síncopa: ${Math.round(mainDNA.flow.syncopation * 100)}%. Velocidad: ${flowProfile?.speedLabel ?? "natural"}. ${flowProfile?.cadenceInstruction ?? ""}
+${featDNA ? `- Flow Feature (${featureArtist?.name}): Cadencia ${featDNA.flow.cadenceType} (${featDNA.flow.avgSyllablesPerBar.join("-")} sílabas por compás). Velocidad: ${featureFlowProfile?.speedLabel ?? "natural"}. ${featureFlowProfile?.cadenceInstruction ?? ""}` : ""}
 ${featureContrast ? `${featureContrast.instruction}\n` : ""}- ${rhymeLevelInstruction}
+- Directiva Rítmica para Suno: Estructura la longitud de cada línea y la colocación de pausas para que el modelo de voz de Suno reproduzca fielmente el bolsillo rítmico del artista original (tresillos cortantes, legato arrastrado, o staccato frío según corresponda), manteniendo las barras compactas y sin atropellos silábicos.
 
 # 💎 ANCLAS COMPOSITIVAS NEUTRALES (TÉCNICA DE ESTUDIO):
 ${goldExamples.map(g => `- **${g.technique}** (${g.description}):\n  Barra 1: "${g.bars[0]}"\n  Barra 2: "${g.bars[1]}"`).join("\n")}

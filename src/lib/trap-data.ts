@@ -450,57 +450,127 @@ export function getInstrumentalBreakById(id: string): InstrumentalBreak | undefi
   return INSTRUMENTAL_BREAKS.find(b => b.id === id);
 }
 
+export type ProducerCategoryId =
+  | "dark_trap"
+  | "bouncy_melodic"
+  | "rage_detroit"
+  | "latin_urban"
+  | "classic_sample";
+
+export interface ProducerCategory {
+  id: ProducerCategoryId;
+  label: string;
+  badge: string;
+  icon: string;
+  description: string;
+  recommendedMoods: string[];
+}
+
+export const PRODUCER_CATEGORIES: ProducerCategory[] = [
+  {
+    id: "dark_trap",
+    label: "Dark Trap & 808s",
+    badge: "🔥 Dark Trap",
+    icon: "🔥",
+    description: "808s pesados, campanas oscuras y atmósfera siniestra de Atlanta",
+    recommendedMoods: ["oscuro", "agresivo", "calle"],
+  },
+  {
+    id: "bouncy_melodic",
+    label: "Bouncy & Melódico",
+    badge: "🌊 Bouncy & Wave",
+    icon: "🌊",
+    description: "Synths psicodélicos, flautas, guitarras y rebote elástico",
+    recommendedMoods: ["flex", "melancolico", "fiesta", "romantico"],
+  },
+  {
+    id: "rage_detroit",
+    label: "Rage & Detroit",
+    badge: "⚡ Rage & Detroit",
+    icon: "⚡",
+    description: "Energía moshpit, leads distorsionados y baterías frenéticas",
+    recommendedMoods: ["agresivo", "fiesta", "flex"],
+  },
+  {
+    id: "latin_urban",
+    label: "Latino & Drill",
+    badge: "🌴 Latino & Drill",
+    icon: "🌴",
+    description: "Dembow moderno, sample drill y trap latino de estadio",
+    recommendedMoods: ["fiesta", "flex", "calle", "romantico"],
+  },
+  {
+    id: "classic_sample",
+    label: "Soul & Boom Bap",
+    badge: "🎷 Classic & Soul",
+    icon: "🎷",
+    description: "Samples de vinilo, jazz, piano clásico y swing analógico",
+    recommendedMoods: ["introspectivo", "melancolico", "calle"],
+  },
+];
+
 export interface Producer {
   id: string;
   name: string;
   tag: string;
   style: string;
+  category?: ProducerCategoryId;
+  moods?: string[];
 }
 
 export const PRODUCERS: Producer[] = [
   { id: "none", name: "Sin productor", tag: "", style: "" },
-  { id: "metro_boomin", name: "Metro Boomin", tag: "If Metro don't trust you, I'm gon' shoot you", style: "808s pesados, hi-hats rápidos, melodías oscuras de piano/sintetizador. Patrón de trap clásico de Atlanta." },
-  { id: "markoff", name: "Markoff", tag: "Markoff on the beat", style: "Productor español, beats de trap madrileño con influencia plugg y drill. 808s oscuros." },
-  { id: "bizarrap", name: "Bizarrap", tag: "BZRP Music Sessions", style: "Productor argentino, beats minimalistas con crecimiento progresivo, énfasis en la voz del artista." },
-  { id: "southside", name: "Southside", tag: "Southside on the track", style: "808 Mafia. 808s distorsionados agresivos, hi-hats muy rápidos, melodías oscuras." },
-  { id: "wheezy", name: "Wheezy", tag: "Wheezy out of here", style: "Beats de trap slatt, 808s potentes, melodías simples pero pegadizas. Estilo Young Thug." },
-  { id: "ovy_on_drums", name: "Ovy on the Drums", tag: "Ovy on the Drums", style: "Productor colombiano, reggaeton/trap latino con dembow, melodías tropicales." },
-  { id: "lex_luger", name: "Lex Luger", tag: "Lex Luger!", style: "Pionero del trap agresivo, brass pesados, 808s rápidos y crudos. Estilo Waka Flocka." },
-  { id: "pierre_bourne", name: "Pierre Bourne", tag: "Pierre!", style: "Beats melódicos y psicodélicos, sintetizadores brillosos, 808s suaves. Estilo Playboi Carti." },
-  { id: "zaytovan", name: "Zaytoven", tag: "Zaytoven!", style: "Atlanta trap pionero, piano simple + 808, estilo Gucci Mane/Future." },
-  { id: "tay_keith", name: "Tay Keith", tag: "Tay Keith, fuck these niggas up!", style: "Memphis trap agresivo, 808s pesados, estilo BlocBoy JB." },
-  { id: "tm88", name: "TM88", tag: "808 Mafia", style: "808 Mafia, sintetizadores oscuros, 808s distorsionados." },
-  { id: "dr_dre", name: "Dr. Dre", tag: "Dre", style: "West Coast G-Funk, sintetizadores lush, batería crujiente." },
-  { id: "timbaland", name: "Timbaland", tag: "Timbo", style: "Beats innovadores, ritmos sincopados, influencia R&B." },
-  { id: "pharrell", name: "Pharrell", tag: "P", style: "Neptunes, sintetizadores funk, ritmos minimalistas." },
-  { id: "mike_dean", name: "Mike Dean", tag: "Mike Dean", style: "Sintetizadores psicodélicos, guitarra, mastering legend." },
-  { id: "808_melo", name: "808 Melo", tag: "808 Melo", style: "UK drill, sliding 808, dark piano." },
-  { id: "tainy", name: "Tainy", tag: "Tainy", style: "Reggaeton/trap latino, dembow moderno, Latin Grammy." },
-  { id: "bnyx", name: "BNYX", tag: "BNYX!", style: "Rage beat, sintetizadores brillantes, 808 distorsionado." },
-  { id: "f1lthy", name: "F1lthy", tag: "F1lthy", style: "Rage/vamp, sintetizadores caóticos, 808 pesado." },
-  { id: "mustard", name: "Mustard", tag: "Mustard", style: "West Coast bounce, hyphy, ritmo bailable." },
-  { id: "hit_boy", name: "Hit-Boy", tag: "Hit-Boy", style: "Versátil, boom bap moderno, producción limpia." },
-  { id: "scott_storch", name: "Scott Storch", tag: "Storch", style: "Piano-driven, melodías elaboradas, hip-hop 2000s." },
-  { id: "swizz_beatz", name: "Swizz Beatz", tag: "Swizzy", style: "Bangers energéticos, sintetizadores agresivos, brass." },
-  { id: "just_blaze", name: "Just Blaze", tag: "Just Blaze", style: "Soul samples, batidoras pesadas, hip-hop clásico." },
-  { id: "kanye_soul", name: "Kanye (Soul)", tag: "Ye", style: "Soul samples speed-up, drums pesados, chipmunk." },
-  { id: "j_dilla", name: "J Dilla", tag: "Dilla", style: "Boom bap lo-fi, swing humano, samples jazz." },
-  { id: "dj_premier", name: "DJ Premier", tag: "Primo", style: "Boom bap NYC, scratches, jazz samples." },
-  { id: "alchemist", name: "Alchemist", tag: "Alc", style: "Lo-fi oscuro, samples raros, boom bap undergound." },
-  { id: "whitearmor", name: "Whitearmor", tag: "Whitearmor", style: "Cloud rap sueco, sintetizadores etéreos, drain gang." },
-  { id: "axl_beats", name: "AXL Beats", tag: "AXL", style: "UK drill, melodías oscuras, 808 deslizante." },
-  { id: "cash_cobain", name: "Cash Cobain", tag: "Cash Cobain", style: "NY drill/sample drill, flip de R&B." },
-  { id: "sonny_digital", name: "Sonny Digital", tag: "Sonny!", style: "Atlanta trap melódico, sintetizadores brillosos." },
-  { id: "london_track", name: "London On Da Track", tag: "London on da track", style: "Atlanta trap con melodía, piano + 808." },
-  { id: "murda_beatz", name: "Murda Beatz", tag: "Murda on the beat, so it's not nice", style: "Bouncy trap anthems, campanas brillantes, clean punchy 808s, flautas rítmicas." },
-  { id: "taz_taylor", name: "Internet Money (Taz & Nick Mira)", tag: "I love Taz!", style: "Melodic guitar loops, bouncy 808s, pluggnb, hi-hats acrobáticos y melodías ultra-pegadizas." },
-  { id: "cardo", name: "Cardo Got Wings", tag: "Cardo got wings!", style: "Spacey trap bounce, sintetizadores analógicos vintage, hi-hats elásticos y 808s profundos." },
-  { id: "sky_rompiendo", name: "Sky Rompiendo", tag: "Sky Rompiendo el Bajo!", style: "Trap latino oscuro y elegante, 808s profundos, texturas espaciales y sintetizadores envolventes." },
-  { id: "enry_k", name: "Enry-K", tag: "Enry-K on the track", style: "Trap español crudo y experimental, 808s saturados, texturas lo-fi y synths vaporosos." },
-  { id: "da_got_that_dope", name: "D.A. Got That Dope", tag: "D.A. got that dope!", style: "Ultra-bouncy club trap, ritmo saltarín frenético, percusiones contagiosas y 808s de muelle." },
-  { id: "wondagurl", name: "WondaGurl", tag: "WondaGurl", style: "Dark industrial trap, bajos 808 monstruosos, texturas sonoras distorsionadas y cajas secas de impacto." },
-  { id: "helluva", name: "Helluva", tag: "Helluva made this beat baby!", style: "Detroit bounce frenético, pianos agresivos a contratiempo, claps afilados y 808s percutidos." },
-  { id: "foreign_teck", name: "Foreign Teck", tag: "Foreign Teck", style: "Hard Latin trap con producción imponente de Atlanta, 808s pesados y arreglos orquestales oscuros." },
+  // 🔥 DARK TRAP & HEAVY 808S
+  { id: "metro_boomin", name: "Metro Boomin", tag: "If Metro don't trust you, I'm gon' shoot you", style: "808s pesados, hi-hats rápidos, melodías oscuras de piano/sintetizador. Patrón de trap clásico de Atlanta.", category: "dark_trap", moods: ["oscuro", "agresivo", "calle"] },
+  { id: "southside", name: "Southside", tag: "Southside on the track", style: "808 Mafia. 808s distorsionados agresivos, hi-hats muy rápidos, melodías oscuras.", category: "dark_trap", moods: ["oscuro", "agresivo"] },
+  { id: "tm88", name: "TM88", tag: "808 Mafia", style: "808 Mafia, sintetizadores oscuros, 808s distorsionados.", category: "dark_trap", moods: ["oscuro", "agresivo"] },
+  { id: "tay_keith", name: "Tay Keith", tag: "Tay Keith, fuck these niggas up!", style: "Memphis trap agresivo, 808s pesados, estilo BlocBoy JB.", category: "dark_trap", moods: ["agresivo", "calle"] },
+  { id: "lex_luger", name: "Lex Luger", tag: "Lex Luger!", style: "Pionero del trap agresivo, brass pesados, 808s rápidos y crudos. Estilo Waka Flocka.", category: "dark_trap", moods: ["agresivo", "calle"] },
+  { id: "wondagurl", name: "WondaGurl", tag: "WondaGurl", style: "Dark industrial trap, bajos 808 monstruosos, texturas sonoras distorsionadas y cajas secas de impacto.", category: "dark_trap", moods: ["oscuro", "agresivo", "introspectivo"] },
+  { id: "808_melo", name: "808 Melo", tag: "808 Melo", style: "UK drill, sliding 808, dark piano.", category: "dark_trap", moods: ["calle", "oscuro"] },
+  { id: "axl_beats", name: "AXL Beats", tag: "AXL", style: "UK drill, melodías oscuras, 808 deslizante.", category: "dark_trap", moods: ["calle", "oscuro"] },
+  { id: "markoff", name: "Markoff", tag: "Markoff on the beat", style: "Productor español, beats de trap madrileño con influencia plugg y drill. 808s oscuros.", category: "dark_trap", moods: ["calle", "oscuro"] },
+  { id: "zaytovan", name: "Zaytoven", tag: "Zaytoven!", style: "Atlanta trap pionero, piano simple + 808, estilo Gucci Mane/Future.", category: "dark_trap", moods: ["calle", "flex"] },
+
+  // 🌊 BOUNCY, MELÓDICO & PSICODÉLICO
+  { id: "pierre_bourne", name: "Pierre Bourne", tag: "Pierre!", style: "Beats melódicos y psicodélicos, sintetizadores brillosos, 808s suaves. Estilo Playboi Carti.", category: "bouncy_melodic", moods: ["flex", "fiesta", "melancolico"] },
+  { id: "wheezy", name: "Wheezy", tag: "Wheezy out of here", style: "Beats de trap slatt, 808s potentes, melodías simples pero pegadizas. Estilo Young Thug.", category: "bouncy_melodic", moods: ["flex", "calle"] },
+  { id: "murda_beatz", name: "Murda Beatz", tag: "Murda on the beat, so it's not nice", style: "Bouncy trap anthems, campanas brillantes, clean punchy 808s, flautas rítmicas.", category: "bouncy_melodic", moods: ["flex", "fiesta"] },
+  { id: "taz_taylor", name: "Internet Money (Taz & Nick Mira)", tag: "I love Taz!", style: "Melodic guitar loops, bouncy 808s, pluggnb, hi-hats acrobáticos y melodías ultra-pegadizas.", category: "bouncy_melodic", moods: ["melancolico", "flex", "romantico"] },
+  { id: "cardo", name: "Cardo Got Wings", tag: "Cardo got wings!", style: "Spacey trap bounce, sintetizadores analógicos vintage, hi-hats elásticos y 808s profundos.", category: "bouncy_melodic", moods: ["flex", "calle"] },
+  { id: "sonny_digital", name: "Sonny Digital", tag: "Sonny!", style: "Atlanta trap melódico, sintetizadores brillosos.", category: "bouncy_melodic", moods: ["flex", "calle"] },
+  { id: "london_track", name: "London On Da Track", tag: "London on da track", style: "Atlanta trap con melodía, piano + 808.", category: "bouncy_melodic", moods: ["melancolico", "romantico", "flex"] },
+  { id: "whitearmor", name: "Whitearmor", tag: "Whitearmor", style: "Cloud rap sueco, sintetizadores etéreos, drain gang.", category: "bouncy_melodic", moods: ["melancolico", "introspectivo"] },
+  { id: "mike_dean", name: "Mike Dean", tag: "Mike Dean", style: "Sintetizadores psicodélicos, guitarra, mastering legend.", category: "bouncy_melodic", moods: ["introspectivo", "oscuro", "melancolico"] },
+
+  // ⚡ RAGE, HYPER & DETROIT BOUNCE
+  { id: "bnyx", name: "BNYX", tag: "BNYX!", style: "Rage beat, sintetizadores brillantes, 808 distorsionado.", category: "rage_detroit", moods: ["agresivo", "fiesta", "flex"] },
+  { id: "f1lthy", name: "F1lthy", tag: "F1lthy", style: "Rage/vamp, sintetizadores caóticos, 808 pesado.", category: "rage_detroit", moods: ["agresivo", "oscuro"] },
+  { id: "helluva", name: "Helluva", tag: "Helluva made this beat baby!", style: "Detroit bounce frenético, pianos agresivos a contratiempo, claps afilados y 808s percutidos.", category: "rage_detroit", moods: ["agresivo", "calle"] },
+  { id: "da_got_that_dope", name: "D.A. Got That Dope", tag: "D.A. got that dope!", style: "Ultra-bouncy club trap, ritmo saltarín frenético, percusiones contagiosas y 808s de muelle.", category: "rage_detroit", moods: ["fiesta", "flex"] },
+  { id: "swizz_beatz", name: "Swizz Beatz", tag: "Swizzy", style: "Bangers energéticos, sintetizadores agresivos, brass.", category: "rage_detroit", moods: ["agresivo", "fiesta"] },
+
+  // 🌴 TRAP LATINO & DRILL URBANO
+  { id: "tainy", name: "Tainy", tag: "Tainy", style: "Reggaeton/trap latino, dembow moderno, Latin Grammy.", category: "latin_urban", moods: ["fiesta", "oscuro", "romantico", "flex"] },
+  { id: "bizarrap", name: "Bizarrap", tag: "BZRP Music Sessions", style: "Productor argentino, beats minimalistas con crecimiento progresivo, énfasis en la voz del artista.", category: "latin_urban", moods: ["agresivo", "calle", "fiesta"] },
+  { id: "sky_rompiendo", name: "Sky Rompiendo", tag: "Sky Rompiendo el Bajo!", style: "Trap latino oscuro y elegante, 808s profundos, texturas espaciales y sintetizadores envolventes.", category: "latin_urban", moods: ["oscuro", "flex", "romantico"] },
+  { id: "ovy_on_drums", name: "Ovy on the Drums", tag: "Ovy on the Drums", style: "Productor colombiano, reggaeton/trap latino con dembow, melodías tropicales.", category: "latin_urban", moods: ["fiesta", "romantico", "melancolico"] },
+  { id: "foreign_teck", name: "Foreign Teck", tag: "Foreign Teck", style: "Hard Latin trap con producción imponente de Atlanta, 808s pesados y arreglos orquestales oscuros.", category: "latin_urban", moods: ["calle", "agresivo", "flex"] },
+  { id: "enry_k", name: "Enry-K", tag: "Enry-K on the track", style: "Trap español crudo y experimental, 808s saturados, texturas lo-fi y synths vaporosos.", category: "latin_urban", moods: ["calle", "introspectivo", "oscuro"] },
+  { id: "cash_cobain", name: "Cash Cobain", tag: "Cash Cobain", style: "NY drill/sample drill, flip de R&B.", category: "latin_urban", moods: ["romantico", "calle", "flex"] },
+
+  // 🎷 SOUL SAMPLES & BOOM BAP
+  { id: "kanye_soul", name: "Kanye (Soul)", tag: "Ye", style: "Soul samples speed-up, drums pesados, chipmunk.", category: "classic_sample", moods: ["introspectivo", "melancolico", "calle"] },
+  { id: "alchemist", name: "The Alchemist", tag: "Alc", style: "Lo-fi oscuro, samples raros, boom bap undergound.", category: "classic_sample", moods: ["oscuro", "calle", "introspectivo"] },
+  { id: "j_dilla", name: "J Dilla", tag: "Dilla", style: "Boom bap lo-fi, swing humano, samples jazz.", category: "classic_sample", moods: ["introspectivo", "melancolico"] },
+  { id: "dj_premier", name: "DJ Premier", tag: "Primo", style: "Boom bap NYC, scratches, jazz samples.", category: "classic_sample", moods: ["calle", "agresivo"] },
+  { id: "just_blaze", name: "Just Blaze", tag: "Just Blaze", style: "Soul samples, batidoras pesadas, hip-hop clásico.", category: "classic_sample", moods: ["agresivo", "flex"] },
+  { id: "hit_boy", name: "Hit-Boy", tag: "Hit-Boy", style: "Versátil, boom bap moderno, producción limpia.", category: "classic_sample", moods: ["flex", "calle", "introspectivo"] },
+  { id: "scott_storch", name: "Scott Storch", tag: "Storch", style: "Piano-driven, melodías elaboradas, hip-hop 2000s.", category: "classic_sample", moods: ["flex", "romantico"] },
+  { id: "dr_dre", name: "Dr. Dre", tag: "Dre", style: "West Coast G-Funk, sintetizadores lush, batería crujiente.", category: "classic_sample", moods: ["calle", "flex"] },
+  { id: "mustard", name: "Mustard", tag: "Mustard", style: "West Coast bounce, hyphy, ritmo bailable.", category: "classic_sample", moods: ["fiesta", "calle"] },
+  { id: "timbaland", name: "Timbaland", tag: "Timbo", style: "Beats innovadores, ritmos sincopados, influencia R&B.", category: "classic_sample", moods: ["fiesta", "flex"] },
+  { id: "pharrell", name: "Pharrell", tag: "P", style: "Neptunes, sintetizadores funk, ritmos minimalistas.", category: "classic_sample", moods: ["flex", "fiesta"] },
 ];
 
 export interface NarrativeArc {
@@ -528,6 +598,19 @@ export function getArtistById(id: string): Artist | undefined {
 
 export function getProducerById(id: string): Producer | undefined {
   return PRODUCERS.find(p => p.id === id);
+}
+
+export function getProducersByCategory(catId: ProducerCategoryId): Producer[] {
+  return PRODUCERS.filter(p => p.category === catId);
+}
+
+export function getProducerCategoryById(id: string): ProducerCategory | undefined {
+  return PRODUCER_CATEGORIES.find(c => c.id === id);
+}
+
+export function getProducersForMood(moodId: string): Producer[] {
+  const normMood = moodId.toLowerCase();
+  return PRODUCERS.filter(p => p.moods?.some(m => normMood.includes(m)));
 }
 
 // ===== Rhyme Schemes =====

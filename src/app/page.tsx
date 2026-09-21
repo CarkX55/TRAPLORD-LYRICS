@@ -37,9 +37,10 @@ import {
   SECTION_TEMPLATES, FLOW_POCKET_OPTIONS, getFlowPocketOptionById,
   INTRO_STYLE_OPTIONS, getIntroStyleOptionById,
   OUTRO_STYLE_OPTIONS, getOutroStyleOptionById,
+  PRODUCER_CATEGORIES, getProducerCategoryById, getProducersForMood, getProducersByCategory,
   getArtistById, getProducerById, getRhymeSchemeById, getBeatTypeById, getFeatureSimById, generateBeatPrompt,
   type Artist, type BeatPrompt, type ProducerTagArchetype, type InstantMoodPreset, type DirtyLevel, type RepetitionPattern, type InstrumentalBreak, type SituationalPreset,
-  type SongSection, type SongStructure, type SectionTemplate, type FlowPocketOption, type IntroStyleOption, type IntroStyleId, type OutroStyleOption, type OutroStyleId
+  type SongSection, type SongStructure, type SectionTemplate, type FlowPocketOption, type IntroStyleOption, type IntroStyleId, type OutroStyleOption, type OutroStyleId, type ProducerCategoryId
 } from "@/lib/trap-data";
 import type { HookVariationOption } from "@/app/api/hook-variations/route";
 import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, cleanSunoBracketHeaders, resolveArtistVocalGuide, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
@@ -205,6 +206,7 @@ export default function TrapGhostPage() {
   const [narrativeArcId, setNarrativeArcId] = useState<string>("none");
   const [producerTag, setProducerTag] = useState<string>("");
   const [producerId, setProducerId] = useState<string>("none");
+  const [producerCategoryFilter, setProducerCategoryFilter] = useState<string>("all");
   const [customDictionary, setCustomDictionary] = useState<string>("");
   const [dynamicMarkers, setDynamicMarkers] = useState<boolean>(false);
   const [autoCorrect, setAutoCorrect] = useState<boolean>(true);
@@ -3169,29 +3171,158 @@ export default function TrapGhostPage() {
                     })()}
                   </div>
 
-                  {/* NEW: Producer selector */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      <Disc3 className="w-3.5 h-3.5" /> Productor (beat & producer tag)
-                    </Label>
+                  {/* NEW: Categorized Producer selector */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <Disc3 className="w-3.5 h-3.5 text-slime" /> Productor & Beat Style
+                      </Label>
+                      <Badge variant="outline" className="text-[10px] text-slime border-slime/30">
+                        {PRODUCERS.filter(p => p.id !== "none").length} productores
+                      </Badge>
+                    </div>
+
+                    {/* Category Filter Pills */}
+                    <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-thin">
+                      <button
+                        type="button"
+                        onClick={() => setProducerCategoryFilter("all")}
+                        className={`text-[10px] px-2 py-0.5 rounded-full border transition-all shrink-0 ${
+                          producerCategoryFilter === "all"
+                            ? "bg-slime/20 border-slime text-slime font-semibold shadow-sm shadow-slime/10"
+                            : "bg-black/40 border-white/10 text-muted-foreground hover:border-white/20 hover:text-white"
+                        }`}
+                      >
+                        Todos ({PRODUCERS.filter(p => p.id !== "none").length})
+                      </button>
+                      {PRODUCER_CATEGORIES.map(cat => {
+                        const count = getProducersByCategory(cat.id).length;
+                        const isActive = producerCategoryFilter === cat.id;
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => setProducerCategoryFilter(isActive ? "all" : cat.id)}
+                            className={`text-[10px] px-2 py-0.5 rounded-full border transition-all shrink-0 flex items-center gap-1 ${
+                              isActive
+                                ? "bg-slime/20 border-slime text-slime font-semibold shadow-sm shadow-slime/10"
+                                : "bg-black/40 border-white/10 text-muted-foreground hover:border-white/20 hover:text-white"
+                            }`}
+                          >
+                            <span>{cat.icon}</span>
+                            <span>{cat.label}</span>
+                            <span className="opacity-60 text-[9px]">({count})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Mood Suggestion Hint */}
+                    {(() => {
+                      const recommended = getProducersForMood(moodId);
+                      if (recommended.length === 0) return null;
+                      const moodObj = MOODS.find(m => m.id === moodId);
+                      return (
+                        <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 bg-black/30 px-2 py-1 rounded border border-white/5">
+                          <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
+                          <span className="shrink-0 text-zinc-300">Para {moodObj?.label ?? moodId}:</span>
+                          <div className="flex items-center gap-1.5 flex-wrap overflow-hidden text-ellipsis">
+                            {recommended.slice(0, 3).map(rp => (
+                              <button
+                                key={rp.id}
+                                type="button"
+                                onClick={() => { setProducerId(rp.id); setProducerTag(rp.tag); }}
+                                className={`text-[10px] underline underline-offset-2 transition-colors ${producerId === rp.id ? "text-slime font-bold" : "text-amber-300/80 hover:text-amber-200"}`}
+                              >
+                                {rp.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Grouped / Filtered Select */}
                     <Select value={producerId} onValueChange={(v) => { setProducerId(v); setProducerTag(getProducerById(v)?.tag ?? ""); }}>
-                      <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {PRODUCERS.map(p => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.id === "none" ? "— Sin productor —" : `🎛️ ${p.name}`}
-                          </SelectItem>
-                        ))}
+                      <SelectTrigger className="bg-black/40"><SelectValue placeholder="Selecciona un productor..." /></SelectTrigger>
+                      <SelectContent className="max-h-[360px]">
+                        <SelectItem value="none">— Sin productor —</SelectItem>
+                        {producerCategoryFilter === "all" ? (
+                          PRODUCER_CATEGORIES.map(cat => {
+                            const catProducers = getProducersByCategory(cat.id);
+                            if (catProducers.length === 0) return null;
+                            return (
+                              <SelectGroup key={cat.id}>
+                                <SelectLabel className="text-[11px] font-semibold text-slime/90 px-2 py-1 flex items-center justify-between bg-black/90 sticky top-0 z-10 border-b border-white/10">
+                                  <span>{cat.icon} {cat.label}</span>
+                                  <span className="text-[10px] text-muted-foreground font-normal">({catProducers.length})</span>
+                                </SelectLabel>
+                                {catProducers.map(p => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    <div className="flex items-center justify-between w-full gap-2">
+                                      <span className="font-medium">🎛️ {p.name}</span>
+                                      {p.tag && <span className="text-[10px] text-muted-foreground truncate max-w-[130px]">"{p.tag}"</span>}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            );
+                          })
+                        ) : (
+                          (() => {
+                            const cat = getProducerCategoryById(producerCategoryFilter as ProducerCategoryId);
+                            const catProducers = getProducersByCategory(producerCategoryFilter as ProducerCategoryId);
+                            return (
+                              <SelectGroup>
+                                {cat && (
+                                  <SelectLabel className="text-[11px] font-semibold text-slime/90 px-2 py-1 flex items-center justify-between bg-black/90 sticky top-0 z-10 border-b border-white/10">
+                                    <span>{cat.icon} {cat.label}</span>
+                                    <span className="text-[10px] text-muted-foreground font-normal">({catProducers.length})</span>
+                                  </SelectLabel>
+                                )}
+                                {catProducers.map(p => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    <div className="flex items-center justify-between w-full gap-2">
+                                      <span className="font-medium">🎛️ {p.name}</span>
+                                      {p.tag && <span className="text-[10px] text-muted-foreground truncate max-w-[130px]">"{p.tag}"</span>}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            );
+                          })()
+                        )}
                       </SelectContent>
                     </Select>
+
+                    {/* Selected Producer Info Card */}
                     {producerId !== "none" && (() => {
                       const p = getProducerById(producerId);
-                      return p ? (
-                        <div className="rounded-md border border-slime/20 bg-slime/5 p-2.5">
-                          <p className="text-[11px] text-slime font-medium">Tag: "{p.tag}"</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">{p.style}</p>
+                      if (!p) return null;
+                      const cat = p.category ? getProducerCategoryById(p.category) : null;
+                      const isMoodMatch = p.moods?.includes(moodId);
+                      return (
+                        <div className="rounded-md border border-slime/20 bg-slime/5 p-2.5 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] text-slime font-semibold flex items-center gap-1.5">
+                              Tag: "{p.tag}"
+                            </span>
+                            <div className="flex items-center gap-1">
+                              {cat && (
+                                <Badge variant="outline" className="text-[9px] border-slime/30 text-slime/80">
+                                  {cat.icon} {cat.label}
+                                </Badge>
+                              )}
+                              {isMoodMatch && (
+                                <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-400 bg-amber-500/10">
+                                  Match Mood
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">{p.style}</p>
                         </div>
-                      ) : null;
+                      );
                     })()}
                   </div>
 
