@@ -570,5 +570,13 @@ export function formatWritingCellsForPrompt(cells: WritingCell[]): string {
     sectionsFormatted.push(`#### ${header}\n${lines.join("\n")}`);
   }
 
-  return `### Células de Escritura (4-Bar Writing Cells)\n*Estructura narrativa interna para evitar versos planos de 16 barras. Usa cada célula como objetivo dinámico de 4 compases*:\n\n${sectionsFormatted.join("\n\n")}`;
+  return `### Células de Escritura (4-Bar Writing Cells)
+*Estructura narrativa interna para evitar versos planos de 16 barras. Usa cada célula como objetivo dinámico de 4 compases*:
+
+${sectionsFormatted.join("\n\n")}
+
+⚠️ CONTINUIDAD CAUSAL Y PROGRESIÓN FÍSICA ESTRICTA (ANTI-TELETRANSPORTE):
+- Las barras dentro de cada célula y entre células adyacentes DEBEN estar conectadas por relación física, causa y efecto, o consecuencias directas de la acción anterior.
+- Queda TERMINANTEMENTE PROHIBIDO el teletransporte escénico o cambios arbitrarios de entorno (ej: pasar de una persecución en la autopista con sirenas a una cabina de grabación o cancha de baloncesto en el siguiente compás).
+- Las metáforas o analogías deben ser breves y no sustituir la escena física real. Cada célula avanza la situación en el tiempo y el espacio con consecuencias tangibles.`;
 }

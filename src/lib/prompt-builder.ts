@@ -1244,14 +1244,24 @@ export function buildStage1ToplinePrompt(
     const strategyConfig = HOOK_STRATEGIES[recommendedStrategy];
     hookInstructionBlock = `
 # 🔁 PATRÓN DE GANCHO SELECCIONADO POR EL USUARIO: ${strategyConfig.label.toUpperCase()}
-- **Instrucción**: ${strategyConfig.instructionPrompt}`;
+- **Instrucción de Estrategia**: ${strategyConfig.instructionPrompt}
+- **⚡ ARQUITECTURA SIMÉTRICA 4+4 (EARWORM FRAMEWORK)**:
+  * Compases 1-4 (Motivo Núcleo): Establece el ancla melódica o mantra con 1-2 líneas motrices potentes y rimas multi-silábicas.
+  * Compases 5-8 (Elevación & Cierre): Retoma el motivo variando la segunda mitad, elevando la textura vocal y rematando en la barra 8 con un payoff definitivo.`;
   } else {
-    // AUTO MODE = AUTÉNTICO ESTILO DEL ARTISTA (Sin encasillamientos telegráficos)
+    // AUTO MODE = ARQUITECTURA ORGÁNICA BASADA EN EL FLOW DEL ARTISTA + 4+4 EARWORM FRAMEWORK
+    const recommendedStrategy = recommendHookStrategy(
+      mainDNA.flow.cadenceType,
+      flowProfile?.hookStyle
+    );
+    const strategyConfig = HOOK_STRATEGIES[recommendedStrategy];
     hookInstructionBlock = `
-# 🎵 ESTILO DE GANCHO: AUTÉNTICO DE ${artist?.name ?? "EL ARTISTA"} (MODO ESTUDIO ORGÁNICO)
-- Compón el estribillo / hook central capturando la identidad lírica, métrica, rima y fraseo musical auténtico de ${artist?.name ?? "el artista"}.
-- Adapta la melodía y el groove al tempo (${params.bpmVibe.range} BPM), estado de ánimo (${params.moodId}) y las temáticas elegidas por el usuario.
-- Escribe barras musicales completas y pegadizas con la actitud y slang natural del artista, sin sonar telegráfico ni forzar palabras mecánicas.`;
+# 🎵 ARQUITECTURA DE GANCHO: AUTÉNTICA DE ${artist?.name ?? "EL ARTISTA"} (${strategyConfig.label.toUpperCase()})
+- **Estrategia Rítmica del Artista**: ${strategyConfig.instructionPrompt}
+- **⚡ ARQUITECTURA SIMÉTRICA 4+4 (EARWORM FRAMEWORK — ESTRICTA)**:
+  * **Compases 1 a 4 (Motivo Núcleo / Anclaje Hipnótico)**: Establece 1 o 2 líneas motrices de anclaje (hook phrase/mantra), con rima asonante multi-silábica o paralelismo rítmico. Dale groove y rebote con espacio para el bajo 808.
+  * **Compases 5 a 8 (Elevación, Variación & Payoff)**: Retoma el motivo melódico de los compases 1-4, elevando la tensión vocal, variando el remate lírico o intensificando los ad-libs, resolviendo en el compás 8 con un payoff definitivo o corte seco.
+  * **🚫 PROHIBIDO ESTRIBILLO COMO MINI-VERSO NARRATIVO**: Queda TERMINANTEMENTE PROHIBIDO escribir el estribillo como 8 líneas inconexas de una historia. El estribillo NO es una estrofa ni un relato de 8 acciones cronológicas; es un OBJETO RÍTMICO Y MELÓDICO MEMORABLE (earworm) que se graba en la cabeza por repetición, simetría y tensión.`;
   }
 
   // Resolver especificación canónica del Hook desde la estructura
@@ -1336,9 +1346,10 @@ ${goldExamples.map(g => `- **${g.technique}** (${g.description}):\n  Barra 1: "$
 4. **FLOW CARACTERÍSTICO DEL ARTISTA (SIN NAME-DROPPING NI BIOGRAFÍA PERSONAL):**
    - El rapeo y la melodía del gancho DEBEN capturar de forma inconfundible el flow, la métrica, la cadencia y el bolsillo rítmico del artista original (${artist?.name ?? "el artista"}) para que al interpretarse en Suno suene con su pegada y estilo característicos.
    - 🚫 REGLA DE ORO DE PRIVACIDAD & HIGIENE: Queda TERMINANTEMENTE PROHIBIDO mencionar el nombre del artista ("soy ${artist?.name ?? "X"}", "aquí ${artist?.name ?? "X"}") ni de otros artistas reales en la letra cantada o ad-libs. Tampoco calques anécdotas autobiográficas íntimas, familiares fallecidos ni nombres de bandas callejeras reales de su infancia. El parecido debe ser 100% por el FLOW, la MÉTRICA y la ACTITUD MUSICAL.
-5. **CERO RIMAS FORZADAS & CERO SERMÓN MORAL ABSTRACTO:**
-   - Sentido sobre rima: Queda TERMINANTEMENTE PROHIBIDO forzar palabras o frases inconexas y absurdas solo para cuadrar una rima consonante. Si una palabra suena artificial en la calle, usa rima asonante.
+5. **CERO RIMAS FORZADAS, SLANT RHYMES & CERO SERMÓN MORAL:**
+   - Slant Rhymes & Rima Asertiva: Usa rimas asonantes multi-silábicas (vowel-matching) y rimas internas fluidas. Queda TERMINANTEMENTE PROHIBIDO forzar consonancias absurdas o infantiles de guardería (*gelato/zapato*, *cuarto/parto*).
    - Show, Don't Preach: Queda PROHIBIDO usar eslóganes morales abstractos trillados de autoayuda (ej: "la lealtad no se vende", "lealtad hasta la tumba", "el dinero no compra la felicidad"). El estribillo debe construirse sobre imágenes sensoriales vivas, actitud cruda o una tensión física real.
+   - Argot Callejero Auténtico: Queda prohibido el lenguaje infantil o traducciones literales como "con el amigo" o "no sentimos temor". Usa "con mi socio", "con mi hermano", "sin pestañear".
 
 ${flowSkeletonSummary ? `\n# 📐 GUÍA DE RITMO Y CADENCIA GLOBAL (BEAT-FIRST):\n${flowSkeletonSummary}\n` : ""}
 # 📋 FORMATO DE SALIDA ESTRICTO:
@@ -1372,6 +1383,27 @@ export function buildStage2GhostwriterPrompt(
   const dirty = getDirtyLevel(params.dirtyLevel ?? 2);
   const mainDNA = getMusicalDNAForArtist(params.artistId);
   const featDNA = featureArtist ? getMusicalDNAForArtist(featureArtist.id) : null;
+
+  // Calibración Dinámica de Ventana Silábica por Artista (Syllable Density Window)
+  const mainMinSyl = mainDNA.flow.avgSyllablesPerBar[0];
+  const mainMaxSyl = mainDNA.flow.avgSyllablesPerBar[1];
+  const mainCeiling = Math.max(mainMaxSyl + 2, 10);
+  const mainWordRange = mainDNA.flow.wordsPerBarLimit
+    ? `${mainDNA.flow.wordsPerBarLimit[0]}-${mainDNA.flow.wordsPerBarLimit[1]} palabras`
+    : (mainMaxSyl <= 8 ? "3-6 palabras" : mainMaxSyl <= 11 ? "5-8 palabras" : "7-11 palabras");
+
+  let featPocketBlock = "";
+  if (featDNA && featureArtist) {
+    const featMinSyl = featDNA.flow.avgSyllablesPerBar[0];
+    const featMaxSyl = featDNA.flow.avgSyllablesPerBar[1];
+    const featCeiling = Math.max(featMaxSyl + 2, 10);
+    const featWordRange = featDNA.flow.wordsPerBarLimit
+      ? `${featDNA.flow.wordsPerBarLimit[0]}-${featDNA.flow.wordsPerBarLimit[1]} palabras`
+      : (featMaxSyl <= 8 ? "3-6 palabras" : featMaxSyl <= 11 ? "5-8 palabras" : "7-11 palabras");
+    featPocketBlock = `\n- 🎯 BOLSILLO MÉTRICO ESTRICTO FEATURE (${featureArtist.name}):
+  * Ventana Silábica: ${featMinSyl} a ${featMaxSyl} sílabas cantadas por línea (LÍMITE MÁXIMO ABSOLUTO: ${featCeiling} sílabas).
+  * Densidad de Palabras: ${featWordRange} por compás.`;
+  }
 
   const customScheme = params.rhymeSchemeId && params.rhymeSchemeId !== "rs_free" ? getRhymeSchemeById(params.rhymeSchemeId) : null;
   const rhymeTier = getRhymeTier(params.artistId);
@@ -1501,15 +1533,17 @@ ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 3. **Memoria Negativa Radical & Cero Checklisting Inter-Estrofas:**
    - Prohibido rotar mecánicamente los mismos dominios metafóricos: si en el Verso 1 usas una analogía deportiva / de baloncesto (ej: Shaq), en el Verso 2 queda TERMINANTEMENTE PROHIBIDO volver a usar otra analogía de baloncesto (cero Kobe, cero NBA). Si en el Verso 1 hablas de coches, en el Verso 2 explora la mesa, el dinero en mano, la patrulla o la tensión entre socios.
    - Prohibido el checklisting en bucle: NUNCA repitas la misma lista de ingredientes (teléfonos + jarabe + baloncesto) en cada estrofa como si fuera una plantilla. Cada verso debe traer objetos, ángulos y consecuencias completamente diferentes.
-4. **Cero Rimas Forzadas de Relleno Sin Sentido (Sentido y Flow sobre Consonancia Infantil):**
+4. **Cero Rimas Forzadas de Relleno & Maestría de Slant Rhymes (Multi-syllabic Vowel Matching):**
    - Queda TERMINANTEMENTE PROHIBIDO forzar palabras o frases inconexas y absurdas solo para cerrar una rima consonante (ej: meter "salimos del zapato" para rimar con "gelato", o "contándolo en el parto" para rimar con "tercer cuarto").
-   - Si una palabra no encaja de forma 100% natural, orgánica y creíble en la escena de calle, DESCÁRTALA. Prioriza rimas asonantes con groove, rimas internas o reformula la barra. En el rap contemporáneo se valora el flow y la actitud mil veces más que una rima consonante escolar forzada.
+   - Utiliza RIMAS MULTI-SILÁBICAS ASONANTES (Slant Rhymes / Vowel Matching) como hacen los letristas de élite: coincidencia del patrón vocálico (ej: a-a-o ➔ candado / disparo / asfalto; e-a ➔ cerca / cuenta / frena) y rimas internas cruzadas a contratiempo.
+   - Si una palabra en posición de rima no suena 100% orgánica, creíble y con peso callejero en la escena, DESCÁRTALA de inmediato y reformula el compás. En el trap de estudio se premia la musicalidad del groove y la actitud mil veces más que un pareado escolar forzado.
    - Evita clichés trillados de IA: "suerte / muerte", "pena / vena", "el asfalto no perdona", "haciendo money sin parar".
 5. **Show, Don't Preach (Cero Sermón Moral de 'Lealtad'):**
    - Queda PROHIBIDO repetir palabras abstractas morales ("lealtad", "respeto", "traición") como eslóganes en cada sección ("la lealtad no se vende", "lealtad hasta la tumba").
    - Muestra la lealtad a través de HECHOS Y CONDUCTAS físicas concretas (guardar silencio ante el fiscal, dividir el fardo en partes iguales, no desbloquear la pantalla), NUNCA predicándola como autoayuda.
-6. **Cero Vocabulario Clínico/Burocrático Hiper-Largo:**
-   - Queda PROHIBIDO usar términos formales, administrativos, jurídicos o clínicos de más de 4 sílabas (como "interrogatorio", "inversión financiera", "procedimiento policial"). Usa el vocabulario callejero conciso y con peso ("la estatal", "el juez", "el calabozo").
+6. **Argot Callejero Auténtico vs. Traducciones Infantiles / Clínicas:**
+   - Prohibidas traducciones literales o construcciones infantiles de libro de texto: NUNCA uses "con el amigo", "en la zona de castigo", "no sentimos temor", "no hay mudanza". Usa el argot callejero orgánico y con filo: "con mi socio", "con mi hermano", "con la banda", "sin pestañear", "las cuentas claras".
+   - Queda PROHIBIDO usar términos formales, administrativos, jurídicos o clínicos de más de 4 sílabas (como "interrogatorio", "inversión financiera", "procedimiento policial"). Usa el vocabulario callejero conciso y con peso ("la estatal", "el fiscal", "el calabozo").
 7. **Flow Característico Sin Name-Dropping Ni Biografía Personal:**
    - La canción debe sonar y fluir idéntica al rapeo característico de los artistas elegidos (${artist?.name ?? "Lead"}${featureArtist ? ` y ${featureArtist.name}` : ""}) — su cadencia, métrica, sílabas por compás, síncopa y actitud musical. Pero está TERMINANTEMENTE PROHIBIDO escribir en las barras o ad-libs los nombres de los artistas ("soy ${artist?.name ?? "X"}", "aquí ${featureArtist?.name ?? "Y"}"), mencionar a otros artistas reales, o calcar tragedias biográficas íntimas, familiares fallecidos o nombres de bandas callejeras reales de su infancia. El oyente debe identificar al artista por su FLOW Y SU VOZ EN SUNO, nunca porque el texto diga su nombre.
 8. **Higiene de Metadatos de Sistema:** Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la bio del artista (como 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
@@ -1533,18 +1567,24 @@ Si la [Intro] está en modo Hype Man o tiene asignado 'Hype', queda TERMINANTEME
 - Flow DNA (${artist?.name}): Cadencia ${mainDNA.flow.cadenceType} (${mainDNA.flow.avgSyllablesPerBar.join("-")} sílabas por compás). Síncopa: ${Math.round(mainDNA.flow.syncopation * 100)}%. Velocidad: ${flowProfile?.speedLabel ?? "natural"}. ${flowProfile?.cadenceInstruction ?? ""}
 ${featDNA ? `- Flow Feature (${featureArtist?.name}): Cadencia ${featDNA.flow.cadenceType} (${featDNA.flow.avgSyllablesPerBar.join("-")} sílabas por compás). Velocidad: ${featureFlowProfile?.speedLabel ?? "natural"}. ${featureFlowProfile?.cadenceInstruction ?? ""}` : ""}
 ${featureContrast ? `${featureContrast.instruction}\n` : ""}- ${rhymeLevelInstruction}
+
+- 🎯 BOLSILLO MÉTRICO ESTRICTO POR COMPÁS (${artist?.name}):
+  * Ventana Silábica: ${mainMinSyl} a ${mainMaxSyl} sílabas cantadas por línea (LÍMITE MÁXIMO ABSOLUTO: ${mainCeiling} sílabas).
+  * Densidad de Palabras: ${mainWordRange} por compás.
+  * Queda TERMINANTEMENTE PROHIBIDO rebasar el límite con barras sobrecargadas o palabras hiper-largas que atropellen el beat o hagan que el modelo vocal de Suno tropiece. Cada compás debe caber holgadamente en el tiempo musical del tempo (${params.bpmVibe.range} BPM).${featPocketBlock}
+
 - Directiva Rítmica para Suno: Estructura la longitud de cada línea y la colocación de pausas para que el modelo de voz de Suno reproduzca fielmente el bolsillo rítmico del artista original (tresillos cortantes, legato arrastrado, o staccato frío según corresponda), manteniendo las barras compactas y sin atropellos silábicos.
 
 # 💎 ANCLAS COMPOSITIVAS NEUTRALES (TÉCNICA DE ESTUDIO):
 ${goldExamples.map(g => `- **${g.technique}** (${g.description}):\n  Barra 1: "${g.bars[0]}"\n  Barra 2: "${g.bars[1]}"`).join("\n")}
 
-# 🧱 CONTINUIDAD ESCÉNICA EN CÉLULAS DE ESCRITURA (4-BAR SCENE PROGRESSION):
-Cada célula o bloque de 4 compases debe mantener continuidad escénica o de tensión dramática:
-- Compás 1: Establece la situación o escenario físico.
-- Compás 2: Aporta un detalle táctil o subtexto revelador.
-- Compás 3: Escala la tensión o introduce un giro interno.
-- Compás 4: Cierra con una consecuencia tangible o punchline de remate.
-🚫 PROHIBIDO cambiar arbitrariamente de tema o saltar de un cliché a otro en cada compás individual.
+# 🧱 CONTINUIDAD ESCÉNICA Y CAUSAL EN CÉLULAS DE ESCRITURA (4-BAR SCENE PROGRESSION):
+Cada célula o bloque de 4 compases debe mantener estricta continuidad física y causal:
+- Compás 1: Establece la situación o acción física inmediata en el entorno.
+- Compás 2: Aporta un detalle táctil, sensorial o subtexto revelador del mismo entorno.
+- Compás 3: Escala la tensión o introduce una complicación directa como consecuencia del hecho anterior.
+- Compás 4: Cierra con una consecuencia tangible o punchline de remate que conecta con el compás siguiente.
+🚫 PROHIBIDO EL TELETRANSPORTE ESCÉNICO: Las barras dentro de cada célula y entre células adyacentes DEBEN estar conectadas por causa-efecto. Si la escena ocurre en la autopista de noche (coches, luces, maleta), NO puedes saltar en el siguiente compás a estar tirando canastas en un pabellón o cantando en una cabina. Si introduces una analogía (ej: deportiva), debe ser una metáfora breve que NO abandone el escenario físico real.
 
 🔄 RIMA Y DENSIDAD VARIABLE:
 Se permiten compases hablados (spoken bars), silencios rítmicos y rimas internas asonantes. La rima nunca debe forzar o gobernar la frase de forma artificial.
@@ -1559,8 +1599,8 @@ En cada verso, ejecuta una progresión dinámica para evitar monotonía:
 # 📜 CONTRATO 4: CAPA VOCAL, PERFORMANCE & AD-LIBS MASTER (VOCAL CONTRACT)
 ================================================================================
 Como Director Vocal, incorpora la capa de performance con criterio musical:
-1. **Ad-libs con Significación & Espacio Rítmico:**
-   - Distribuye los ad-libs de forma musical en contratiempo: NUNCA en cada compás continuo.
+1. **Ad-libs con Significación & Regla 2x2 de Performance:**
+   - Regla 2x2 de Respiración: En versos de 8 a 16 barras, alterna compases limpios (2 compases seguidos donde la voz principal y el bajo 808 mandan sin ad-libs de distracción) con compases que llevan ad-libs puntuales en los huecos o contratiempos.
    - LÍMITE DE CONSECUTIVIDAD: Máximo 2 compases seguidos con ad-lib (maxConsecutiveAdlibBars = 2).
    - Deja compases limpios para que la voz principal y el beat respiren con fuerza.
    - Presupuesto por sección: En Versos: moderado (~40-50% de las barras con ad-lib); en Coros: bajo/moderado; en Outro: sutil/sparse.
