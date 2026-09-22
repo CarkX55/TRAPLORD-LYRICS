@@ -262,13 +262,13 @@ export function buildSpanglishInstruction(percent: number): {
     organicRule = "IDIOMA: 100% Español puro. Prohibido usar frases o palabras en inglés (salvo marcas registradas). Las rimas, la métrica y la jerga deben fluir con naturalidad en español.";
   } else if (englishPct <= 20) {
     vibeLabel = `🇪🇸 Español dominante con Loanwords (${spanishPct}% ES / ${englishPct}% EN)`;
-    organicRule = `CODE-SWITCHING ORGÁNICO: Español dominante. Escribe las estrofas y narrativa en español, pero integra anglicismos callejeros y loanwords auténticos de la cultura urbana (drip, opps, motion, racks, plug, flex) en puntos rítmicos naturales. Los estribillos en español. Prohibido repetir una fórmula mecánica de '[inglés] + [español]' en cada línea; la alternancia debe sonar natural.`;
+    organicRule = `CODE-SWITCHING ORGÁNICO: Español dominante. Escribe las estrofas y narrativa en español con sintaxis natural de calle, integrando anglicismos auténticos (drip, opps, motion, racks, plug, flex) en puntos rítmicos naturales o remates. Los estribillos en español. Prohibido partir oraciones con traducciones mecánicas mitad-y-mitad ('fast in my carro'); la alternancia debe fluir como un hispanohablante nativo.`;
   } else if (englishPct <= 45) {
     vibeLabel = `🔌 Español con Rhyme Anchors en inglés (${spanishPct}% ES / ${englishPct}% EN)`;
-    organicRule = `CODE-SWITCHING ORGÁNICO: Base en español con remates y anclas de rima en inglés. Desarrolla la frase en español y cierra el compás con punchlines o terminaciones en inglés. Mezcla fluida y musical como Eladio Carrión o Myke Towers. Prohibido el patrón mecánico repetitivo línea por línea.`;
+    organicRule = `CODE-SWITCHING ORGÁNICO: La columna vertebral de la narrativa debe tener la sintaxis natural, el dialecto y la fluidez del español callejero. Los anglicismos entran de forma orgánica como préstamos directos de la cultura trap (drip, racks, plug, opps, foreign, switch) o como ráfagas de remate y punchline de actitud en la rima ('big racks, no cap', 'all gas, no brakes'). 🚫 PROHIBIDO EL CORTE MITAD-Y-MITAD DENTRO DEL SINTAGMA: Queda terminantemente prohibido partir oraciones con traducciones ortopédicas de máquina ('fast in my carro', 'lo cuido en el saco', 'I am the boss, me miran como jefe'). Los estribillos en español.`;
   } else if (englishPct <= 65) {
     vibeLabel = `⚖️ Spanglish balanceado 50/50 (${spanishPct}% ES / ${englishPct}% EN)`;
-    organicRule = `CODE-SWITCHING ORGÁNICO DINÁMICO (50/50): Alternancia constante y fluida. Alterna barras completas en inglés y español o realiza cambios de código a mitad de compás con total naturalidad estilo Kidd Keo / Eladio. 🚫 PROHIBIDA LA FÓRMULA MECÁNICA: Queda terminantemente prohibido repetir en cada compás el esquema artificial de '[palabra en inglés] + [frase en español]'. El cambio de idioma debe ser espontáneo y variado.`;
+    organicRule = `CODE-SWITCHING ORGÁNICO DINÁMICO (50/50): Alternancia constante y fluida de barras completas en inglés y español, o cambios de código naturales estilo Eladio Carrión / Myke Towers. 🚫 PROHIBIDA LA TRADUCCIÓN MECÁNICA POR COMPÁS: Queda terminantemente prohibido partir cada compás a la mitad con esquemas ortopédicos de '[palabra en inglés] + [frase en español]'. Cada frase debe sonar como habla un bilingüe nativo, no un traductor automático.`;
   } else if (englishPct <= 85) {
     vibeLabel = `🇺🇸 Inglés dominante con barras en español (${englishPct}% EN / ${spanishPct}% ES)`;
     organicRule = `CODE-SWITCHING ORGÁNICO: Inglés americano dominante (75-80%). Estructura principal en inglés con puentes, remates o frases callejeras directas en español. Mezcla orgánica sin plantillas rígidas por compás.`;
@@ -1354,26 +1354,28 @@ ${hookVariationsEnabled ? `
 ${goldExamples.map(g => `- **${g.technique}** (${g.description}):\n  Barra 1: "${g.bars[0]}"\n  Barra 2: "${g.bars[1]}"`).join("\n")}
 
 # 🏀 REGLAS DE ARQUITECTURA TOPLINE (MÚSICA REAL DE ESTUDIO):
-1. **FRASEO MUSICAL Y BARRAS COMPLETAS:**
-   - Escribe compases que fluyan con ritmo natural, swing y musicalidad real.
+1. **FRASEO MUSICAL, BARRAS COMPLETAS & ESPECIFICIDAD VÍVIDA:**
+   - Escribe compases que fluyan con ritmo natural, swing y musicalidad real de hit de trap.
+   - Construye el estribillo sobre hechos físicos tangibles, compras, activos o detalles sensoriales concretos que enganchen de inmediato (ej: el notario firmando, el oro en la mesa, la maleta sellada, el olor a dinero y plástico nuevo), en lugar de vaguedades genéricas.
    - Queda TERMINANTEMENTE PROHIBIDO sonar a telegrama inconexo o lista de palabras sueltas. El estribillo debe tener melodía, sentido y pegada.
 2. **VOCABULARIO ORGÁNICO & LIBRE (CERO ATREZZO ARTIFICIAL):**
    - Desarrolla el gancho basándote en las temáticas elegidas por el usuario y el escenario físico seleccionado.
    - El vocabulario es 100% libre. Queda TERMINANTEMENTE PROHIBIDO forzar marcas o atrezzo artificial no pedido por el usuario.
    - Higiene de Metadatos: Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la bio del artista (ej: 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
-3. **AD-LIBS LIMPIOS Y UNIVERSALES:**
+3. **AD-LIBS Y COMENTARIOS REACTIVOS DE ESCENA:**
    - Cada compás debe tener fuerza propia dentro del groove.
-   - En el Estribillo/Chorus mantén los ad-libs universales y comedidos en contratiempo: (Yeah), (Facts), (Uh), (Hold up), (Never), (No cap).
+   - Alterna ad-libs universales en contratiempo: (Yeah), (Facts), (Uh), (Hold up), (Never), (No cap), con comentarios reactivos breves en voz baja que confirman la escena: (Tranquilo), (Hielo), (Pocos), (Pagao), (Mío).
    - Máximo 1-2 compases seguidos con ad-lib para que la melodía central y el bajo 808 respiren con fuerza.
    - Queda PROHIBIDO incluir traducciones literales entre idiomas entre paréntesis o saturar con muletillas repetitivas.
 4. **FLOW CARACTERÍSTICO DEL ARTISTA (SIN NAME-DROPPING NI BIOGRAFÍA PERSONAL):**
    - El rapeo y la melodía del gancho DEBEN capturar de forma inconfundible el flow, la métrica, la cadencia y el bolsillo rítmico de ${hookArtist?.name ?? "el artista"} (${hookFlowProfile?.cadence?.toUpperCase() ?? "STACCATO"}) para que al interpretarse en Suno suene con su pegada y estilo característicos.
    - 🚫 REGLA DE ORO DE PRIVACIDAD & HIGIENE: Queda TERMINANTEMENTE PROHIBIDO mencionar el nombre del artista ("soy ${hookArtist?.name ?? "X"}", "aquí ${hookArtist?.name ?? "X"}") ni de otros artistas reales en la letra cantada o ad-libs. Tampoco calques anécdotas autobiográficas íntimas, familiares fallecidos ni nombres de bandas callejeras reales de su infancia. El parecido debe ser 100% por el FLOW, la MÉTRICA y la ACTITUD MUSICAL.
-5. **RIMA AUDIBLE REAL & NATURALIDAD DE ESTUDIO (CERO ENCASILLAMIENTO):**
+5. **RIMA AUDIBLE REAL, GROOVE & ANTI-PARTICIPIOS EN CADENA:**
    - Esquema de Rima Obligatorio: El estribillo DEBE rimar según el esquema asignado ${hookRhymeScheme?.label ?? "AABB"} (${hookRhymeScheme?.description ?? ""}). Queda prohibida la prosa suelta sin rima.
+   - 🚫 ANTI-PARTICIPIOS EN CADENA: Queda terminantemente prohibido hacer un estribillo donde 3 o más líneas rimen con la misma terminación verbal en '-ado/-ido' (ej: congelado/acelerado/controlado/duplicado). Busca rimas con pegada sobre sustantivos o palabras agudas y sonoras (-és, -ín, -al, -ón, -or, -ás, -ero, -ete, -ente).
    - Fonética de Rima de Estudio: Utiliza rimas consonantes naturales o rimas asonantes multi-silábicas (slant rhymes / vowel-matching como 'fuego/ceros' o 'pista/prisa'). Prohibidas consonancias forzadas e infantiles de guardería (*gelato/zapato*, *cuarto/parto*).
-   - Naturalidad de Estudio: Quedan terminantemente prohibidas las frases ortopédicas o traducciones automáticas de máquina (ej: 'piso frío el suelo', 'cuarzo fino'). Escribe con fluidez y sintaxis natural.
-   - Show, Don't Preach: Queda PROHIBIDO usar eslóganes morales abstractos trillados de autoayuda (ej: "la lealtad no se vende", "lealtad hasta la tumba", "el dinero no compra la felicidad"). El estribillo debe construirse sobre imágenes sensoriales vivas, actitud cruda o una tensión física real.
+   - Naturalidad de Estudio: Quedan terminantemente prohibidas las frases ortopédicas o traducciones automáticas de máquina (ej: 'fast in my carro', 'cuarzo fino'). Escribe con fluidez y sintaxis natural.
+   - Show, Don't Preach: Queda PROHIBIDO usar eslóganes morales abstractos trillados de autoayuda. El estribillo debe construirse sobre imágenes sensoriales vivas, actitud cruda o una tensión física real.
 
 ${flowSkeletonSummary ? `\n# 📐 GUÍA DE RITMO Y CADENCIA GLOBAL (BEAT-FIRST):\n${flowSkeletonSummary}\n` : ""}
 # 📋 FORMATO DE SALIDA ESTRICTO:
@@ -1582,24 +1584,29 @@ ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 - Función en la Canción: ${framing.dramaticFunction}
 
 🚫 REGLAS DE VOCABULARIO, FLOW Y AUTENTICIDAD DE ESTUDIO:
-1. **Fidelidad al Mundo Configurado & No-Reciclaje del Gancho:** Desarrolla la narrativa, imaginería y metáforas ancladas en las temáticas elegidas por el usuario y los elementos físicos de la situación escénica configurada en la pantalla. Los Versos deben avanzar la historia aportando NUEVOS objetos y situaciones. Queda TERMINANTEMENTE PROHIBIDO reciclar o copiar en los versos los mismos objetos físicos que ya aparecen en el Estribillo (si el estribillo ya fijó teléfonos, jarabe o luces, los versos deben explorar otros elementos: la maleta, el motor, la lluvia, el asfalto, las llaves, la celda, el fardo o la desconfianza).
+1. **Realismo Visceral, Negocios Callejeros & Anécdotas Concretas (Show, Don't Generalize):**
+   - No escribas historias genéricas o predecibles. Busca una perspectiva MUY ORIGINAL, un ángulo narrativo único o anécdotas específicas que combinen los temas de forma sorprendente pero 100% REAL dentro del estilo de vida del Rap/Trap.
+   - Compón a través de hechos físicos tangibles y detalles específicos de alto calibre que demuestren que el narrador conoce de primera mano ese mundo: activos, compras al contado, documentos, notarios, naves industriales, olores sensoriales (plástico nuevo y fardos de billetes), giros postales a la prisión, comida cara para la familia, zulos con doble tabique, pesas calibradas o marcas exactas. Cero vaguedades abstractas o clichés poéticos de IA ("la noche fría", "el asfalto no perdona").
+   - Queda TERMINANTEMENTE PROHIBIDO reciclar o copiar en los versos los mismos objetos físicos que ya aparecen en el Estribillo. Los versos deben avanzar la escena aportando NUEVAS consecuencias y objetos.
 2. **Entidades Explícitas del Usuario (Preservación Inviolable):** Las temáticas pedidas por el usuario (${userTopicsList.length > 0 ? userTopicsList.join(", ") : "temas seleccionados"}) son elecciones deliberadas e inviolables. Queda TERMINANTEMENTE PROHIBIDO censurarlas, cambiarlas por perífrasis genéricas o considerarlas como 'contaminación corporativa'.
 3. **Memoria Negativa Radical & Cero Checklisting Inter-Estrofas:**
    - Prohibido rotar mecánicamente los mismos dominios metafóricos: si en el Verso 1 usas una analogía deportiva / de baloncesto (ej: Shaq), en el Verso 2 queda TERMINANTEMENTE PROHIBIDO volver a usar otra analogía de baloncesto (cero Kobe, cero NBA). Si en el Verso 1 hablas de coches, en el Verso 2 explora la mesa, el dinero en mano, la patrulla o la tensión entre socios.
    - Prohibido el checklisting en bucle: NUNCA repitas la misma lista de ingredientes en cada estrofa como si fuera una plantilla. Cada verso debe traer objetos, ángulos y consecuencias completamente diferentes.
-4. **Rima Audible Real & Slant Rhymes Multi-silábicas (Cero Prosa Suelta):**
-   - Cada compás DEBE rimar según el esquema asignado a su artista o sección (AABB, ABAB, Triplets o Monorrima).
-   - Queda TERMINANTEMENTE PROHIBIDO escribir prosa partida en líneas sin rima sonora audible.
+4. **Rima Audible Real & Anti-Participios en Cadena (Cero Pereza Gramatical):**
+   - Cada compás DEBE rimar según el esquema asignado a su artista o sección (AABB, ABAB, Triplets). Queda terminantemente prohibida la prosa suelta sin rima.
+   - 🚫 ANTI-PARTICIPIOS EN CADENA: Queda terminantemente prohibido hacer estribillos o versos donde 3 o más líneas rimen con la misma terminación verbal en '-ado/-ido' (ej: congelado/acelerado/controlado/duplicado). Es el vicio más vago de la IA.
+   - Busca rimas de peso sobre sustantivos, palabras agudas o terminaciones variadas y sonoras: -és, -ín, -al, -ón, -or, -ás, -ero, -ete, -ente.
    - Utiliza rimas consonantes naturales o rimas asonantes multi-silábicas (slant rhymes / vowel-matching: *fuego/ceros*, *pista/prisa*, *candado/disparo*).
-   - Quedan prohibidas las consonancias escolares forzadas de relleno o rimas infantiles.
-   - Evita clichés trillados de IA: "suerte / muerte", "pena / vena", "el asfalto no perdona", "haciendo money sin parar".
+   - Quedan prohibidas las consonancias escolares forzadas de relleno o rimas infantiles (*gelato/zapato*, *frío como nieve*).
+   - Evita clichés trillados de IA: "suerte / muerte", "pena / vena", "haciendo money sin parar".
 5. **Show, Don't Preach (Cero Sermón Moral de 'Lealtad'):**
    - Queda PROHIBIDO repetir palabras abstractas morales ("lealtad", "respeto", "traición") como eslóganes en cada sección ("la lealtad no se vende", "lealtad hasta la tumba").
    - Muestra las vivencias a través de HECHOS Y CONDUCTAS físicas concretas, NUNCA predicándolas como sermones de autoayuda.
-6. **Libertad de Vocabulario, Tono Regional y Naturalidad de Estudio (Cero Encasillamiento):**
-   - Queda totalmente prohibido encasillar a la IA con listas obligatorias de palabras o vetos artificiales. El vocabulario es 100% libre y guiado orgánicamente por la temática del usuario.
+6. **Sintaxis Humana, Code-Switching Orgánico y Slang de Pegada:**
+   - La columna vertebral de cada frase debe mantener la sintaxis natural, el dialecto y la fluidez del idioma principal (oraciones completas, giros de calle creíbles sin traducciones ortopédicas de máquina).
+   - El slang americano o anglicismos entran de forma natural: como préstamos directos integrados en el compás (*draco, foreign, racks, plug, opp, switch*) o como ráfagas de remate y punchline de actitud al final de la barra (*'big racks, no cap'*, *'all gas, no brakes'*).
+   - 🚫 PROHIBIDO EL CORTE MITAD-Y-MITAD DENTRO DEL SINTAGMA: Queda terminantemente prohibido partir oraciones traduciendo palabra por palabra como un estudiante de intercambio (*'fast in my carro'*, *'lo cuido en el saco'*, *'I am the boss, me miran como jefe'*).
    - Adopta el tono y cadencia regional nativa del artista (${artist?.origin ?? "calle"}) con fluidez callejera humana creíble (ej: modismos orgánicos de PR, Argentina, España, Atlanta/Spanglish según corresponda).
-   - Cero construcciones ortopédicas o calcos de Google Translate: Prohibido redactar frases invertidas antinaturales (*'piso frío el suelo'*, *'cuarzo fino'*, *'corriendo en la cama'*). Las barras deben sonar a como habla y rapea un artista real en una cabina de grabación profesional.
 7. **Dinámica Lírica según el Mood (${currentMood.label.toUpperCase()}):**
 ${currentMood.id === "agresivo" || currentMood.id === "oscuro" || currentMood.id === "menacing"
   ? "   - Actitud Staccato Amenazante & Punchlines Cortantes: Compases secos de alta tensión, ataques rápidos con silencios cortados, ad-libs agresivos en contratiempo y barras de confrontación directa."
@@ -1668,8 +1675,8 @@ En cada verso, ejecuta una progresión dinámica para evitar monotonía:
 # 📜 CONTRATO 4: CAPA VOCAL, PERFORMANCE & AD-LIBS MASTER (VOCAL CONTRACT)
 ================================================================================
 Como Director Vocal, incorpora la capa de performance con criterio musical:
-1. **Ad-libs Limpios y Universales & Regla 2x2 de Respiración:**
-   - Ad-libs de Actitud Universales: Utiliza ad-libs limpios y efectivos en contratiempo: (Yeah), (Facts), (Uh), (Hold up), (Never), (No cap), o ecos de la última palabra.
+1. **Ad-libs con Personalidad & Comentarios Reactivos de Escena:**
+   - Alterna ad-libs clásicos de ritmo y energía (Brrr, Yeah, Uh, Skrrt) con COMENTARIOS REACTIVOS DE UNA O DOS PALABRAS en voz baja que afirman y dan peso dramático a la barra: (Tranquilo), (Hielo), (Pocos), (Pagao), (Huele bien), (Mío), (Seguro), (Págaselo), (Fajas), (No cap).
    - Regla 2x2 de Respiración: En versos de 8 a 16 barras, alterna compases limpios (2 compases seguidos donde la voz principal y el bajo 808 mandan sin ad-libs de distracción) con compases que llevan ad-libs puntuales en los huecos o contratiempos.
    - LÍMITE DE CONSECUTIVIDAD: Máximo 2 compases seguidos con ad-lib (maxConsecutiveAdlibBars = 2).
    - Deja compases limpios para que la voz principal y el beat respiren con fuerza.
