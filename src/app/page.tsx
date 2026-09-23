@@ -388,7 +388,14 @@ export default function TrapGhostPage() {
           .catch(() => {});
       }
       const storedModel = localStorage.getItem("gemini_model");
-      if (storedModel) setGeminiModel(storedModel);
+      if (storedModel) {
+        if (storedModel.includes("2.5")) {
+          setGeminiModel("gemini-2.0-flash");
+          try { localStorage.setItem("gemini_model", "gemini-2.0-flash"); } catch {}
+        } else {
+          setGeminiModel(storedModel);
+        }
+      }
       const storedBudget = localStorage.getItem("gemini_thinking_budget");
       if (storedBudget !== null) setThinkingBudget(Number(storedBudget));
       const storedProducer = localStorage.getItem("producer_name");
@@ -2148,10 +2155,10 @@ export default function TrapGhostPage() {
                           <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                         )) : (
                           <>
-                            <SelectItem value="gemini-2.5-flash">⚡ Gemini 2.5 Flash</SelectItem>
-                            <SelectItem value="gemini-2.5-pro">⚡ Gemini 2.5 Pro</SelectItem>
                             <SelectItem value="gemini-2.0-flash">🔥 Gemini 2.0 Flash (Recomendado · Rápido y Estable)</SelectItem>
-                            <SelectItem value="gemini-1.5-flash">📊 Gemini 1.5 Flash</SelectItem>
+                            <SelectItem value="gemini-2.0-flash-lite">⚡ Gemini 2.0 Flash Lite (Ultra Rápido)</SelectItem>
+                            <SelectItem value="gemini-1.5-flash">⚡ Gemini 1.5 Flash (Alta Cuota)</SelectItem>
+                            <SelectItem value="gemini-2.0-flash-thinking-exp-01-21">🧠 Gemini 2.0 Flash Thinking Exp</SelectItem>
                             <SelectItem value="gemini-1.5-pro">📊 Gemini 1.5 Pro</SelectItem>
                           </>
                         )}

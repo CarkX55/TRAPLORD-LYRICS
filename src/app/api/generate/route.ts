@@ -31,7 +31,7 @@ import { buildCorrectionInstruction, analyzeLanguageRatio, type LanguageAnalysis
 import { getArtistReference } from "@/lib/artist-references";
 import { generateArtistReference } from "@/lib/reference-generator";
 import { analyzeReferenceTrack } from "@/lib/track-analyzer";
-import { parseRawLyricsToAST, stringifyASTToSunoLyrics, createHookContract, bindHookContractToAST, hashSongDocument, resolveSectionSpec, validateLyricEnvelope, type HookContract } from "@/lib/song-document";
+import { parseRawLyricsToAST, stringifyASTToSunoLyrics, createHookContract, bindHookContractToAST, hashSongDocument, resolveSectionSpec, validateLyricEnvelope, stripMetaReasoning, type HookContract } from "@/lib/song-document";
 import { synthesizeSemanticAnchor } from "@/lib/motif-engine";
 import { buildLanguageDNA, buildLanguageTarget, calculateSyllableLanguageRatio } from "@/lib/language-dna";
 import { auditDialectAndTranslationArtifacts, type SpanishFlavor } from "@/lib/dialect-engine";
@@ -117,86 +117,116 @@ interface GenerateBody {
   spanishFlavor?: SpanishFlavor;
 }
 
-// Unified LLM Caller honoring strictly the user's selected model with progressive retry
+// Unified Resilient LLM Caller with Model Cascade & Auto-Fallback
 async function callLLM(prompt: string, body: GenerateBody, temperature: number = 0.72): Promise<string> {
   if (body.geminiApiKey && body.geminiApiKey.trim()) {
-    const model = (body.geminiModel && body.geminiModel.trim()) ? body.geminiModel.trim() : "gemini-2.0-flash";
+    const rawRequestedModel = (body.geminiModel && body.geminiModel.trim()) ? body.geminiModel.trim() : "gemini-2.0-flash";
+    // Normalize deprecated / invalid names (e.g. non-existent gemini-2.5)
+    const primaryModel = rawRequestedModel.includes("2.5") ? "gemini-2.0-flash" : rawRequestedModel;
+
+    // Build intelligent fallback cascade: Primary user model -> gemini-2.0-flash -> gemini-1.5-flash
+    const modelCascade: string[] = [primaryModel];
+    if (!modelCascade.includes("gemini-2.0-flash")) {
+      modelCascade.push("gemini-2.0-flash");
+    }
+    if (!modelCascade.includes("gemini-1.5-flash")) {
+      modelCascade.push("gemini-1.5-flash");
+    }
+
     let lastError: Error | null = null;
 
-    // Up to 3 attempts on the chosen model with progressive delay
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s per attempt
+    for (let mIdx = 0; mIdx < modelCascade.length; mIdx++) {
+      const currentModel = modelCascade[mIdx];
+      const isFallback = mIdx > 0;
+      if (isFallback) {
+        console.warn(`[callLLM] Cascading to fallback model: ${currentModel} (after ${modelCascade[mIdx - 1]} failed)`);
+      }
 
-        // Build generationConfig with optional thinkingConfig
-        const generationConfig: Record<string, unknown> = {
-          temperature,
-          topP: 0.95,
-        };
+      // Try up to 2 attempts on this candidate model
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s per attempt
 
-        // Only attach thinkingConfig for models that specifically support thinking tokens
-        const isThinkingModel = model.includes("thinking") || model.includes("-exp");
-        if (
-          isThinkingModel &&
-          typeof body.thinkingBudget === "number" &&
-          body.thinkingBudget >= 0
-        ) {
-          generationConfig.thinkingConfig = {
-            thinkingBudget: body.thinkingBudget,
+          // Build generationConfig with SAFE thinkingConfig
+          const generationConfig: Record<string, unknown> = {
+            temperature,
+            topP: 0.95,
           };
-        }
 
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal: controller.signal,
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig,
-            }),
+          // ONLY attach thinkingConfig if the model name specifically contains "thinking"
+          // AND thinkingBudget is a valid integer >= 1024 (Gemini API minimum)
+          const supportsThinking = currentModel.toLowerCase().includes("thinking");
+          if (
+            supportsThinking &&
+            typeof body.thinkingBudget === "number" &&
+            body.thinkingBudget >= 1024
+          ) {
+            generationConfig.thinkingConfig = {
+              thinkingBudget: body.thinkingBudget,
+            };
           }
-        );
-        clearTimeout(timeoutId);
 
-        const json = await res.json();
-        if (json.error) {
-          const errMsg = json.error.message || json.error.status || `Error ${json.error.code}`;
-          console.warn(`[callLLM] Model ${model} returned API error (${json.error.code}, attempt ${attempt}): ${errMsg}`);
-          lastError = new Error(`Gemini (${model}): ${errMsg}`);
-          
-          if (attempt < 3 && (json.error.code === 503 || json.error.code === 429)) {
-            // Wait with backoff before retrying on the user's chosen model
-            await new Promise(r => setTimeout(r, attempt * 2000));
-            continue;
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${body.geminiApiKey.trim()}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: controller.signal,
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig,
+              }),
+            }
+          );
+          clearTimeout(timeoutId);
+
+          const json = await res.json();
+          if (json.error) {
+            const errMsg = json.error.message || json.error.status || `Error ${json.error.code}`;
+            const errCode = json.error.code;
+            console.warn(`[callLLM] Model ${currentModel} returned API error (${errCode}, attempt ${attempt}): ${errMsg}`);
+            lastError = new Error(`Gemini (${currentModel}): ${errMsg}`);
+
+            // If it's 400 (unsupported config) or 404 (model not found/deprecated), don't retry same model - advance to next model in cascade!
+            if (errCode === 400 || errCode === 404) {
+              break;
+            }
+
+            // If 503 or 429 and attempt 1, wait briefly with backoff
+            if (attempt === 1 && (errCode === 503 || errCode === 429)) {
+              await new Promise(r => setTimeout(r, 1500));
+              continue;
+            }
+
+            // On attempt 2 or unrecoverable error, advance to next model in cascade
+            break;
           }
-          throw lastError;
-        }
 
-        const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text || !text.trim()) {
-          console.warn(`[callLLM] Model ${model} returned empty candidates`);
-          lastError = new Error(`Gemini (${model}) no devolvió contenido.`);
-          if (attempt < 3) {
-            await new Promise(r => setTimeout(r, 1500));
-            continue;
+          const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!text || !text.trim()) {
+            console.warn(`[callLLM] Model ${currentModel} returned empty candidates`);
+            lastError = new Error(`Gemini (${currentModel}) no devolvió contenido.`);
+            if (attempt === 1) {
+              await new Promise(r => setTimeout(r, 1000));
+              continue;
+            }
+            break;
           }
-          throw lastError;
-        }
 
-        return text.trim();
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(`[callLLM] Model ${model} attempt ${attempt} failed: ${lastError.message}`);
-        if (attempt < 3) {
-          await new Promise(r => setTimeout(r, attempt * 1500));
+          // Success!
+          return text.trim();
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error(String(err));
+          console.warn(`[callLLM] Model ${currentModel} attempt ${attempt} exception: ${lastError.message}`);
+          if (attempt === 1) {
+            await new Promise(r => setTimeout(r, 1000));
+          }
         }
       }
     }
 
-    throw lastError || new Error(`No se pudo procesar la solicitud con el modelo ${model}.`);
+    throw lastError || new Error(`No se pudo procesar la solicitud tras intentar con los modelos: ${modelCascade.join(", ")}`);
   } else {
     // Sandbox z-ai with fallback
     const ZAI = (await import("z-ai-web-dev-sdk")).default;
@@ -352,7 +382,8 @@ export async function POST(req: NextRequest) {
     };
 
     const temperature = typeof body.temperature === "number" ? body.temperature : 0.72;
-    const modelUsed = (body.geminiApiKey && body.geminiApiKey.trim()) ? (body.geminiModel || "gemini-2.5-flash") : "sandbox-z-ai";
+    const rawModel = body.geminiModel?.trim();
+    const modelUsed = (body.geminiApiKey && body.geminiApiKey.trim()) ? ((rawModel && !rawModel.includes("2.5")) ? rawModel : "gemini-2.0-flash") : "sandbox-z-ai";
     const pipelineStartTime = Date.now();
     let lyrics = "";
     let finalRaw = "";
@@ -522,18 +553,32 @@ export async function POST(req: NextRequest) {
       const t2 = Date.now();
       let stage2Lyrics = await callLLM(stage2Prompt, body, 0.72);
 
-      // Invariant: Fail-Closed Lyric Envelope Validation
+      // Resilient Lyric Envelope Validation & Sanitization
       const envelopeCheck = validateLyricEnvelope(stage2Lyrics);
-      if (!envelopeCheck.valid && envelopeCheck.detectedReasoningLines && envelopeCheck.detectedReasoningLines.length > 0) {
-        console.warn(`[generate] Fail-Closed: Contaminated envelope detected (${envelopeCheck.reason}). Retrying once with strict zero-reasoning instruction.`);
-        const retryPrompt = `${stage2Prompt}\n\n⚠️ ALERTA DE COMPOSICIÓN CRÍTICA: Tu salida previa contenía texto conversacional o justificaciones explicativas ("${envelopeCheck.detectedReasoningLines[0]}"). Comienza INMEDIATAMENTE en el primer corchete de sección. CERO TEXTO ANTES O DESPUÉS.`;
-        const retryLyrics = await callLLM(retryPrompt, body, 0.55);
-        const retryCheck = validateLyricEnvelope(retryLyrics);
-        if (retryCheck.valid) {
-          stage2Lyrics = retryLyrics;
+      if (!envelopeCheck.valid) {
+        console.warn(`[generate] Envelope validation notice: ${envelopeCheck.reason}. Sanitizing with stripMetaReasoning.`);
+        const cleanedCandidate = stripMetaReasoning(stage2Lyrics);
+        const hasValidSections = /\[(?:intro|verse|chorus|hook|bridge|outro|pre-chorus|post-chorus)/i.test(cleanedCandidate);
+
+        if (hasValidSections) {
+          // Gracefully recovered: preamble, meta-reasoning, or markdown delimiters stripped, preserving genuine song
+          stage2Lyrics = cleanedCandidate;
         } else {
-          console.error(`[generate] FAIL_CLOSED_LEAK_REJECTED: Second attempt also failed envelope validation.`);
-          throw new Error(`FAIL_CLOSED_LEAK_REJECTED: La salida del modelo contenía explicaciones o metarazonamiento fuera de la letra musical (${retryCheck.reason}).`);
+          // If no genuine sections were found at all, retry once with strict direct prompt
+          console.warn("[generate] Zero valid sections found after stripping. Retrying once with strict zero-reasoning instruction.");
+          try {
+            const retryPrompt = `${stage2Prompt}\n\n⚠️ ALERTA DE COMPOSICIÓN CRÍTICA: Devuelve ÚNICAMENTE la letra de la canción comenzando directamente en el primer corchete [Intro]. CERO texto conversacional antes o después.`;
+            const retryLyrics = await callLLM(retryPrompt, body, 0.55);
+            const retryCleaned = stripMetaReasoning(retryLyrics);
+            if (/\[(?:intro|verse|chorus|hook|bridge|outro)/i.test(retryCleaned)) {
+              stage2Lyrics = retryCleaned;
+            } else if (stage2Lyrics && stage2Lyrics.trim()) {
+              stage2Lyrics = cleanedCandidate || stage2Lyrics;
+            }
+          } catch (retryErr) {
+            console.warn("[generate] Envelope retry failed, proceeding with sanitized candidate:", retryErr);
+            stage2Lyrics = cleanedCandidate || stage2Lyrics;
+          }
         }
       }
       const d2Ms = Date.now() - t2;

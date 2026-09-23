@@ -75,7 +75,8 @@ Devuelve SOLO el caption (sin explicaciones, sin metadatos):`;
     let caption = "";
 
     if (body.geminiApiKey?.trim()) {
-      const model = body.geminiModel || "gemini-2.5-flash";
+      const rawModel = body.geminiModel?.trim();
+      const model = (rawModel && !rawModel.includes("2.5")) ? rawModel : "gemini-2.0-flash";
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
         {
