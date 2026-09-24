@@ -1,7 +1,41 @@
 // Centralized Gemini API Configuration & Helpers
 // TRAPLORD Studio Engine — Direct Google Generative AI integration
 
-export const GEMINI_DEFAULT_MODEL = "gemini-2.0-flash";
+export const GEMINI_DEFAULT_MODEL = "gemini-3.5-flash-lite";
+
+/**
+ * Modern Google Gemini model cascade in order of availability and stability.
+ * Prioritizes high-throughput, low-latency models that avoid 503 high demand spikes.
+ */
+export const GEMINI_MODEL_CASCADE = [
+  "gemini-3.5-flash-lite",
+  "gemini-3.5-flash",
+  "gemini-3.6-flash",
+  "gemini-3.6-flash-lite",
+  "gemini-3.7-flash",
+  "gemini-3.8-flash",
+];
+
+/**
+ * Migrates deprecated model IDs (1.0, 1.5, 2.0, 2.5) to modern Google 3.x models.
+ */
+export function normalizeGeminiModel(modelName?: string): string {
+  if (!modelName || !modelName.trim()) return GEMINI_DEFAULT_MODEL;
+  const trimmed = modelName.trim();
+  const lower = trimmed.toLowerCase();
+
+  // If user has old deprecated 1.0, 1.5, 2.0 or 2.5 model in state or localStorage, auto-upgrade to 3.5-flash-lite
+  if (
+    lower.includes("gemini-2.0") ||
+    lower.includes("gemini-2.5") ||
+    lower.includes("gemini-1.5") ||
+    lower.includes("gemini-1.0") ||
+    lower.includes("thinking-exp")
+  ) {
+    return GEMINI_DEFAULT_MODEL;
+  }
+  return trimmed;
+}
 
 // Permissive safety settings for trap/street lyrics (unrestricted creative expression)
 export const GEMINI_SAFETY_SETTINGS = [
@@ -21,19 +55,13 @@ export const GEMINI_SAFETY_SETTINGS_FALLBACK = [
 
 /**
  * Checks whether a given model name supports or defaults to thinking.
- * Covers Gemini 2.0 Flash Thinking, Gemini 2.5, Gemini 3.x, and custom thinking models.
  */
 export function isThinkingModel(modelName?: string): boolean {
   if (!modelName) return false;
   const lower = modelName.toLowerCase();
   return (
     lower.includes("thinking") ||
-    lower.includes("gemini-2.5") ||
-    lower.includes("gemini-3") ||
-    lower.startsWith("gemini-3") ||
-    lower.includes("3.5") ||
-    lower.includes("3.6") ||
-    lower.includes("3.7") ||
+    lower.includes("pro") ||
     lower.includes("3.8")
   );
 }

@@ -3,7 +3,7 @@
 
 import { getFlowProfile } from "./artist-flow-profiles";
 import type { ArtistReference } from "./artist-references";
-import { getEffectiveApiKey, hasAvailableApiKey, GEMINI_SAFETY_SETTINGS, extractGeminiText } from "./gemini-config";
+import { getEffectiveApiKey, hasAvailableApiKey, GEMINI_SAFETY_SETTINGS, extractGeminiText, normalizeGeminiModel } from "./gemini-config";
 
 export interface GenerateReferenceParams {
   artistId: string;
@@ -14,7 +14,7 @@ export interface GenerateReferenceParams {
 
 async function callLLM(prompt: string, params: GenerateReferenceParams): Promise<string> {
   const apiKey = getEffectiveApiKey(params.geminiApiKey);
-  const model = params.geminiModel || "gemini-2.0-flash";
+  const model = normalizeGeminiModel(params.geminiModel);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 

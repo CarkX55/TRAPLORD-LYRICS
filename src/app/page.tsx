@@ -81,6 +81,7 @@ import type { GenerationProcessLog } from "@/lib/generation-logger";
 import { GenerationLogModal } from "@/components/generation-log-modal";
 
 import type { AnalysisSnapshot } from "@/lib/quality-gate";
+import { GEMINI_DEFAULT_MODEL, normalizeGeminiModel } from "@/lib/gemini-config";
 
 interface GenerateResponse {
   lyrics: string;
@@ -294,7 +295,7 @@ export default function TrapGhostPage() {
   // Round 12: API Key + model selector + producer name + flow profile
   const [geminiApiKey, setGeminiApiKey] = useState<string>("");
   const [hasServerKey, setHasServerKey] = useState<boolean>(false);
-  const [geminiModel, setGeminiModel] = useState<string>("gemini-2.0-flash");
+  const [geminiModel, setGeminiModel] = useState<string>(GEMINI_DEFAULT_MODEL);
   const [thinkingBudget, setThinkingBudget] = useState<number>(-1); // -1: auto, 0: instant, 1024: balanced, 4096: deep
   const [producerName, setProducerName] = useState<string>("Markoff");
   const [availableModels, setAvailableModels] = useState<{ id: string; name: string }[]>([]);
@@ -415,7 +416,11 @@ export default function TrapGhostPage() {
       }
       const storedModel = localStorage.getItem("gemini_model");
       if (storedModel) {
-        setGeminiModel(storedModel);
+        const normalized = normalizeGeminiModel(storedModel);
+        setGeminiModel(normalized);
+        if (normalized !== storedModel) {
+          localStorage.setItem("gemini_model", normalized);
+        }
       }
       const storedBudget = localStorage.getItem("gemini_thinking_budget");
       if (storedBudget !== null) setThinkingBudget(Number(storedBudget));
@@ -450,7 +455,12 @@ export default function TrapGhostPage() {
       setAvailableModels(models);
       if (models.length > 0) {
         const currentExists = models.some((m: { id: string }) => m.id === geminiModel);
-        if (!currentExists) setGeminiModel(models[0].id);
+        if (!currentExists) {
+          setGeminiModel(models[0].id);
+          try {
+            localStorage.setItem("gemini_model", models[0].id);
+          } catch {}
+        }
       }
     } catch {
       setAvailableModels([]);
@@ -622,7 +632,7 @@ export default function TrapGhostPage() {
 
     const isFastMode = pipelineMode === "fast";
     addLiveLog("info", `🚀 Iniciando generación para [${artist?.name ?? artistId}] • ${bpmVibeId} BPM`);
-    addLiveLog("info", `🎛️ Modo: ${isFastMode ? "Rápido (1 Pasada)" : "Estudio (2 Pasadas)"} • Modelo: ${geminiModel || "gemini-2.0-flash"} • Spanglish: ${spanglishPercent}%`);
+    addLiveLog("info", `🎛️ Modo: ${isFastMode ? "Rápido (1 Pasada)" : "Estudio (2 Pasadas)"} • Modelo: ${geminiModel || GEMINI_DEFAULT_MODEL} • Spanglish: ${spanglishPercent}%`);
 
     const progressSteps = isFastMode ? [
       { step: 1, title: "⚡ Generación Rápida (1 Pasada)", detail: "Componiendo letra completa en un único pase de estudio...", percent: 50 },
@@ -2271,18 +2281,26 @@ export default function TrapGhostPage() {
                       )}
                       {loadingModels && <span className="text-[10px] text-muted-foreground">Cargando...</span>}
                     </div>
-                    <Select value={geminiModel} onValueChange={setGeminiModel}>
+                    <Select
+                      value={geminiModel}
+                      onValueChange={(val) => {
+                        setGeminiModel(val);
+                        try {
+                          localStorage.setItem("gemini_model", val);
+                        } catch {}
+                      }}
+                    >
                       <SelectTrigger className="bg-black/40"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {availableModels.length > 0 ? availableModels.map(m => (
                           <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                         )) : (
                           <>
-                            <SelectItem value="gemini-2.0-flash">🔥 Gemini 2.0 Flash (Recomendado · Rápido y Estable)</SelectItem>
-                            <SelectItem value="gemini-2.0-flash-lite">⚡ Gemini 2.0 Flash Lite (Ultra Rápido)</SelectItem>
-                            <SelectItem value="gemini-1.5-flash">⚡ Gemini 1.5 Flash (Alta Cuota)</SelectItem>
-                            <SelectItem value="gemini-2.0-flash-thinking-exp-01-21">🧠 Gemini 2.0 Flash Thinking Exp</SelectItem>
-                            <SelectItem value="gemini-1.5-pro">📊 Gemini 1.5 Pro</SelectItem>
+                            <SelectItem value="gemini-3.5-flash-lite">⚡ Gemini 3.5 Flash Lite (Ultra Rápido · Anti-503 · Recomendado)</SelectItem>
+                            <SelectItem value="gemini-3.5-flash">🚀 Gemini 3.5 Flash (Rápido y Estable · Alta Capacidad)</SelectItem>
+                            <SelectItem value="gemini-3.6-flash">🔥 Gemini 3.6 Flash (Recomendado por Google · Ultrarrápido)</SelectItem>
+                            <SelectItem value="gemini-3.7-flash">✨ Gemini 3.7 Flash (Generación 3.7)</SelectItem>
+                            <SelectItem value="gemini-3.8-flash">🧠 Gemini 3.8 Flash (Frontier · Sujeto a alta demanda 503)</SelectItem>
                           </>
                         )}
                       </SelectContent>

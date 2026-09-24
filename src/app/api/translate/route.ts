@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getEffectiveApiKey, GEMINI_SAFETY_SETTINGS, extractGeminiText } from "@/lib/gemini-config";
+import { getEffectiveApiKey, GEMINI_SAFETY_SETTINGS, extractGeminiText, normalizeGeminiModel } from "@/lib/gemini-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -39,8 +39,7 @@ ${body.text}`;
 
     let translated = "";
     const apiKey = getEffectiveApiKey(body.geminiApiKey);
-    const rawModel = body.geminiModel?.trim();
-    const model = (rawModel && rawModel.trim()) ? rawModel.trim() : "gemini-2.0-flash";
+    const model = normalizeGeminiModel(body.geminiModel);
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {

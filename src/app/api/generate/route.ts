@@ -123,6 +123,9 @@ import {
   GEMINI_SAFETY_SETTINGS_FALLBACK,
   extractGeminiText,
   isThinkingModel,
+  normalizeGeminiModel,
+  GEMINI_MODEL_CASCADE,
+  GEMINI_DEFAULT_MODEL,
 } from "@/lib/gemini-config";
 
 // Unified Resilient LLM Caller with Model Cascade, Auto-Fallback, Safety Protections & Live Diagnostics
@@ -133,16 +136,14 @@ async function callLLM(
   diagnosticCollector?: DiagnosticCallAttempt[]
 ): Promise<string> {
   const apiKey = getEffectiveApiKey(body.geminiApiKey);
-  const rawRequestedModel = (body.geminiModel && body.geminiModel.trim()) ? body.geminiModel.trim() : "gemini-2.0-flash";
-  const primaryModel = rawRequestedModel;
+  const primaryModel = normalizeGeminiModel(body.geminiModel);
 
-  // Build intelligent fallback cascade: Primary user model -> gemini-2.0-flash -> gemini-1.5-flash
+  // Build resilient modern fallback cascade: Primary user model -> 3.5-flash-lite -> 3.5-flash -> 3.6-flash -> 3.7-flash -> 3.8-flash
   const modelCascade: string[] = [primaryModel];
-  if (!modelCascade.includes("gemini-2.0-flash")) {
-    modelCascade.push("gemini-2.0-flash");
-  }
-  if (!modelCascade.includes("gemini-1.5-flash")) {
-    modelCascade.push("gemini-1.5-flash");
+  for (const m of GEMINI_MODEL_CASCADE) {
+    if (!modelCascade.includes(m)) {
+      modelCascade.push(m);
+    }
   }
 
   let lastError: Error | null = null;
@@ -241,14 +242,15 @@ async function callLLM(
             break;
           }
 
-          // If 400 (unsupported config) or 404 (model not found/deprecated), advance immediately
-          if (errCode === 400 || errCode === 404) {
+          // If 404 (model not found/deprecated) or 410, advance immediately to next model in cascade
+          if (errCode === 400 || errCode === 404 || errCode === 410) {
+            console.warn(`[callLLM] Model ${currentModel} returned ${errCode}, cascading immediately...`);
             break;
           }
 
           // If 503 and attempt 1, wait briefly with backoff
           if (attempt === 1 && errCode === 503) {
-            await new Promise(r => setTimeout(r, 1500));
+            await new Promise(r => setTimeout(r, 1200));
             continue;
           }
 
@@ -385,7 +387,7 @@ function resolveTopics(topicIds: string[]): string[] {
 export async function POST(req: NextRequest) {
   const pipelineStartTime = Date.now();
   let capturedBody: GenerateBody | undefined;
-  let modelUsed = "gemini-2.0-flash";
+  let modelUsed = GEMINI_DEFAULT_MODEL;
   let processMode: GenerationProcessLog["mode"] = "pipeline_2_pass_primary";
   let lyrics = "";
   let finalRaw = "";
@@ -397,7 +399,7 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as GenerateBody;
     capturedBody = body;
     const rawModelInit = body.geminiModel?.trim();
-    if (rawModelInit) modelUsed = rawModelInit;
+    if (rawModelInit) modelUsed = normalizeGeminiModel(rawModelInit);
 
     // Resolve referenced entities
     const bpmVibe = BPM_VIBES.find(b => b.id === body.bpmVibeId) ?? BPM_VIBES[5];
@@ -510,7 +512,7 @@ export async function POST(req: NextRequest) {
 
     const temperature = typeof body.temperature === "number" ? body.temperature : 0.72;
     const rawModel = body.geminiModel?.trim();
-    modelUsed = (rawModel && rawModel.trim()) ? rawModel.trim() : "gemini-2.0-flash";
+    modelUsed = normalizeGeminiModel(rawModel);
     let finalAST: SongDocument | null = null;
     let auditContext: InitialAuditContext | null = null;
     let dialectAudit: any = null;

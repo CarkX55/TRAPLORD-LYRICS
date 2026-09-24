@@ -25,31 +25,63 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: data.error.message }, { status: 400 });
     }
 
+    // Filter out embeddings, vision-only, tts, audio, and all deprecated 1.x/2.x models that return 404
     const models = (data.models || [])
       .filter((m: { name?: string; supportedGenerationMethods?: string[] }) => {
         const id = (m.name || "").replace("models/", "").toLowerCase();
         if (!m.supportedGenerationMethods?.includes("generateContent")) return false;
-        // Filter out embeddings, vision-only, tts, and audio/aqa models
+        // Filter out non-text generation models
         if (id.includes("embedding") || id.includes("aqa") || id.includes("imagen") || id.includes("tts")) return false;
-        // Filter out old deprecated expired models that throw 404/410
-        if (id === "gemini-1.0-pro" || id.includes("exp-11") || id.includes("exp-12")) return false;
+        // Filter out deprecated models that fail with HTTP 404/410 in v1beta
+        if (
+          id.includes("1.0") ||
+          id.includes("1.5") ||
+          id.includes("2.0") ||
+          id.includes("2.5") ||
+          id.includes("exp-11") ||
+          id.includes("exp-12") ||
+          id.includes("thinking-exp")
+        ) {
+          return false;
+        }
         return true;
       })
       .map((m: { name: string; displayName?: string }) => {
         const id = m.name.replace("models/", "");
         let name = m.displayName || id;
-        if (id === "gemini-2.0-flash") name = `🔥 ${name} (Recomendado · Rápido y Estable)`;
-        else if (id === "gemini-2.0-flash-lite" || id.includes("flash-lite")) name = `⚡ ${name} (Ultra Rápido)`;
-        else if (id === "gemini-1.5-flash") name = `⚡ ${name} (Alta Cuota)`;
-        else if (id.includes("thinking")) name = `🧠 ${name} (Razonamiento)`;
-        else if (id.includes("gemini-2.0")) name = `🔥 ${name}`;
-        else if (id.includes("gemini-1.5")) name = `📊 ${name}`;
-        else if (id.includes("gemini-3")) name = `✨ ${name}`;
+        if (id.includes("3.5") && (id.includes("lite") || id.includes("flash-lite"))) {
+          name = `⚡ ${name} (Ultra Rápido · Anti-503 · Máxima Disponibilidad)`;
+        } else if (id.includes("3.5") && id.includes("flash")) {
+          name = `🚀 ${name} (Rápido y Estable · Alta Capacidad)`;
+        } else if (id === "gemini-3.6-flash") {
+          name = `🔥 ${name} (Recomendado por Google · Ultrarrápido)`;
+        } else if (id.includes("3.6") && (id.includes("lite") || id.includes("flash-lite"))) {
+          name = `⚡ ${name} (Ultra Rápido y Ligero)`;
+        } else if (id.includes("3.7") && id.includes("flash")) {
+          name = `✨ ${name} (Generación 3.7)`;
+        } else if (id.includes("3.8") && id.includes("flash")) {
+          name = `🧠 ${name} (Frontier 3.8 · Sujeto a alta demanda 503)`;
+        } else if (id.includes("pro")) {
+          name = `💎 ${name} (Pro Deep Reasoning)`;
+        } else {
+          name = `✨ ${name}`;
+        }
         return { id, name };
       })
       .sort((a: { id: string }, b: { id: string }) => {
-        if (a.id === "gemini-2.0-flash") return -1;
-        if (b.id === "gemini-2.0-flash") return 1;
+        const priorityOrder = [
+          "gemini-3.5-flash-lite",
+          "gemini-3.5-flash",
+          "gemini-3.6-flash",
+          "gemini-3.6-flash-lite",
+          "gemini-3.7-flash",
+          "gemini-3.8-flash",
+        ];
+        const aIndex = priorityOrder.indexOf(a.id);
+        const bIndex = priorityOrder.indexOf(b.id);
+        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+        if (aIndex !== -1) return -1;
+        if (bIndex !== -1) return 1;
         if (a.id.includes("flash") && !b.id.includes("flash")) return -1;
         if (!a.id.includes("flash") && b.id.includes("flash")) return 1;
         return a.id.localeCompare(b.id);

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getFlowProfile } from "@/lib/artist-flow-profiles";
 import { getRhymeTier } from "@/lib/prompt-builder";
 import { stripMetaReasoning } from "@/lib/song-document";
-import { getEffectiveApiKey, GEMINI_SAFETY_SETTINGS, extractGeminiText } from "@/lib/gemini-config";
+import { getEffectiveApiKey, GEMINI_SAFETY_SETTINGS, extractGeminiText, normalizeGeminiModel } from "@/lib/gemini-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // increased for auto-iterate (up to 3 iterations)
@@ -30,7 +30,7 @@ interface AgentResult {
 
 async function callLLM(prompt: string, body: AgentPolishBody): Promise<string> {
   const apiKey = getEffectiveApiKey(body.geminiApiKey);
-  const model = body.geminiModel || "gemini-2.0-flash";
+  const model = normalizeGeminiModel(body.geminiModel);
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {

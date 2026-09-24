@@ -1,7 +1,7 @@
 // Track Analyzer — extracts the "DNA" of a pasted reference track
 // Uses Google Gemini to analyze structure, rhyme scheme, density, etc.
 
-import { getEffectiveApiKey, hasAvailableApiKey, GEMINI_SAFETY_SETTINGS, extractGeminiText } from "./gemini-config";
+import { getEffectiveApiKey, hasAvailableApiKey, GEMINI_SAFETY_SETTINGS, extractGeminiText, normalizeGeminiModel } from "./gemini-config";
 
 export interface TrackSection {
   name: string;
@@ -32,7 +32,7 @@ export interface AnalyzeTrackParams {
 
 async function callLLM(prompt: string, params: AnalyzeTrackParams): Promise<string> {
   const apiKey = getEffectiveApiKey(params.geminiApiKey);
-  const model = params.geminiModel || "gemini-2.0-flash";
+  const model = normalizeGeminiModel(params.geminiModel);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
 
