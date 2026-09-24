@@ -91,7 +91,7 @@ export const DRAMATIC_MOTIF_CATALOG: readonly DramaticMotif[] = [
     antiClicheDirectives: [
       "Evitar presumir de dinero de forma vacía o festiva",
       "Enfocar en el peso del aislamiento y la ausencia de euforia",
-      "No convertir el lujo en un catálogo de marcas",
+      "Integrar el lujo y las marcas con peso de calle y consecuencias reales, sin sonar a folleto publicitario vacío",
     ],
     suggestedAction: "Contrastar el confort exterior con la sequedad interna de quien ya no siente entusiasmo",
   },
@@ -175,7 +175,7 @@ export const DRAMATIC_MOTIF_CATALOG: readonly DramaticMotif[] = [
     antiClicheDirectives: [
       "Evitar relatos de videojuego tipo Need for Speed",
       "Anclar en el vértigo interno de quien prefiere el impacto antes que el freno",
-      "Evitar nombres de marcas de coches si no aportan textura física",
+      "Integrar coches, motores y marcas con textura física y sensaciones reales de calle (rugido de V8, gomas calientes, frenos cerámicos)",
     ],
     suggestedAction: "Transmitir la inercia irreversible del que solo encuentra calma a máxima velocidad",
   },
@@ -359,30 +359,27 @@ export function classifyTopicIntent(topic: string): TopicIntent {
   const trimmed = (topic || "").trim();
   const lower = trimmed.toLowerCase();
 
+  // Specific named entities: crypto, high-end brands, places, people, luxury/hardware brands
+  const isCryptoOrBrand =
+    /\b(?:cardano|bitcoin|ethereum|solana|crypto|btc|eth|ada|rolls|royce|maybach|mercedes|ferrari|lambo|lamborghini|patek|rolex|glock|atlanta|miami|madrid|barcelona|compton|detroit|memphis|brooklyn|chicago|shiesty|curry|jordan|amiri|balenciaga|trackhawk|hellcat|wockhardt|runtz|gelato|moncler|goyard|cartier|draco)\b/i.test(
+      lower
+    );
+
+  // General abstract trap topic domains & UI catalogue items (e.g. "Dinero & Hustle", "Hierba & Humo", "Coca & Polvo", etc.)
+  const isGeneralTrapDomain =
+    /\b(?:dinero|hustle|traicion|traición|mujeres|calle|drogas|lean|éxito|exito|fama|enemigos|beef|joyas|joyería|flex|noche|discoteca|muerte|violencia|amor|adicción|adiccion|coches|velocidad|realeza|infancia|venganza|depresión|depresion|ansiedad|lealtad|crew|exceso|lujo|legal|sangre|deuda|hielo|whips|rides|mansiones|props|designer|diseño|stripper|strippers|snitch|soplonas|territorio|bloque|tóxico|toxico|heartbreak|corazón|corazon|groupies|pastillas|xanax|hierba|humo|smoke|coca|polvo|coke|borracho|fiesta|fiestas|policía|policia|feds|cárcel|carcel|libertad|paranoia|serpientes|falsos|corte|pánico|panico|terapia|trauma|realidad|legado|historia|regreso|contratos|discos|independiente|diy|haters|baloncesto|deporte|apuestas|casino|stripclub|cuentas|cuentas claras|círculo|circulo|círculo cerrado|circulo cerrado|barrio|familia|soledad|respeto|superación|superacion)\b/i.test(
+      lower
+    );
+
   // Check known abstract themes
   const tokens = lower.split(/[\s,]+/);
   const isAbstract =
+    isGeneralTrapDomain ||
     ABSTRACT_THEME_KEYWORDS.has(lower) ||
     tokens.some((t) => ABSTRACT_THEME_KEYWORDS.has(t)) ||
     /^(?:la |el |las |los )?(?:lealtad|traici[óo]n|calle|familia|soledad|paranoia|respeto|superaci[óo]n)\b/i.test(lower);
 
-  // Check for specific named entities: crypto, brands, places, people, or capitalized proper nouns
-  const isCryptoOrBrand =
-    /\b(?:cardano|bitcoin|ethereum|solana|crypto|btc|eth|ada|rolls|royce|maybach|mercedes|ferrari|lambo|patek|rolex|glock|atlanta|miami|madrid|barcelona|compton|detroit|memphis|brooklyn|chicago|shiesty|curry|jordan)\b/i.test(
-      lower
-    );
-
-  const hasCapitalization = /^[A-Z]/.test(trimmed) && !isAbstract;
-
-  if (isCryptoOrBrand || hasCapitalization) {
-    return {
-      kind: "named_entity",
-      value: trimmed,
-      preservation: "lexical_available",
-    };
-  }
-
-  if (isAbstract) {
+  if (isAbstract && !isCryptoOrBrand) {
     return {
       kind: "abstract_theme",
       value: trimmed,
@@ -390,8 +387,17 @@ export function classifyTopicIntent(topic: string): TopicIntent {
     };
   }
 
-  // Default fallback: if capitalized -> named entity; otherwise abstract theme
-  if (/[A-Z]/.test(trimmed)) {
+  if (isCryptoOrBrand) {
+    return {
+      kind: "named_entity",
+      value: trimmed,
+      preservation: "lexical_available",
+    };
+  }
+
+  // Proper noun check: single or double word capitalized that is not an abstract trap theme
+  const isProperNoun = /^[A-Z]/.test(trimmed) && tokens.length <= 2 && !isAbstract;
+  if (isProperNoun) {
     return {
       kind: "named_entity",
       value: trimmed,
