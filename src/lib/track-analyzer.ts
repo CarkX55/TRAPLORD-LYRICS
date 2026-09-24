@@ -1,5 +1,7 @@
 // Track Analyzer — extracts the "DNA" of a pasted reference track
-// Uses LLM (Gemini on Vercel, z-ai SDK in sandbox) to analyze structure, rhyme scheme, density, etc.
+// Uses Google Gemini to analyze structure, rhyme scheme, density, etc.
+
+import { getEffectiveApiKey, hasAvailableApiKey, GEMINI_SAFETY_SETTINGS, extractGeminiText } from "./gemini-config";
 
 export interface TrackSection {
   name: string;
@@ -29,36 +31,38 @@ export interface AnalyzeTrackParams {
 }
 
 async function callLLM(prompt: string, params: AnalyzeTrackParams): Promise<string> {
-  if (params.geminiApiKey?.trim()) {
-    const model = params.geminiModel || "gemini-2.0-flash";
+  const apiKey = getEffectiveApiKey(params.geminiApiKey);
+  const model = params.geminiModel || "gemini-2.0-flash";
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
+
+  try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${params.geminiApiKey.trim()}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { temperature: 0.4, topP: 0.9 },
+          safetySettings: GEMINI_SAFETY_SETTINGS,
         }),
       }
     );
+    clearTimeout(timeoutId);
     const json = await res.json();
     if (json.error) throw new Error(`Gemini: ${json.error.message}`);
-    return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  } else {
-    const ZAI = (await import("z-ai-web-dev-sdk")).default;
-    const zai = await ZAI.create();
-    const completion = await zai.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      thinking: { type: "disabled" },
-      temperature: 0.4,
-    });
-    return completion.choices[0]?.message?.content ?? "";
+    return extractGeminiText(json.candidates?.[0]);
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
   }
 }
 
 export async function analyzeReferenceTrack(params: AnalyzeTrackParams): Promise<TrackAnalysis | null> {
   if (!params.lyrics?.trim()) return null;
+  if (!hasAvailableApiKey(params.geminiApiKey)) return null;
 
   const prompt = `Eres un analista experto en estructura de canciones de trap/rap. Analiza estas letras y extrae su "ADN" estructural con precisión.
 

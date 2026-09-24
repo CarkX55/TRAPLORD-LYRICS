@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getFlowProfile } from "@/lib/artist-flow-profiles";
 import { getRhymeTier } from "@/lib/prompt-builder";
 import { stripMetaReasoning } from "@/lib/song-document";
+import { getEffectiveApiKey, GEMINI_SAFETY_SETTINGS, extractGeminiText } from "@/lib/gemini-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // increased for auto-iterate (up to 3 iterations)
@@ -28,33 +29,23 @@ interface AgentResult {
 }
 
 async function callLLM(prompt: string, body: AgentPolishBody): Promise<string> {
-  if (body.geminiApiKey?.trim()) {
-    const model = body.geminiModel || "gemini-2.0-flash";
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7, topP: 0.95 },
-        }),
-      }
-    );
-    const json = await res.json();
-    if (json.error) throw new Error(`Gemini: ${json.error.message}`);
-    return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  } else {
-    // Z.ai SDK fallback (solo sandbox)
-    const ZAI = (await import("z-ai-web-dev-sdk")).default;
-    const zai = await ZAI.create();
-    const completion = await zai.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      thinking: { type: "disabled" },
-      temperature: 0.7,
-    });
-    return completion.choices[0]?.message?.content ?? "";
-  }
+  const apiKey = getEffectiveApiKey(body.geminiApiKey);
+  const model = body.geminiModel || "gemini-2.0-flash";
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, topP: 0.95 },
+        safetySettings: GEMINI_SAFETY_SETTINGS,
+      }),
+    }
+  );
+  const json = await res.json();
+  if (json.error) throw new Error(`Gemini: ${json.error.message}`);
+  return extractGeminiText(json.candidates?.[0]);
 }
 
 // Extract chorus/hook sections from lyrics (supports [Chorus], [Hook], ### [Chorus])

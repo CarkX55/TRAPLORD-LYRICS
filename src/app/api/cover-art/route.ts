@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getArtistById, MOODS, BPM_VIBES, getProducerById } from "@/lib/trap-data";
+import { getEffectiveApiKey } from "@/lib/gemini-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -11,6 +12,7 @@ interface CoverArtBody {
   producerId?: string;
   spanglishPercent: number;
   songTitle?: string;
+  geminiApiKey?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -48,15 +50,16 @@ export async function POST(req: NextRequest) {
       playboi_carti: "vampire aesthetic, red eyes, gothic punk, chaotic energy",
       gunna: "drip fashion, luxury brands, clean minimal, high fashion",
       lil_baby: "atlanta street, emotional lighting, documentary style",
-      drake: "toronto night, clean cinematic, emotional lighting",
-      travis_scott: "psychedelic, astroworld aesthetic, neon carnival, chaotic",
-      don_tolver: "houston night, R&B smooth, seductive lighting",
-      lil_uzi: "emo punk, colorful hair, anime aesthetic, energetic",
-      yung_beef: "barcelona street, raw gritty, florida barrial",
-      cruz_cafune: "canary islands, warm sunset, beach urban, reflective",
-      recycled_j: "madrid street, boom bap, vintage film grain",
-      hard_gz: "madrid drill, dark alley, menacing shadows",
-      quevedo: "summer party, beach club, vibrant young",
+      travis_scott: "rodeo desert, brown earth tones, cactus jack, psychedelic vintage aesthetic, distorted shadows",
+      drake: "nocturnal toronto, high-rise luxury penthouse, blue ambient lighting, cinematic loneliness",
+      metro_boomin: "comic book dark, lightning bolts, thunderstorm, ominous hero aesthetic",
+      takeoff: "space trap, stars and constellations, rocket, futuristic astronaut drip",
+      duki: "buenos aires street, neon graffiti, rockstar trap, tattoo aesthetic, smoke",
+      ysy_a: "earthquake shockwaves, golden hour, architectural trap, hyper-energetic, dynamic motion",
+      quevedo: "canary island coast, ocean night, sunset gold, melodic island trap",
+      eladio_carrion: "sauce boy aesthetic, blue and silver, heavyweight champion, cold studio lighting",
+      mora: "microdosis aesthetic, purple psychedelic, glitch art, late night driving, blurry lights",
+      feid: "ferxxo green, neon shades, medellin night, reggaeton trap, vibrant urban party",
       beny_jr: "moroccan patterns, barcelona street, multicultural",
       agnus_tris: "drill dark, madrid night, threatening shadows",
       pnl: "cloud rap, atmospheric, melancholic sky, ethereal",
@@ -75,14 +78,31 @@ export async function POST(req: NextRequest) {
 
     const prompt = `Album cover art for a trap song. Style: ${artistVisual}. Mood: ${moodVisual}. BPM: ${bpm?.range ?? "130-145"}. ${producer ? `Producer vibe: ${producer.name} (${producer.style}).` : ""} Spanglish ratio: ${body.spanglishPercent}% EN. Square format, high quality, professional album cover, no text, no words, no letters, pure visual art, dramatic lighting, cinematic composition.`;
 
-    const ZAI = (await import("z-ai-web-dev-sdk")).default;
-    const zai = await ZAI.create();
-    const response = await zai.images.generations.create({
-      prompt,
-      size: "1024x1024",
-    });
+    const apiKey = getEffectiveApiKey(body.geminiApiKey);
 
-    const imageBase64 = response.data[0]?.base64;
+    // Call Google Imagen 3 API directly
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instances: [{ prompt }],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio: "1:1",
+            outputOptions: { mimeType: "image/jpeg" },
+          },
+        }),
+      }
+    );
+
+    const json = await res.json();
+    if (json.error) {
+      return NextResponse.json({ error: `Imagen (Gemini): ${json.error.message}` }, { status: 400 });
+    }
+
+    const imageBase64 = json.predictions?.[0]?.bytesBase64Encoded;
     if (!imageBase64) {
       return NextResponse.json({ error: "La generación de imagen no devolvió contenido." }, { status: 502 });
     }

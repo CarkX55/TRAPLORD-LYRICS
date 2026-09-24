@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getArtistById, getDirtyLevel, ARTISTS_DATA } from "@/lib/trap-data";
 import { getFlowProfile, getHookDensityProfile } from "@/lib/artist-flow-profiles";
+import { getEffectiveApiKey, GEMINI_SAFETY_SETTINGS, extractGeminiText } from "@/lib/gemini-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -122,36 +123,26 @@ REGLAS OBLIGATORIAS:
 - Prohibido usar clichés baratos ("el asfalto no perdona", "fuego/juego", "money sin parar").`;
 
     let rawText = "";
-
-    if (body.geminiApiKey?.trim()) {
-      const model = body.geminiModel || "gemini-2.0-flash";
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: systemPrompt }] }],
-            generationConfig: {
-              temperature: 0.85,
-              topP: 0.95,
-            },
-          }),
-        }
-      );
-      const json = await res.json();
-      if (json.error) throw new Error(`Gemini: ${json.error.message}`);
-      rawText = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    } else {
-      const ZAI = (await import("z-ai-web-dev-sdk")).default;
-      const zai = await ZAI.create();
-      const completion = await zai.chat.completions.create({
-        messages: [{ role: "user", content: systemPrompt }],
-        thinking: { type: "disabled" },
-        temperature: 0.85,
-      });
-      rawText = completion.choices[0]?.message?.content ?? "";
-    }
+    const apiKey = getEffectiveApiKey(body.geminiApiKey);
+    const model = body.geminiModel || "gemini-2.0-flash";
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: systemPrompt }] }],
+          generationConfig: {
+            temperature: 0.85,
+            topP: 0.95,
+          },
+          safetySettings: GEMINI_SAFETY_SETTINGS,
+        }),
+      }
+    );
+    const json = await res.json();
+    if (json.error) throw new Error(`Gemini: ${json.error.message}`);
+    rawText = extractGeminiText(json.candidates?.[0]);
 
     let variations: HookVariationOption[] = [];
     try {

@@ -13,7 +13,7 @@ import {
   type SectionVoiceAssignment,
   type PromptParams,
 } from "@/lib/prompt-builder";
-import type { GenerationProcessLog, GenerationStageLog } from "@/lib/generation-logger";
+import type { GenerationProcessLog, GenerationStageLog, DiagnosticCallAttempt } from "@/lib/generation-logger";
 
 import {
   MOODS,
@@ -117,130 +117,241 @@ interface GenerateBody {
   spanishFlavor?: SpanishFlavor;
 }
 
-// Unified Resilient LLM Caller with Model Cascade & Auto-Fallback
-async function callLLM(prompt: string, body: GenerateBody, temperature: number = 0.72): Promise<string> {
-  if (body.geminiApiKey && body.geminiApiKey.trim()) {
-    const rawRequestedModel = (body.geminiModel && body.geminiModel.trim()) ? body.geminiModel.trim() : "gemini-2.0-flash";
-    // Normalize deprecated / invalid names (e.g. non-existent gemini-2.5)
-    const primaryModel = rawRequestedModel.includes("2.5") ? "gemini-2.0-flash" : rawRequestedModel;
+import {
+  getEffectiveApiKey,
+  GEMINI_SAFETY_SETTINGS,
+  GEMINI_SAFETY_SETTINGS_FALLBACK,
+  extractGeminiText,
+  isThinkingModel,
+} from "@/lib/gemini-config";
 
-    // Build intelligent fallback cascade: Primary user model -> gemini-2.0-flash -> gemini-1.5-flash
-    const modelCascade: string[] = [primaryModel];
-    if (!modelCascade.includes("gemini-2.0-flash")) {
-      modelCascade.push("gemini-2.0-flash");
+// Unified Resilient LLM Caller with Model Cascade, Auto-Fallback, Safety Protections & Live Diagnostics
+async function callLLM(
+  prompt: string,
+  body: GenerateBody,
+  temperature: number = 0.72,
+  diagnosticCollector?: DiagnosticCallAttempt[]
+): Promise<string> {
+  const apiKey = getEffectiveApiKey(body.geminiApiKey);
+  const rawRequestedModel = (body.geminiModel && body.geminiModel.trim()) ? body.geminiModel.trim() : "gemini-2.0-flash";
+  const primaryModel = rawRequestedModel;
+
+  // Build intelligent fallback cascade: Primary user model -> gemini-2.0-flash -> gemini-1.5-flash
+  const modelCascade: string[] = [primaryModel];
+  if (!modelCascade.includes("gemini-2.0-flash")) {
+    modelCascade.push("gemini-2.0-flash");
+  }
+  if (!modelCascade.includes("gemini-1.5-flash")) {
+    modelCascade.push("gemini-1.5-flash");
+  }
+
+  let lastError: Error | null = null;
+  let activeSafetySettings = GEMINI_SAFETY_SETTINGS;
+
+  for (let mIdx = 0; mIdx < modelCascade.length; mIdx++) {
+    const currentModel = modelCascade[mIdx];
+    const isFallback = mIdx > 0;
+    if (isFallback) {
+      console.warn(`[callLLM] Cascading to fallback model: ${currentModel} (after ${modelCascade[mIdx - 1]} failed)`);
     }
-    if (!modelCascade.includes("gemini-1.5-flash")) {
-      modelCascade.push("gemini-1.5-flash");
-    }
 
-    let lastError: Error | null = null;
+    // Try up to 2 attempts on this candidate model (unless aborted/timed out)
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const attemptStart = Date.now();
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s per attempt
 
-    for (let mIdx = 0; mIdx < modelCascade.length; mIdx++) {
-      const currentModel = modelCascade[mIdx];
-      const isFallback = mIdx > 0;
-      if (isFallback) {
-        console.warn(`[callLLM] Cascading to fallback model: ${currentModel} (after ${modelCascade[mIdx - 1]} failed)`);
-      }
+        // Build generationConfig with safe thinkingConfig
+        const generationConfig: Record<string, unknown> = {
+          temperature,
+          topP: 0.95,
+        };
 
-      // Try up to 2 attempts on this candidate model
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s per attempt
+        const supportsThinking = isThinkingModel(currentModel);
+        if (supportsThinking) {
+          if (typeof body.thinkingBudget === "number") {
+            if (body.thinkingBudget === 0) {
+              generationConfig.thinkingConfig = { thinkingBudget: 0 };
+            } else if (body.thinkingBudget > 0) {
+              generationConfig.thinkingConfig = { thinkingBudget: body.thinkingBudget };
+            }
+          } else {
+            // Default to 0 (instant) for speed and to prevent hanging thinking models
+            generationConfig.thinkingConfig = { thinkingBudget: 0 };
+          }
+        }
 
-          // Build generationConfig with SAFE thinkingConfig
-          const generationConfig: Record<string, unknown> = {
-            temperature,
-            topP: 0.95,
-          };
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig,
+              safetySettings: activeSafetySettings,
+            }),
+          }
+        );
+        clearTimeout(timeoutId);
+        const durationMs = Date.now() - attemptStart;
 
-          // ONLY attach thinkingConfig if the model name specifically contains "thinking"
-          // AND thinkingBudget is a valid integer >= 1024 (Gemini API minimum)
-          const supportsThinking = currentModel.toLowerCase().includes("thinking");
-          if (
-            supportsThinking &&
-            typeof body.thinkingBudget === "number" &&
-            body.thinkingBudget >= 1024
-          ) {
-            generationConfig.thinkingConfig = {
-              thinkingBudget: body.thinkingBudget,
-            };
+        const json = await res.json();
+        if (json.error) {
+          const errMsg = json.error.message || json.error.status || `Error ${json.error.code}`;
+          const errCode = json.error.code;
+          console.warn(`[callLLM] Model ${currentModel} returned API error (${errCode}, attempt ${attempt}): ${errMsg}`);
+          lastError = new Error(`Gemini (${currentModel}): ${errMsg}`);
+
+          diagnosticCollector?.push({
+            timestamp: new Date().toISOString(),
+            model: currentModel,
+            attempt,
+            durationMs,
+            status: "error",
+            httpCode: errCode,
+            error: errMsg,
+          });
+
+          // If 400 is due to thinkingConfig not supported, strip thinkingConfig and retry immediately
+          if (errCode === 400 && (errMsg.toLowerCase().includes("thinking") || errMsg.toLowerCase().includes("thinkingconfig"))) {
+            console.warn(`[callLLM] Model ${currentModel} does not support thinkingConfig, retrying without it...`);
+            delete generationConfig.thinkingConfig;
+            continue;
           }
 
-          const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${body.geminiApiKey.trim()}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              signal: controller.signal,
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig,
-              }),
-            }
-          );
-          clearTimeout(timeoutId);
-
-          const json = await res.json();
-          if (json.error) {
-            const errMsg = json.error.message || json.error.status || `Error ${json.error.code}`;
-            const errCode = json.error.code;
-            console.warn(`[callLLM] Model ${currentModel} returned API error (${errCode}, attempt ${attempt}): ${errMsg}`);
-            lastError = new Error(`Gemini (${currentModel}): ${errMsg}`);
-
-            // If it's 400 (unsupported config) or 404 (model not found/deprecated), don't retry same model - advance to next model in cascade!
-            if (errCode === 400 || errCode === 404) {
-              break;
-            }
-
-            // If 503 or 429 and attempt 1, wait briefly with backoff
-            if (attempt === 1 && (errCode === 503 || errCode === 429)) {
-              await new Promise(r => setTimeout(r, 1500));
-              continue;
-            }
-
-            // On attempt 2 or unrecoverable error, advance to next model in cascade
-            break;
+          // If 400 is due to safety settings threshold BLOCK_NONE, downgrade to BLOCK_ONLY_HIGH
+          if (errCode === 400 && errMsg.toLowerCase().includes("safety")) {
+            console.warn(`[callLLM] Model ${currentModel} rejected BLOCK_NONE safety threshold, retrying with BLOCK_ONLY_HIGH...`);
+            activeSafetySettings = GEMINI_SAFETY_SETTINGS_FALLBACK;
+            continue;
           }
 
-          const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (!text || !text.trim()) {
-            console.warn(`[callLLM] Model ${currentModel} returned empty candidates`);
-            lastError = new Error(`Gemini (${currentModel}) no devolvió contenido.`);
+          // If 429 (Rate Limit / Quota Exceeded)
+          if (errCode === 429) {
+            console.warn(`[callLLM] Model ${currentModel} quota exhausted (429) on attempt ${attempt}`);
+            lastError = new Error(`Gemini (${currentModel}): Límite de cuota alcanzado (Error 429).`);
             if (attempt === 1) {
-              await new Promise(r => setTimeout(r, 1000));
+              await new Promise(r => setTimeout(r, 2000));
               continue;
             }
+            // Advance to next model in cascade on attempt 2
             break;
           }
 
-          // Success!
-          return text.trim();
-        } catch (err) {
-          lastError = err instanceof Error ? err : new Error(String(err));
-          console.warn(`[callLLM] Model ${currentModel} attempt ${attempt} exception: ${lastError.message}`);
+          // If 400 (unsupported config) or 404 (model not found/deprecated), advance immediately
+          if (errCode === 400 || errCode === 404) {
+            break;
+          }
+
+          // If 503 and attempt 1, wait briefly with backoff
+          if (attempt === 1 && errCode === 503) {
+            await new Promise(r => setTimeout(r, 1500));
+            continue;
+          }
+
+          break;
+        }
+
+        if (json.promptFeedback?.blockReason === "SAFETY") {
+          console.warn(`[callLLM] Model ${currentModel} prompt blocked by safety filter`);
+          lastError = new Error(`Gemini (${currentModel}) bloqueó el prompt por política de seguridad (SAFETY).`);
+          diagnosticCollector?.push({
+            timestamp: new Date().toISOString(),
+            model: currentModel,
+            attempt,
+            durationMs,
+            status: "safety_blocked",
+            error: "Prompt bloqueado por política de seguridad (SAFETY).",
+          });
+          break;
+        }
+
+        const candidate = json.candidates?.[0];
+        if (candidate?.finishReason === "SAFETY") {
+          console.warn(`[callLLM] Model ${currentModel} candidate blocked by safety filter`);
+          lastError = new Error(`Gemini (${currentModel}) bloqueó la respuesta por política de seguridad (SAFETY).`);
+          diagnosticCollector?.push({
+            timestamp: new Date().toISOString(),
+            model: currentModel,
+            attempt,
+            durationMs,
+            status: "safety_blocked",
+            finishReason: "SAFETY",
+            error: "Respuesta bloqueada por política de seguridad (SAFETY).",
+          });
+          break;
+        }
+
+        // Safely extract genuine text (filtering out thought parts)
+        const text = extractGeminiText(candidate);
+        if (!text || !text.trim()) {
+          console.warn(`[callLLM] Model ${currentModel} returned empty text`);
+          lastError = new Error(`Gemini (${currentModel}) no devolvió contenido lírico.`);
+          diagnosticCollector?.push({
+            timestamp: new Date().toISOString(),
+            model: currentModel,
+            attempt,
+            durationMs,
+            status: "empty",
+            finishReason: candidate?.finishReason || "UNKNOWN",
+            error: "Respuesta vacía o sin contenido lírico.",
+          });
           if (attempt === 1) {
             await new Promise(r => setTimeout(r, 1000));
+            continue;
           }
+          break;
+        }
+
+        // Success!
+        diagnosticCollector?.push({
+          timestamp: new Date().toISOString(),
+          model: currentModel,
+          attempt,
+          durationMs,
+          status: "success",
+          finishReason: candidate?.finishReason || "STOP",
+          textSnippet: text.substring(0, 80),
+        });
+
+        return text.trim();
+      } catch (err) {
+        const durationMs = Date.now() - attemptStart;
+        const isAbort = err instanceof Error && (err.name === "AbortError" || err.message.includes("aborted"));
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.warn(`[callLLM] Model ${currentModel} attempt ${attempt} exception: ${lastError.message}`);
+
+        diagnosticCollector?.push({
+          timestamp: new Date().toISOString(),
+          model: currentModel,
+          attempt,
+          durationMs,
+          status: isAbort ? "timeout" : "error",
+          error: lastError.message,
+        });
+
+        // If timed out, do NOT retry same slow model for another 60s - cascade immediately!
+        if (isAbort) {
+          lastError = new Error(`Gemini (${currentModel}) agotó el tiempo de espera (timeout 60s).`);
+          break;
+        }
+
+        if (attempt === 1) {
+          await new Promise(r => setTimeout(r, 1000));
         }
       }
     }
-
-    throw lastError || new Error(`No se pudo procesar la solicitud tras intentar con los modelos: ${modelCascade.join(", ")}`);
-  } else {
-    // Sandbox z-ai with fallback
-    const ZAI = (await import("z-ai-web-dev-sdk")).default;
-    const zai = await ZAI.create();
-    const completion = await zai.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      temperature,
-    });
-    const text = completion.choices[0]?.message?.content;
-    if (!text || !text.trim()) {
-      throw new Error("El modelo sandbox no devolvió contenido.");
-    }
-    return text.trim();
   }
+
+  const isQuotaError = lastError?.message.includes("429") || lastError?.message.toLowerCase().includes("quota") || lastError?.message.toLowerCase().includes("exhausted");
+  if (isQuotaError) {
+    throw new Error("⚠️ Límite de cuota alcanzado en Google Gemini (Error 429). Tu API Key de Google AI Studio gratuita tiene un límite por minuto. Por favor, espera 30-45 segundos antes de volver a pulsar 'Generar Letra', o activa el 'Modo Rápido (1 Pasada)' para ahorrar llamadas.");
+  }
+
+  throw lastError || new Error(`No se pudo procesar la solicitud tras intentar con los modelos: ${modelCascade.join(", ")}`);
 }
 
 // Get a reference for an artist: curated DB first, then generate on-the-fly
@@ -250,12 +361,15 @@ async function getOrGenerateReference(artistId: string, geminiApiKey?: string, g
   const artist = getArtistById(artistId);
   if (!artist) return null;
   try {
-    return await generateArtistReference({
+    const refPromise = generateArtistReference({
       artistId,
       artistName: artist.name,
       geminiApiKey,
       geminiModel,
     });
+    // 8-second circuit breaker so reference generation never blocks the song pipeline
+    const timeoutPromise = new Promise<null>(r => setTimeout(() => r(null), 8000));
+    return await Promise.race([refPromise, timeoutPromise]);
   } catch (err) {
     console.error(`[generate] ref gen failed for ${artistId}:`, err instanceof Error ? err.message : err);
     return null;
@@ -269,8 +383,21 @@ function resolveTopics(topicIds: string[]): string[] {
 }
 
 export async function POST(req: NextRequest) {
+  const pipelineStartTime = Date.now();
+  let capturedBody: GenerateBody | undefined;
+  let modelUsed = "gemini-2.0-flash";
+  let processMode: GenerationProcessLog["mode"] = "pipeline_2_pass_primary";
+  let lyrics = "";
+  let finalRaw = "";
+  const stageLogs: GenerationStageLog[] = [];
+  const diagnosticAttempts: DiagnosticCallAttempt[] = [];
+  const driftHistory: LanguageDriftStep[] = [];
+
   try {
     const body = (await req.json()) as GenerateBody;
+    capturedBody = body;
+    const rawModelInit = body.geminiModel?.trim();
+    if (rawModelInit) modelUsed = rawModelInit;
 
     // Resolve referenced entities
     const bpmVibe = BPM_VIBES.find(b => b.id === body.bpmVibeId) ?? BPM_VIBES[5];
@@ -383,10 +510,7 @@ export async function POST(req: NextRequest) {
 
     const temperature = typeof body.temperature === "number" ? body.temperature : 0.72;
     const rawModel = body.geminiModel?.trim();
-    const modelUsed = (body.geminiApiKey && body.geminiApiKey.trim()) ? ((rawModel && !rawModel.includes("2.5")) ? rawModel : "gemini-2.0-flash") : "sandbox-z-ai";
-    const pipelineStartTime = Date.now();
-    let lyrics = "";
-    let finalRaw = "";
+    modelUsed = (rawModel && rawModel.trim()) ? rawModel.trim() : "gemini-2.0-flash";
     let finalAST: SongDocument | null = null;
     let auditContext: InitialAuditContext | null = null;
     let dialectAudit: any = null;
@@ -398,10 +522,8 @@ export async function POST(req: NextRequest) {
       plannedVerseIntents?: PlannedVerseIntent[];
     } | undefined = undefined;
     let pipelineStagesCompleted: string[] = [];
-    const stageLogs: GenerationStageLog[] = [];
-    const driftHistory: LanguageDriftStep[] = [];
     let repairDecisionData: GenerationProcessLog["repairDecision"] = undefined;
-    let processMode: GenerationProcessLog["mode"] = "pipeline_3_pass";
+    processMode = "pipeline_3_pass";
 
     // Register initial target drift point
     driftHistory.push({
@@ -419,7 +541,7 @@ export async function POST(req: NextRequest) {
       processMode = "regenerate_section";
       const singlePrompt = buildSystemPrompt(promptParams);
       const t0 = Date.now();
-      const rawLyrics = await callLLM(singlePrompt, body, temperature);
+      const rawLyrics = await callLLM(singlePrompt, body, temperature, diagnosticAttempts);
       const dMs = Date.now() - t0;
       finalRaw = rawLyrics;
       lyrics = cleanSunoBracketHeaders(rawLyrics, {
@@ -444,7 +566,7 @@ export async function POST(req: NextRequest) {
       processMode = "legacy_single_pass";
       const singlePrompt = buildSystemPrompt(promptParams);
       const t0 = Date.now();
-      const rawLyrics = await callLLM(singlePrompt, body, temperature);
+      const rawLyrics = await callLLM(singlePrompt, body, temperature, diagnosticAttempts);
       const dMs = Date.now() - t0;
       finalRaw = rawLyrics;
       lyrics = cleanSunoBracketHeaders(rawLyrics, {
@@ -479,14 +601,15 @@ export async function POST(req: NextRequest) {
       const hookVariationsEnabled = body.hookVariationsEnabled !== false;
       const stage1Prompt = buildStage1ToplinePrompt(promptParams, flowSkeleton.globalIntentionSummary, hookVariationsEnabled);
       const t1 = Date.now();
-      const stage1Topline = await callLLM(stage1Prompt, body, 0.82);
+      const stage1Topline = await callLLM(stage1Prompt, body, 0.82, diagnosticAttempts);
       const d1Ms = Date.now() - t1;
       
       // Resolve canonical Hook specification dynamically from structure & voice assignments
       const hookSpec = resolveSectionSpec(structure.sections, body.sectionVoices, "hook");
 
       // Invariant: Create canonical HookContract with expectedBars, occurrenceCount, and provable safe collapse
-      const hookContract = createHookContract(stage1Topline, {
+      const cleanedTopline = stripMetaReasoning(stage1Topline);
+      const hookContract = createHookContract(cleanedTopline, {
         allowPerformanceVariation: true,
         expectedBars: hookSpec.targetBars || 8,
         occurrenceCount: hookSpec.occurrenceCount,
@@ -551,7 +674,7 @@ export async function POST(req: NextRequest) {
         flowSkeletonSnippet
       );
       const t2 = Date.now();
-      let stage2Lyrics = await callLLM(stage2Prompt, body, 0.72);
+      let stage2Lyrics = await callLLM(stage2Prompt, body, 0.72, diagnosticAttempts);
 
       // Resilient Lyric Envelope Validation & Sanitization
       const envelopeCheck = validateLyricEnvelope(stage2Lyrics);
@@ -568,7 +691,7 @@ export async function POST(req: NextRequest) {
           console.warn("[generate] Zero valid sections found after stripping. Retrying once with strict zero-reasoning instruction.");
           try {
             const retryPrompt = `${stage2Prompt}\n\n⚠️ ALERTA DE COMPOSICIÓN CRÍTICA: Devuelve ÚNICAMENTE la letra de la canción comenzando directamente en el primer corchete [Intro]. CERO texto conversacional antes o después.`;
-            const retryLyrics = await callLLM(retryPrompt, body, 0.55);
+            const retryLyrics = await callLLM(retryPrompt, body, 0.55, diagnosticAttempts);
             const retryCleaned = stripMetaReasoning(retryLyrics);
             if (/\[(?:intro|verse|chorus|hook|bridge|outro)/i.test(retryCleaned)) {
               stage2Lyrics = retryCleaned;
@@ -670,7 +793,7 @@ REGLAS ESTRICTAS DE SALIDA:
 
 CANCIÓN A CORREGIR:
 ${candidateLyrics}`;
-          const patchedText = await callLLM(patchInstruction, body, 0.65);
+          const patchedText = await callLLM(patchInstruction, body, 0.65, diagnosticAttempts);
           const dRepairMs = Date.now() - tRepair;
           if (patchedText && patchedText.trim()) {
             finalRaw = patchedText;
@@ -767,6 +890,7 @@ ${candidateLyrics}`;
       modelUsed,
       totalDurationMs,
       stages: stageLogs,
+      diagnosticAttempts,
       finalRawLyrics: finalRaw,
       cleanedLyrics: lyrics,
       contextSummary: {
@@ -851,6 +975,39 @@ ${candidateLyrics}`;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido en la generación de estudio.";
     console.error("[generate] error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+
+    const targetArtistId = capturedBody?.artistId;
+    const targetFeatId = capturedBody?.featureArtistId;
+    const targetMoodId = capturedBody?.moodId;
+    const targetBpmId = capturedBody?.bpmVibeId;
+    const artistObj = targetArtistId ? getArtistById(targetArtistId) : undefined;
+    const featObj = targetFeatId ? getArtistById(targetFeatId) : undefined;
+    const moodObj = targetMoodId ? MOODS.find(m => m.id === targetMoodId) : undefined;
+    const bpmVibe = targetBpmId ? BPM_VIBES.find(b => b.id === targetBpmId) : undefined;
+
+    const errorLog: GenerationProcessLog = {
+      timestamp: new Date().toISOString(),
+      mode: processMode,
+      modelUsed,
+      totalDurationMs: Date.now() - pipelineStartTime,
+      stages: stageLogs,
+      diagnosticAttempts,
+      finalRawLyrics: finalRaw,
+      cleanedLyrics: lyrics,
+      error: message,
+      contextSummary: {
+        artistName: artistObj?.name ?? capturedBody?.artistId ?? "Desconocido",
+        featureArtistName: featObj?.name ?? capturedBody?.featureArtistId,
+        mood: moodObj?.label ?? capturedBody?.moodId ?? "N/A",
+        bpm: bpmVibe ? `${bpmVibe.range} BPM (${bpmVibe.label})` : (capturedBody?.bpmVibeId ?? "N/A"),
+        structure: capturedBody?.structureId ?? "N/A",
+        spanglishTarget: capturedBody?.spanglishPercent ?? 50,
+        spanglishActual: 0,
+        rhymeTier: capturedBody?.artistId ? getRhymeTier(capturedBody.artistId) : 1,
+        dirtyLevel: capturedBody?.dirtyLevel ?? 2,
+      },
+    };
+
+    return NextResponse.json({ error: message, generationLog: errorLog }, { status: 500 });
   }
 }

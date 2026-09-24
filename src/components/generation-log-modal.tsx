@@ -26,9 +26,12 @@ import {
   ShieldCheck,
   AlertTriangle,
   Anchor,
+  Activity,
+  XCircle,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { GenerationProcessLog, GenerationStageLog } from "@/lib/generation-logger";
+import type { GenerationProcessLog, GenerationStageLog, DiagnosticCallAttempt } from "@/lib/generation-logger";
 
 interface GenerationLogModalProps {
   open: boolean;
@@ -67,6 +70,8 @@ export function GenerationLogModal({ open, onOpenChange, log }: GenerationLogMod
   }
 
   const { contextSummary, stages } = log;
+  const hasError = Boolean(log.error);
+  const attempts = log.diagnosticAttempts || [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -102,6 +107,29 @@ export function GenerationLogModal({ open, onOpenChange, log }: GenerationLogMod
             </div>
           </div>
         </DialogHeader>
+
+        {/* Banner de Error / Fallo de API */}
+        {hasError && (
+          <div className="p-3.5 bg-red-950/60 border-b border-red-500/50 text-xs flex items-start gap-3">
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+            <div className="space-y-1 flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold text-red-200">Fallo en la Generación (Interrupción tras bambalinas)</span>
+                <Badge variant="outline" className="border-red-500/50 text-red-300 text-[10px] bg-red-950/50 shrink-0">
+                  {log.error?.includes("429") ? "Error 429 Cuota" : "Fallo de API"}
+                </Badge>
+              </div>
+              <p className="text-red-300/90 font-mono text-[11px] leading-relaxed break-words">
+                {log.error}
+              </p>
+              {log.error?.includes("429") && (
+                <p className="text-[10px] text-amber-300/90 font-sans pt-1">
+                  💡 <b>Solución rápida:</b> Tu clave gratuita de Google AI Studio se bloquea temporalmente por exceso de peticiones por minuto. Espera 30 segundos o cambia al <b>Modo Rápido (1 Pasada)</b> para enviar un solo prompt en vez de dos pasadas.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Resumen Superior */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3.5 bg-muted/20 border-b border-border/40 text-xs font-mono">
@@ -148,9 +176,15 @@ export function GenerationLogModal({ open, onOpenChange, log }: GenerationLogMod
         )}
 
         {/* Contenedor de Pestañas */}
-        <Tabs defaultValue="stages" className="flex-1 flex flex-col min-h-0">
+        <Tabs defaultValue={hasError ? "diagnostics" : "stages"} className="flex-1 flex flex-col min-h-0">
           <div className="px-5 border-b border-border/40 bg-background/20 flex items-center justify-between">
             <TabsList className="bg-transparent h-11 p-0 gap-4">
+              <TabsTrigger
+                value="diagnostics"
+                className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-amber-400 data-[state=active]:text-amber-400 rounded-none px-2 h-11 text-xs"
+              >
+                <Activity className="w-3.5 h-3.5 mr-1.5" /> Diagnóstico API Tras Bambalinas ({attempts.length})
+              </TabsTrigger>
               <TabsTrigger
                 value="stages"
                 className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-cyber data-[state=active]:text-cyber rounded-none px-2 h-11 text-xs"
@@ -182,93 +216,215 @@ export function GenerationLogModal({ open, onOpenChange, log }: GenerationLogMod
             </Button>
           </div>
 
-          {/* TAB 1: Pasadas del Pipeline */}
-          <TabsContent value="stages" className="flex-1 flex flex-col m-0 min-h-0">
-            {/* Sub-selector de Pasada */}
-            <div className="flex border-b border-border/30 bg-muted/10 p-2 gap-2 overflow-x-auto">
-              {stages.map((stage, idx) => (
-                <button
-                  key={stage.stageId}
-                  onClick={() => setSelectedStageTab(String(idx))}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all text-left whitespace-nowrap ${
-                    selectedStageTab === String(idx)
-                      ? "bg-cyber/20 text-cyber border border-cyber/40 shadow-sm"
-                      : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-                  }`}
-                >
-                  <span className="w-4 h-4 rounded-full bg-background border border-current text-[10px] flex items-center justify-center font-mono">
-                    {idx + 1}
-                  </span>
-                  <span>{stage.stageName.split(":")[0]}</span>
-                  <span className="text-[10px] opacity-70 font-mono">{(stage.durationMs / 1000).toFixed(1)}s</span>
-                </button>
-              ))}
+          {/* TAB 0: Diagnóstico de API & Llamadas Tras Bambalinas */}
+          <TabsContent value="diagnostics" className="flex-1 flex flex-col m-0 min-h-0 p-4 space-y-4 overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-semibold text-foreground flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-amber-400" />
+                  Registro Técnico de Llamadas a Google Gemini
+                </h4>
+                <p className="text-[11px] text-muted-foreground">
+                  Traza exacta de cada petición enviada al endpoint de Gemini, códigos de error y respuestas.
+                </p>
+              </div>
+              <Badge variant="outline" className="text-[10px] font-mono border-amber-400/50 text-amber-300">
+                {attempts.length} {attempts.length === 1 ? "intento registrado" : "intentos registrados"}
+              </Badge>
             </div>
 
-            {/* Detalle de la Pasada Seleccionada */}
-            {stages[Number(selectedStageTab)] && (
-              <div className="flex-1 flex flex-col min-h-0">
-                {(() => {
-                  const stage: GenerationStageLog = stages[Number(selectedStageTab)];
+            {attempts.length === 0 ? (
+              <div className="p-6 rounded-lg border border-border/40 bg-black/20 text-center text-xs text-muted-foreground">
+                No se registraron intentos directos de API en este log.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {attempts.map((att, idx) => {
+                  const isOk = att.status === "success";
+                  const isSafety = att.status === "safety_blocked";
+                  const isRateLimit = att.httpCode === 429;
+
                   return (
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/40 min-h-0">
-                      {/* Columna Izquierda: Prompt Enviado */}
-                      <div className="flex flex-col min-h-0 h-full">
-                        <div className="p-3 bg-muted/20 border-b border-border/40 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-xs text-foreground flex items-center gap-1.5">
-                              <Terminal className="w-3.5 h-3.5 text-cyber" /> Prompt Inyectado al Modelo
-                            </span>
-                            <Badge variant="outline" className="text-[10px] font-mono">
-                              {stage.prompt.length} chars
-                            </Badge>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleCopy(stage.prompt, `prompt_${stage.stageId}`, "Prompt")}
-                            className="h-6 text-xs text-muted-foreground hover:text-cyber px-2"
-                          >
-                            {copiedKey === `prompt_${stage.stageId}` ? <Check className="w-3 h-3 text-slime" /> : <Copy className="w-3 h-3" />}
-                          </Button>
+                    <div
+                      key={idx}
+                      className={`p-3.5 rounded-lg border text-xs font-mono space-y-2.5 transition-all ${
+                        isOk
+                          ? "bg-emerald-950/20 border-emerald-500/40"
+                          : isSafety
+                          ? "bg-amber-950/30 border-amber-500/40"
+                          : "bg-red-950/30 border-red-500/40"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/30 pb-2">
+                        <div className="flex items-center gap-2">
+                          {isOk ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+                          )}
+                          <span className="font-bold text-foreground">
+                            Intento #{att.attempt} — Modelo: <span className="text-pink-400">{att.model}</span>
+                          </span>
                         </div>
-                        <ScrollArea className="flex-1 p-3.5 bg-black/30">
-                          <pre className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap text-muted-foreground select-text">
-                            {stage.prompt}
-                          </pre>
-                        </ScrollArea>
+                        <div className="flex items-center gap-2">
+                          {att.httpCode && (
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${
+                                isOk
+                                  ? "border-emerald-500/50 text-emerald-400"
+                                  : isRateLimit
+                                  ? "border-amber-400/60 text-amber-300 bg-amber-400/10 font-bold"
+                                  : "border-red-400/60 text-red-400"
+                              }`}
+                            >
+                              HTTP {att.httpCode} {isRateLimit ? "• CUOTA AGOTADA" : ""}
+                            </Badge>
+                          )}
+                          <Badge
+                            variant="secondary"
+                            className={`text-[10px] capitalize ${
+                              isOk ? "text-emerald-300" : isSafety ? "text-amber-300" : "text-red-300"
+                            }`}
+                          >
+                            {att.status.replace("_", " ")}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> {(att.durationMs / 1000).toFixed(2)}s
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Columna Derecha: Respuesta en Bruto */}
-                      <div className="flex flex-col min-h-0 h-full">
-                        <div className="p-3 bg-muted/20 border-b border-border/40 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-xs text-foreground flex items-center gap-1.5">
-                              <Sparkles className="w-3.5 h-3.5 text-slime" /> Salida del Modelo (Fase {Number(selectedStageTab) + 1})
-                            </span>
-                            <Badge variant="outline" className="text-[10px] font-mono">
-                              {stage.rawResponse.length} chars
-                            </Badge>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleCopy(stage.rawResponse, `res_${stage.stageId}`, "Respuesta")}
-                            className="h-6 text-xs text-muted-foreground hover:text-slime px-2"
-                          >
-                            {copiedKey === `res_${stage.stageId}` ? <Check className="w-3 h-3 text-slime" /> : <Copy className="w-3 h-3" />}
-                          </Button>
+                      {att.error && (
+                        <div className="p-2 rounded bg-black/40 border border-red-500/20 text-red-300 text-[11px] leading-relaxed break-words">
+                          <span className="text-red-400 font-semibold block text-[10px] uppercase">Detalle del Fallo:</span>
+                          {att.error}
                         </div>
-                        <ScrollArea className="flex-1 p-3.5 bg-black/40">
-                          <pre className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap text-foreground/90 select-text">
-                            {stage.rawResponse}
-                          </pre>
-                        </ScrollArea>
-                      </div>
+                      )}
+
+                      {att.finishReason && (
+                        <div className="text-[10px] text-muted-foreground">
+                          Motivo de finalización: <span className="text-foreground font-semibold">{att.finishReason}</span>
+                        </div>
+                      )}
+
+                      {att.textSnippet && (
+                        <div className="p-2 rounded bg-black/30 border border-border/30 text-[11px] text-muted-foreground truncate">
+                          <span className="text-foreground/80 font-semibold mr-1">Snippet devuelto:</span>
+                          {att.textSnippet}
+                        </div>
+                      )}
                     </div>
                   );
-                })()}
+                })}
               </div>
+            )}
+          </TabsContent>
+
+          {/* TAB 1: Pasadas del Pipeline */}
+          <TabsContent value="stages" className="flex-1 flex flex-col m-0 min-h-0">
+            {stages.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center gap-3">
+                <div className="p-3 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+                  <XCircle className="w-8 h-8" />
+                </div>
+                <div className="max-w-md space-y-1">
+                  <p className="text-sm font-semibold text-foreground">No se completaron pasadas de composición</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    La llamada a la IA fue interrumpida o rechazada por Google antes de poder generar el contenido lírico.
+                    Consulta la pestaña <b>"Diagnóstico API Tras Bambalinas"</b> para ver exactamente qué respondió el servidor y qué código devolvió.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Sub-selector de Pasada */}
+                <div className="flex border-b border-border/30 bg-muted/10 p-2 gap-2 overflow-x-auto">
+                  {stages.map((stage, idx) => (
+                    <button
+                      key={stage.stageId}
+                      onClick={() => setSelectedStageTab(String(idx))}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all text-left whitespace-nowrap ${
+                        selectedStageTab === String(idx)
+                          ? "bg-cyber/20 text-cyber border border-cyber/40 shadow-sm"
+                          : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                      }`}
+                    >
+                      <span className="w-4 h-4 rounded-full bg-background border border-current text-[10px] flex items-center justify-center font-mono">
+                        {idx + 1}
+                      </span>
+                      <span>{stage.stageName.split(":")[0]}</span>
+                      <span className="text-[10px] opacity-70 font-mono">{(stage.durationMs / 1000).toFixed(1)}s</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Detalle de la Pasada Seleccionada */}
+                {stages[Number(selectedStageTab)] && (
+                  <div className="flex-1 flex flex-col min-h-0">
+                    {(() => {
+                      const stage: GenerationStageLog = stages[Number(selectedStageTab)];
+                      return (
+                        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/40 min-h-0">
+                          {/* Columna Izquierda: Prompt Enviado */}
+                          <div className="flex flex-col min-h-0 h-full">
+                            <div className="p-3 bg-muted/20 border-b border-border/40 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                                  <Terminal className="w-3.5 h-3.5 text-cyber" /> Prompt Inyectado al Modelo
+                                </span>
+                                <Badge variant="outline" className="text-[10px] font-mono">
+                                  {stage.prompt.length} chars
+                                </Badge>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleCopy(stage.prompt, `prompt_${stage.stageId}`, "Prompt")}
+                                className="h-6 text-xs text-muted-foreground hover:text-cyber px-2"
+                              >
+                                {copiedKey === `prompt_${stage.stageId}` ? <Check className="w-3 h-3 text-slime" /> : <Copy className="w-3 h-3" />}
+                              </Button>
+                            </div>
+                            <ScrollArea className="flex-1 p-3.5 bg-black/30">
+                              <pre className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap text-muted-foreground select-text">
+                                {stage.prompt}
+                              </pre>
+                            </ScrollArea>
+                          </div>
+
+                          {/* Columna Derecha: Respuesta en Bruto */}
+                          <div className="flex flex-col min-h-0 h-full">
+                            <div className="p-3 bg-muted/20 border-b border-border/40 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                                  <Sparkles className="w-3.5 h-3.5 text-slime" /> Salida del Modelo (Fase {Number(selectedStageTab) + 1})
+                                </span>
+                                <Badge variant="outline" className="text-[10px] font-mono">
+                                  {stage.rawResponse.length} chars
+                                </Badge>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleCopy(stage.rawResponse, `res_${stage.stageId}`, "Respuesta")}
+                                className="h-6 text-xs text-muted-foreground hover:text-slime px-2"
+                              >
+                                {copiedKey === `res_${stage.stageId}` ? <Check className="w-3 h-3 text-slime" /> : <Copy className="w-3 h-3" />}
+                              </Button>
+                            </div>
+                            <ScrollArea className="flex-1 p-3.5 bg-black/40">
+                              <pre className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap text-foreground/90 select-text">
+                                {stage.rawResponse}
+                              </pre>
+                            </ScrollArea>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </>
             )}
           </TabsContent>
 

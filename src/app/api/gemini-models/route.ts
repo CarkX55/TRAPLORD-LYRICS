@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getEffectiveApiKey, hasAvailableApiKey } from "@/lib/gemini-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 10;
 
+export async function GET() {
+  const hasEnvKey = hasAvailableApiKey();
+  return NextResponse.json({ hasEnvKey });
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { apiKey } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const apiKey = (body.apiKey && String(body.apiKey).trim()) || process.env.GEMINI_API_KEY?.trim();
     
-    if (!apiKey || !apiKey.trim()) {
+    if (!apiKey) {
       return NextResponse.json({ error: "No API key provided" }, { status: 400 });
     }
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`);
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
     const data = await res.json();
 
     if (data.error) {
@@ -48,7 +55,7 @@ export async function POST(req: NextRequest) {
         return a.id.localeCompare(b.id);
       });
 
-    return NextResponse.json({ models });
+    return NextResponse.json({ models, hasEnvKey: hasAvailableApiKey() });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error fetching models";
     return NextResponse.json({ error: message }, { status: 500 });

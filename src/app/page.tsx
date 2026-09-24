@@ -24,7 +24,8 @@ import {
   RefreshCw, Share2, Link2, Shuffle, BarChart3, Clock, TrendingUp,
   MessageSquare, Award, AlertCircle, Lightbulb, AudioLines, Music2,
   Image, Star, Quote, Instagram, Twitter, Video, ListMusic, Radio, Key,
-  Plus, ArrowUp, ArrowDown, X, Layers, Volume2, VolumeX, FileSpreadsheet, Terminal
+  Plus, ArrowUp, ArrowDown, X, Layers, Volume2, VolumeX, FileSpreadsheet, Terminal,
+  AlertTriangle, SlidersHorizontal
 } from "lucide-react";
 import {
   ARTISTS_DATA, MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, PRODUCERS, RHYME_SCHEMES,
@@ -122,6 +123,14 @@ interface HistoryEntry {
   fullLyrics: string;
   analysis?: LanguageAnalysis | null;
   generationLog?: GenerationProcessLog;
+}
+
+export interface LiveStudioLogEntry {
+  id: string;
+  time: string;
+  type: "info" | "success" | "warn" | "error";
+  message: string;
+  detail?: string;
 }
 
 const MOOD_ICONS: Record<string, typeof Flame> = {
@@ -284,6 +293,7 @@ export default function TrapGhostPage() {
   const [sunoReadiness, setSunoReadiness] = useState<SunoReadinessResult | null>(null);
   // Round 12: API Key + model selector + producer name + flow profile
   const [geminiApiKey, setGeminiApiKey] = useState<string>("");
+  const [hasServerKey, setHasServerKey] = useState<boolean>(false);
   const [geminiModel, setGeminiModel] = useState<string>("gemini-2.0-flash");
   const [thinkingBudget, setThinkingBudget] = useState<number>(-1); // -1: auto, 0: instant, 1024: balanced, 4096: deep
   const [producerName, setProducerName] = useState<string>("Markoff");
@@ -335,8 +345,23 @@ export default function TrapGhostPage() {
   const [generationLog, setGenerationLog] = useState<GenerationProcessLog | null>(null);
   const [logModalOpen, setLogModalOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
-  const [generationProgress, setGenerationProgress] = useState<{ step: number; title: string; detail: string } | null>(null);
+  const [generationProgress, setGenerationProgress] = useState<{ step: number; title: string; detail: string; percent?: number } | null>(null);
   const [regenCount, setRegenCount] = useState<number>(0);
+  const [pipelineMode, setPipelineMode] = useState<"fast" | "studio">("studio");
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [liveStudioLogs, setLiveStudioLogs] = useState<LiveStudioLogEntry[]>([]);
+  const [liveMonitorOpen, setLiveMonitorOpen] = useState<boolean>(true);
+
+  const addLiveLog = useCallback((type: LiveStudioLogEntry["type"], message: string, detail?: string) => {
+    const entry: LiveStudioLogEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      time: new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      type,
+      message,
+      detail,
+    };
+    setLiveStudioLogs(prev => [...prev.slice(-49), entry]);
+  }, []);
 
   // Presets
   const [presets, setPresets] = useState<Preset[]>([]);
@@ -375,63 +400,59 @@ export default function TrapGhostPage() {
       const storedKey = localStorage.getItem("gemini_api_key");
       if (storedKey) {
         setGeminiApiKey(storedKey);
-        // Cargar modelos vía proxy del servidor
-        fetch("/api/gemini-models", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ apiKey: storedKey }),
-        })
+        fetchGeminiModels(storedKey);
+      } else {
+        // Consultar si el servidor tiene GEMINI_API_KEY en .env
+        fetch("/api/gemini-models")
           .then(r => r.json())
           .then(data => {
-            if (data.models) setAvailableModels(data.models);
+            if (data.hasEnvKey) {
+              setHasServerKey(true);
+              fetchGeminiModels("");
+            }
           })
           .catch(() => {});
       }
       const storedModel = localStorage.getItem("gemini_model");
       if (storedModel) {
-        if (storedModel.includes("2.5")) {
-          setGeminiModel("gemini-2.0-flash");
-          try { localStorage.setItem("gemini_model", "gemini-2.0-flash"); } catch {}
-        } else {
-          setGeminiModel(storedModel);
-        }
+        setGeminiModel(storedModel);
       }
       const storedBudget = localStorage.getItem("gemini_thinking_budget");
       if (storedBudget !== null) setThinkingBudget(Number(storedBudget));
       const storedProducer = localStorage.getItem("producer_name");
       if (storedProducer) setProducerName(storedProducer);
+      const storedPipelineMode = localStorage.getItem("generation_pipeline_mode");
+      if (storedPipelineMode === "fast" || storedPipelineMode === "studio") {
+        setPipelineMode(storedPipelineMode);
+      }
     } catch {}
   }, []);
 
   // ===== Fetch available Gemini models from API =====
-  const fetchGeminiModels = useCallback(async (apiKey: string) => {
-    if (!apiKey.trim()) {
-      setAvailableModels([]);
-      return;
-    }
+  const fetchGeminiModels = useCallback(async (apiKey?: string) => {
     setLoadingModels(true);
     try {
       // Usar proxy del servidor para evitar CORS
       const res = await fetch("/api/gemini-models", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey }),
+        body: JSON.stringify({ apiKey: (apiKey && apiKey.trim()) ? apiKey.trim() : undefined }),
       });
       const data = await res.json();
       if (data.error) {
-        toast.error(`Error: ${data.error}`);
         setAvailableModels([]);
         return;
+      }
+      if (data.hasEnvKey) {
+        setHasServerKey(true);
       }
       const models = data.models || [];
       setAvailableModels(models);
       if (models.length > 0) {
         const currentExists = models.some((m: { id: string }) => m.id === geminiModel);
         if (!currentExists) setGeminiModel(models[0].id);
-        toast.success(`${models.length} modelos disponibles cargados`);
       }
     } catch {
-      toast.error("No se pudo cargar la lista de modelos");
       setAvailableModels([]);
     } finally {
       setLoadingModels(false);
@@ -579,8 +600,64 @@ export default function TrapGhostPage() {
 
   // ===== Generate =====
   const handleGenerate = useCallback(async (isRegen: boolean = false) => {
+    const hasKey = Boolean(geminiApiKey.trim() || hasServerKey);
+    if (!hasKey) {
+      setApiKeyOpen(true);
+      toast.error("⚠️ Se requiere una API Key de Gemini", {
+        description: "Introduce tu API Key gratuita de Google AI Studio en el panel lateral para poder componer la letra.",
+      });
+      setTimeout(() => {
+        const el = document.getElementById("gemini-api-key-input");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.focus();
+        }
+      }, 150);
+      return;
+    }
+
     setLoading(true);
     setRegenCount(isRegen ? regenCount + 1 : 0);
+    setGenerationError(null);
+
+    const isFastMode = pipelineMode === "fast";
+    addLiveLog("info", `🚀 Iniciando generación para [${artist?.name ?? artistId}] • ${bpmVibeId} BPM`);
+    addLiveLog("info", `🎛️ Modo: ${isFastMode ? "Rápido (1 Pasada)" : "Estudio (2 Pasadas)"} • Modelo: ${geminiModel || "gemini-2.0-flash"} • Spanglish: ${spanglishPercent}%`);
+
+    const progressSteps = isFastMode ? [
+      { step: 1, title: "⚡ Generación Rápida (1 Pasada)", detail: "Componiendo letra completa en un único pase de estudio...", percent: 50 },
+      { step: 2, title: "🔬 Formateo Suno v4.5 & AST", detail: "Estructurando corchetes, dialecto y rimas...", percent: 90 },
+    ] : [
+      { step: 1, title: "🎛️ Fase 1/3: Topliner & Hook Contract", detail: "Diseñando concepto melódico, ganchos canónicos y mantras vocales...", percent: 25 },
+      { step: 2, title: "✍️ Fase 2/3: Master Ghostwriter", detail: "Escribiendo versos completos con 4-Bar Writing Cells y rimas métricas...", percent: 60 },
+      { step: 3, title: "🔬 Fase 3/3: Calibración & Quality Gate AST", detail: "Auditando fonética, dialecto, rimas y formato Suno v4.5...", percent: 85 },
+      { step: 4, title: "⚡ Masterización Final", detail: "Reconciliando AST inmutable y empaquetando versión definitiva...", percent: 95 },
+    ];
+
+    setGenerationProgress(progressSteps[0]);
+    let timer1: NodeJS.Timeout | undefined;
+    let timer2: NodeJS.Timeout | undefined;
+    let timer3: NodeJS.Timeout | undefined;
+
+    if (isFastMode) {
+      timer1 = setTimeout(() => {
+        setGenerationProgress(progressSteps[1]);
+        addLiveLog("info", "🔬 Paso 2: Formateando corchetes Suno y auditando AST...");
+      }, 3500);
+    } else {
+      timer1 = setTimeout(() => {
+        setGenerationProgress(progressSteps[1]);
+        addLiveLog("info", "✍️ Fase 2: Master Ghostwriter escribiendo versos...");
+      }, 6000);
+      timer2 = setTimeout(() => {
+        setGenerationProgress(progressSteps[2]);
+        addLiveLog("info", "🔬 Fase 3: Calibración y Quality Gate AST...");
+      }, 19000);
+      timer3 = setTimeout(() => {
+        setGenerationProgress(progressSteps[3]);
+        addLiveLog("info", "⚡ Masterización final y empaquetado de versión...");
+      }, 32000);
+    }
 
     const configPayload = {
       artistId,
@@ -627,21 +704,17 @@ export default function TrapGhostPage() {
       adlibStyle,
       situationalPresetId: situationalPresetId !== "none" ? situationalPresetId : undefined,
       flowPocketMode: flowPocketMode !== "auto" ? flowPocketMode : undefined,
+      useLegacySinglePass: isFastMode,
     };
 
     if (!isRegen) {
       setHookVariations([]);
     }
 
-    setGenerationProgress({
-      step: 1,
-      title: "Generando letra en el estudio...",
-      detail: "Pipeline de composición y análisis AST en ejecución",
-    });
-
     try {
       // Notificación de inicio del pipeline de estudio
-      toast.info("🎛️ Sesión de estudio iniciada...");
+      toast.info(isFastMode ? "⚡ Generación rápida iniciada (1 Pasada)..." : "🎛️ Sesión de estudio iniciada (2 Pasadas)...");
+      addLiveLog("info", "📡 Transmitiendo prompt a /api/generate...");
 
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -649,16 +722,43 @@ export default function TrapGhostPage() {
         body: JSON.stringify(configPayload),
       });
 
-      const data: GenerateResponse & {
+      let data: (GenerateResponse & {
         error?: string;
         refTrackSummary?: string;
         sunoStylePrompt?: string;
         sunoLayers?: SunoStyleLayers;
         pipelineStages?: string[];
-      } = await res.json();
+      }) | null = null;
 
-      if (!res.ok || data.error) {
-        throw new Error(data.error || "Error en la generación de estudio");
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        console.error("No se pudo parsear respuesta JSON del servidor:", jsonErr);
+      }
+
+      // Si el servidor devolvió telemetría o log de proceso (incluso si falló), lo guardamos de inmediato
+      if (data?.generationLog) {
+        setGenerationLog(data.generationLog);
+        if (data.generationLog.diagnosticAttempts && data.generationLog.diagnosticAttempts.length > 0) {
+          data.generationLog.diagnosticAttempts.forEach(att => {
+            const isOk = att.status === "success";
+            addLiveLog(
+              isOk ? "success" : att.status === "safety_blocked" ? "warn" : "error",
+              `Gemini [${att.model}] intento #${att.attempt}: ${att.status.toUpperCase()} (${(att.durationMs / 1000).toFixed(1)}s)${att.httpCode ? ` • HTTP ${att.httpCode}` : ""}`,
+              att.error || (att.textSnippet ? `Texto: "${att.textSnippet.slice(0, 50)}..."` : undefined)
+            );
+          });
+        }
+      }
+
+      if (!res.ok || data?.error) {
+        const errorDetail = data?.error || `Error en la generación de estudio (HTTP ${res.status})`;
+        addLiveLog("error", `Fallo en el pipeline: ${errorDetail}`);
+        throw new Error(errorDetail);
+      }
+
+      if (!data) {
+        throw new Error("Respuesta de API vacía o no válida.");
       }
 
       // Capturar análisis de tema de referencia
@@ -678,7 +778,6 @@ export default function TrapGhostPage() {
       if (data.beatPrompt) setBeatPrompt(data.beatPrompt);
       if (data.sunoStylePrompt) setSunoStylePrompt(data.sunoStylePrompt);
       if (data.sunoLayers) setSunoLayers(data.sunoLayers);
-      if (data.generationLog) setGenerationLog(data.generationLog);
       if (lockedSections.length > 0) setLockedSections([]);
 
       const moodLabel = MOODS.find(m => m.id === moodId)?.label ?? moodId;
@@ -698,11 +797,18 @@ export default function TrapGhostPage() {
       };
       setHistory(prev => [entry, ...prev].slice(0, 8));
 
+      addLiveLog("success", `🔥 Composición finalizada con éxito (${cleanLyrics.split("\n").filter(Boolean).length} líneas generadas)`);
       toast.success(isRegen ? "⚡ Letra regenerada" : "🔥 Letra de estudio generada");
       setTimeout(() => lyricsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error desconocido");
+      const errorMsg = err instanceof Error ? err.message : "Error desconocido en la generación de estudio.";
+      addLiveLog("error", `❌ Error en generación: ${errorMsg}`);
+      setGenerationError(errorMsg);
+      toast.error(errorMsg, { duration: 7000 });
     } finally {
+      if (timer1) clearTimeout(timer1);
+      if (timer2) clearTimeout(timer2);
+      if (timer3) clearTimeout(timer3);
       setLoading(false);
       setGenerationProgress(null);
     }
@@ -712,8 +818,9 @@ export default function TrapGhostPage() {
       temperature, rhymeSchemeId, lockedSections, lyrics, regenCount, artist,
       beatTypeId, featureSimId, customIntro, collabInteraction, altVoiceAsterisks,
       syllableSync, phoneticAdlibs, smartBarsMode, sectionVoices, sunoTagsMode,
-      geminiApiKey, geminiModel, producerName, refTrackOpen, refTrackLyrics, dynamicSongForm,
-      dynamismMode, adlibStyle, situationalPresetId, customSections, isCustomStructure, flowPocketMode]);
+      geminiApiKey, hasServerKey, geminiModel, producerName, refTrackOpen, refTrackLyrics, dynamicSongForm,
+      dynamismMode, adlibStyle, situationalPresetId, customSections, isCustomStructure, flowPocketMode,
+      pipelineMode, addLiveLog]);
 
   // ===== Copy for Suno AI (Clean Bracketed Format with Vocal Guides) =====
   const handleCopySuno = useCallback(async () => {
@@ -881,7 +988,7 @@ export default function TrapGhostPage() {
     `).join("")}
   </div>
   <div class="footer">
-    Generado con TrapGhost · ${new Date().toLocaleString("es-ES")} · Powered by Z.ai
+    Generado con TrapGhost · ${new Date().toLocaleString("es-ES")} · Google Gemini
   </div>
   <div class="no-print" style="text-align:center; margin-top: 20px;">
     <button onclick="window.print()" style="padding: 10px 24px; font-size: 14px; background: #00ff41; color: #000; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">🖨️ Imprimir / Guardar PDF</button>
@@ -1236,6 +1343,15 @@ export default function TrapGhostPage() {
 
   // ===== Regenerate single section =====
   const handleRegenerateSection = useCallback(async (sectionName: string, sectionContent: string) => {
+    const hasKey = Boolean(geminiApiKey.trim() || hasServerKey);
+    if (!hasKey) {
+      setApiKeyOpen(true);
+      toast.error("⚠️ Se requiere una API Key de Gemini", {
+        description: "Introduce tu API Key en el panel lateral para poder regenerar la sección.",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       // Build context: all lyrics EXCEPT the section being regenerated
@@ -1303,7 +1419,8 @@ export default function TrapGhostPage() {
   }, [artistId, featureArtistId, moodId, selectedTopics, customTopic, spanglishPercent,
       bpmVibeId, structureId, narrativeArcId, producerId, producerTag, customDictionary,
       dynamicMarkers, chorusLangOverride, versesLangOverride, barCountOverride,
-      rhymeSchemeId, temperature, lyrics, customSections, isCustomStructure, flowPocketMode]);
+      rhymeSchemeId, temperature, lyrics, customSections, isCustomStructure, flowPocketMode,
+      geminiApiKey, hasServerKey]);
 
   // ===== Share URL (encode config into URL hash) =====
   const handleShareUrl = useCallback(() => {
@@ -2090,26 +2207,32 @@ export default function TrapGhostPage() {
 
             {/* --- API Key & Model Card --- */}
             <Collapsible open={apiKeyOpen} onOpenChange={setApiKeyOpen}>
-              <Card className="glass-card p-5 space-y-3">
+              <Card id="gemini-api-key-section" className="glass-card p-5 space-y-3">
                 <CollapsibleTrigger asChild>
                   <button className="flex items-center gap-2 w-full text-left group cursor-pointer">
                     <Key className="w-5 h-5 text-cyber shrink-0" />
                     <h2 className="font-display text-lg font-semibold group-hover:text-cyber transition-colors">API Key de Gemini</h2>
-                    <Badge variant="outline" className={`ml-auto text-[10px] ${geminiApiKey ? "border-slime/40 text-slime" : "border-yellow-400/40 text-yellow-400"}`}>
-                      {geminiApiKey ? "✓ Configurada" : "⚠ Vacía (usa Z.ai SDK)"}
+                    <Badge variant="outline" className={`ml-auto text-[10px] ${geminiApiKey ? "border-slime/40 text-slime" : hasServerKey ? "border-cyan-400/40 text-cyan-400" : "border-amber-400/40 text-amber-400"}`}>
+                      {geminiApiKey ? "✓ Guardada en Navegador" : hasServerKey ? "✓ Activa desde .env" : "⚠ Clave Requerida"}
                     </Badge>
                     <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${apiKeyOpen ? "rotate-180" : ""}`} />
                   </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-3 pt-2 animate-fade-slide">
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Pon tu API Key de Google Gemini para usar la app desde cualquier sitio. Consíguela gratis en{" "}
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-cyber underline">aistudio.google.com</a>
+                    Pon tu API Key de Google Gemini para componer letras. Consíguela 100% gratis en{" "}
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-cyber underline font-semibold">aistudio.google.com</a>
                   </p>
+                  {hasServerKey && !geminiApiKey && (
+                    <div className="text-[11px] bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 p-2.5 rounded-lg flex items-center gap-2">
+                      <span className="text-sm">✨</span>
+                      <span>Detectada API Key en tu archivo <strong>.env</strong> del servidor. Lista para generar sin necesidad de pegarla aquí.</span>
+                    </div>
+                  )}
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">API Key</Label>
                     <div className="flex gap-2">
-                      <Input type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)} placeholder="AIza..." className="bg-black/40 font-mono text-[11px]" />
+                      <Input id="gemini-api-key-input" type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)} placeholder={hasServerKey ? "Cargada desde .env (o introduce otra personalizada)" : "AIza..."} className="bg-black/40 font-mono text-[11px]" />
                       <Button variant="outline" size="sm" onClick={() => {
                         try {
                           localStorage.setItem("gemini_api_key", geminiApiKey.trim());
@@ -3719,6 +3842,95 @@ export default function TrapGhostPage() {
 
             {/* --- Generate Button --- */}
             <Card className="glass-card p-5 space-y-3 sticky top-20 z-20">
+              {/* Pipeline Mode Switcher: Fast vs Studio */}
+              <div className="flex items-center justify-between gap-1.5 p-1 rounded-lg bg-black/40 border border-white/10 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPipelineMode("fast");
+                    try { localStorage.setItem("generation_pipeline_mode", "fast"); } catch {}
+                  }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md font-medium transition-all ${
+                    pipelineMode === "fast"
+                      ? "bg-amber-400/20 text-amber-300 border border-amber-400/50 shadow-sm"
+                      : "text-muted-foreground hover:text-white hover:bg-white/5"
+                  }`}
+                  title="Modo Rápido: Compone la canción en 1 sola pasada (~5-8 segundos). Ideal para probar modelos rápidamente o evitar límites de cuota (429)."
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="truncate">⚡ Modo Rápido (1 Pasada · ~6s)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPipelineMode("studio");
+                    try { localStorage.setItem("generation_pipeline_mode", "studio"); } catch {}
+                  }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md font-medium transition-all ${
+                    pipelineMode === "studio"
+                      ? "bg-slime/20 text-slime border border-slime/50 shadow-sm"
+                      : "text-muted-foreground hover:text-white hover:bg-white/5"
+                  }`}
+                  title="Modo Estudio: Arquitectura completa de producción en 2 pasadas (Topliner Hook Contract + Master Ghostwriter + Quality Gate)."
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-slime" />
+                  <span className="truncate">🎛️ Modo Estudio (2 Pasadas · ~30s)</span>
+                </button>
+              </div>
+
+              {/* Generation Error Alert Banner */}
+              {generationError && (
+                <div className="p-3.5 rounded-lg border border-red-500/50 bg-red-950/40 text-xs space-y-2 animate-in fade-in slide-in-from-top-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 text-red-400 font-semibold text-xs">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
+                      <span>Incidencia en la Generación</span>
+                    </div>
+                    <button
+                      onClick={() => setGenerationError(null)}
+                      className="text-muted-foreground hover:text-white p-0.5"
+                      title="Cerrar aviso"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <p className="text-red-200/90 font-mono text-[11px] leading-relaxed break-words">
+                    {generationError}
+                  </p>
+                  <div className="pt-1 flex flex-wrap gap-2 text-[10px]">
+                    {generationError.includes("429") && (
+                      <span className="bg-amber-400/10 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded">
+                        💡 Tip: Tu cuota gratuita de Google se renueva cada minuto. Espera 30s o activa el "Modo Rápido".
+                      </span>
+                    )}
+                    {generationError.toLowerCase().includes("timeout") && (
+                      <span className="bg-cyan-400/10 text-cyan-300 border border-cyan-400/30 px-2 py-0.5 rounded">
+                        💡 Tip: Elige el modelo "Gemini 2.0 Flash" o selecciona "Sin Thinking" en el panel lateral.
+                      </span>
+                    )}
+                    {pipelineMode === "studio" && (
+                      <button
+                        onClick={() => {
+                          setPipelineMode("fast");
+                          setGenerationError(null);
+                          setTimeout(() => handleGenerate(false), 100);
+                        }}
+                        className="bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 px-2.5 py-1 rounded font-medium transition-colors flex items-center gap-1"
+                      >
+                        <Zap className="w-3 h-3" /> Reintentar ahora en Modo Rápido (1 Pasada)
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setLogModalOpen(true)}
+                      className="bg-cyan-400/20 hover:bg-cyan-400/30 text-cyan-300 border border-cyan-400/40 px-2.5 py-1 rounded font-medium transition-colors flex items-center gap-1.5"
+                    >
+                      <Terminal className="w-3 h-3 text-cyan-400" /> 🔍 Ver qué pasó tras bambalinas (Inspector de Prompts & API)
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <Button
                   onClick={() => handleGenerate(false)}
@@ -3779,6 +3991,124 @@ export default function TrapGhostPage() {
                   Re-generaciones con corrección: <span className="text-slime font-medium">{regenCount}</span>
                 </p>
               )}
+
+              {/* Monitor Tras Bambalinas (Live Studio Activity Console) */}
+              <div className="rounded-lg border border-border/50 bg-black/40 overflow-hidden text-xs">
+                <div className="p-2.5 bg-muted/20 border-b border-border/40 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                        loading ? "bg-cyan-400" : generationError ? "bg-red-400" : "bg-emerald-400"
+                      }`} />
+                      <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                        loading ? "bg-cyan-500" : generationError ? "bg-red-500" : "bg-emerald-500"
+                      }`} />
+                    </span>
+                    <span className="font-semibold text-foreground flex items-center gap-1.5 text-[11px]">
+                      <Terminal className="w-3.5 h-3.5 text-cyber" /> Monitor Tras Bambalinas
+                    </span>
+                    <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 h-4 border-cyber/30 text-cyber">
+                      {loading ? "Generando..." : liveStudioLogs.length > 0 ? `${liveStudioLogs.length} eventos` : "En espera"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setLogModalOpen(true)}
+                      className="h-6 text-[10px] text-muted-foreground hover:text-cyber px-2 gap-1"
+                      title="Abrir inspector detallado con prompts y modelos"
+                    >
+                      <Terminal className="w-3 h-3 text-cyber" /> Inspector
+                    </Button>
+                    {liveStudioLogs.length > 0 && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const text = liveStudioLogs
+                              .map(l => `[${l.time}] [${l.type.toUpperCase()}] ${l.message}${l.detail ? ` -> ${l.detail}` : ""}`)
+                              .join("\n");
+                            navigator.clipboard.writeText(text);
+                            toast.success("Log copiado al portapapeles");
+                          }}
+                          className="h-6 text-[10px] text-muted-foreground hover:text-slime px-1.5"
+                          title="Copiar log tras bambalinas"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setLiveStudioLogs([])}
+                          className="h-6 text-[10px] text-muted-foreground hover:text-red-400 px-1.5"
+                          title="Limpiar monitor"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setLiveMonitorOpen(!liveMonitorOpen)}
+                      className="p-1 text-muted-foreground hover:text-foreground rounded"
+                      title={liveMonitorOpen ? "Ocultar detalles" : "Mostrar detalles"}
+                    >
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${liveMonitorOpen ? "" : "-rotate-90"}`} />
+                    </button>
+                  </div>
+                </div>
+
+                {liveMonitorOpen && (
+                  <div className="p-2.5 max-h-48 overflow-y-auto font-mono text-[10.5px] space-y-1.5 bg-black/60 custom-scroll">
+                    {liveStudioLogs.length === 0 ? (
+                      <div className="text-muted-foreground/70 text-[10px] py-2 text-center">
+                        Pulsa <span className="text-slime font-semibold">"Generar Letra"</span> para ver en directo cada llamada a Gemini, tiempos y códigos de estado.
+                      </div>
+                    ) : (
+                      liveStudioLogs.map(logItem => (
+                        <div key={logItem.id} className="leading-snug flex items-start gap-1.5">
+                          <span className="text-muted-foreground/60 select-none text-[9px] shrink-0 font-sans mt-0.5">
+                            {logItem.time}
+                          </span>
+                          <span
+                            className={`shrink-0 font-bold text-[9px] px-1 rounded ${
+                              logItem.type === "success"
+                                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                : logItem.type === "warn"
+                                ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                : logItem.type === "error"
+                                ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                                : "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                            }`}
+                          >
+                            {logItem.type === "success" ? "OK" : logItem.type === "warn" ? "WARN" : logItem.type === "error" ? "ERR" : "INFO"}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <span className={
+                              logItem.type === "success"
+                                ? "text-emerald-200"
+                                : logItem.type === "warn"
+                                ? "text-amber-200"
+                                : logItem.type === "error"
+                                ? "text-red-300 font-semibold"
+                                : "text-muted-foreground"
+                            }>
+                              {logItem.message}
+                            </span>
+                            {logItem.detail && (
+                              <p className="text-[9.5px] text-muted-foreground/70 break-words mt-0.5 pl-2 border-l border-border/30">
+                                {logItem.detail}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
             </Card>
 
             {/* --- History Panel (NEW) --- */}
@@ -4257,32 +4587,42 @@ export default function TrapGhostPage() {
               )}
 
               {loading && !lyrics ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-4 animate-fade-slide">
+                <div className="flex flex-col items-center justify-center py-16 gap-5 animate-fade-slide">
                   <div className="relative">
-                    <div className="trap-spinner !w-12 !h-12 !border-cyber" />
-                    <Sparkles className="w-5 h-5 text-cyber absolute inset-0 m-auto animate-pulse" />
+                    <div className="trap-spinner !w-14 !h-14 !border-cyber shadow-lg shadow-cyber/20" />
+                    <Sparkles className="w-6 h-6 text-cyber absolute inset-0 m-auto animate-pulse" />
                   </div>
                   
                   {/* Studio Phase Indicator */}
                   <div className="max-w-md w-full px-4 space-y-3 text-center">
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-foreground">
+                    <Badge variant="outline" className="border-cyber/40 text-cyber text-[10px] uppercase tracking-wider font-mono px-3 py-0.5 bg-cyber/5">
+                      Fase {generationProgress?.step || 1} de 3
+                    </Badge>
+                    <div className="space-y-1.5">
+                      <p className="text-base font-semibold text-foreground tracking-tight">
                         {generationProgress?.title || "Generando en el estudio..."}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground leading-relaxed">
                         {generationProgress?.detail || "Pipeline de composición y análisis AST activo"}
                       </p>
                     </div>
 
-                    {/* Honest Dynamic Studio Pulse */}
-                    <div className="w-full max-w-xs mx-auto pt-2">
-                      <div className="h-1.5 w-full bg-muted/30 rounded-full overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-cyber to-slime rounded-full animate-pulse w-3/4 mx-auto" />
+                    {/* Dynamic Studio Progress Bar */}
+                    <div className="w-full max-w-xs mx-auto pt-3 space-y-1.5">
+                      <div className="h-2 w-full bg-muted/40 rounded-full overflow-hidden p-0.5 border border-border/40">
+                        <div 
+                          className="h-full bg-gradient-to-r from-cyber via-slime to-cyber rounded-full transition-all duration-700 ease-out"
+                          style={{ width: `${generationProgress?.percent || 20}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] text-muted-foreground/70 px-1 font-mono">
+                        <span>ESTUDIO EN VIVO</span>
+                        <span>{generationProgress?.percent || 20}%</span>
                       </div>
                     </div>
 
-                    <p className="text-[10px] text-muted-foreground/60 italic pt-2">
-                      Estudio en vivo: análisis musical y generación en proceso
+                    <p className="text-[10px] text-muted-foreground/60 italic pt-1">
+                      Componiendo estructura y auditando cadencias rítmicas para Suno AI
                     </p>
                   </div>
                 </div>
@@ -4436,6 +4776,50 @@ export default function TrapGhostPage() {
                     )}
                   </div>
                 </ScrollArea>
+              ) : (generationError || (generationLog && !lyrics)) ? (
+                <div className="flex flex-col items-center justify-center py-16 px-4 gap-4 text-center max-w-lg mx-auto">
+                  <div className="w-14 h-14 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400">
+                    <AlertTriangle className="w-7 h-7" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <h3 className="font-display text-base font-semibold text-foreground">
+                      No se pudo entregar la letra en esta llamada
+                    </h3>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      La API de Google Gemini o el pipeline de estudio devolvió un error antes de completar la letra.
+                      Hemos capturado la traza técnica completa tras bambalinas.
+                    </p>
+                  </div>
+                  {generationError && (
+                    <div className="p-3 rounded-md bg-black/50 border border-red-500/30 text-red-300 font-mono text-[11px] text-left w-full break-words">
+                      {generationError}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2 justify-center pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLogModalOpen(true)}
+                      className="border-cyber/50 hover:bg-cyber/10 text-cyber text-xs h-9 gap-1.5"
+                    >
+                      <Terminal className="w-4 h-4" />
+                      🔍 Ver qué pasó tras bambalinas (Inspector de Prompts)
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => {
+                        setPipelineMode("fast");
+                        setGenerationError(null);
+                        setTimeout(() => handleGenerate(false), 100);
+                      }}
+                      className="bg-amber-400 hover:bg-amber-400/90 text-black font-semibold text-xs h-9 gap-1.5"
+                    >
+                      <Zap className="w-4 h-4 fill-black" />
+                      Reintentar en Modo Rápido (1 Pasada)
+                    </Button>
+                  </div>
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
                   <div className="w-16 h-16 rounded-full bg-slime/5 flex items-center justify-center">
@@ -6187,7 +6571,7 @@ export default function TrapGhostPage() {
           <p>TrapGhost v13.0 · API Key Gemini · Beat Types · Voice Assignment · Flow Profiles · Suno Style Prompt · {history.length > 0 ? `${history.length} en historial` : "Sin historial"}</p>
           <p className="flex items-center gap-2">
             <span className="bpm-pulse" />
-            Powered by Z.ai · {regenCount > 0 ? `${regenCount} correcciones aplicadas` : "Sin correcciones aún"}
+            Google Gemini Studio · {regenCount > 0 ? `${regenCount} correcciones aplicadas` : "Sin correcciones aún"}
           </p>
         </div>
       </footer>

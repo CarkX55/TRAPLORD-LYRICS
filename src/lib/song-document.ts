@@ -234,10 +234,19 @@ export function createHookContract(
     occurrenceCount?: number;
   } = {}
 ): HookContract {
-  const lines = approvedTopline
+  const cleanedTopline = stripMetaReasoning(approvedTopline);
+  let lines = cleanedTopline
     .split(/\r?\n/)
     .map(l => l.trim())
-    .filter(l => l.length > 0 && !l.startsWith("["));
+    .filter(l => l.length > 0 && !l.startsWith("[") && !l.startsWith("```") && !isMetaReasoningLine(l));
+
+  // Graceful fallback if overly aggressive filter left zero lines
+  if (lines.length === 0) {
+    lines = approvedTopline
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !l.startsWith("[") && !l.startsWith("```"));
+  }
 
   // 1. Extract performance metadata template per bar before cleaning text
   const performanceTemplate: BarPerformanceMarkup[] = [];

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PRODUCER_TAG_ARCHETYPES, getProducerTagArchetypeById } from "@/lib/trap-data";
+import { getEffectiveApiKey, GEMINI_SAFETY_SETTINGS, extractGeminiText } from "@/lib/gemini-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 45;
@@ -84,46 +85,30 @@ Devuelve EXCLUSIVAMENTE un JSON válido con esta estructura (sin markdown, sin e
 }`;
 
     let result: { tags: GeneratedTag[] };
-
-    if (body.geminiApiKey?.trim()) {
-      const model = body.geminiModel || "gemini-2.0-flash";
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.95, topP: 0.95 },
-          }),
-        }
-      );
-      const geminiJson = await geminiRes.json();
-      if (geminiJson.error) {
-        return NextResponse.json({ error: `Gemini: ${geminiJson.error.message}` }, { status: 400 });
+    const apiKey = getEffectiveApiKey(body.geminiApiKey);
+    const model = body.geminiModel || "gemini-2.0-flash";
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.95, topP: 0.95 },
+          safetySettings: GEMINI_SAFETY_SETTINGS,
+        }),
       }
-      const raw = geminiJson.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-      try {
-        const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-        result = JSON.parse(cleaned);
-      } catch {
-        return NextResponse.json({ tags: [], raw });
-      }
-    } else {
-      const ZAI = (await import("z-ai-web-dev-sdk")).default;
-      const zai = await ZAI.create();
-      const completion = await zai.chat.completions.create({
-        messages: [{ role: "user", content: prompt }],
-        thinking: { type: "disabled" },
-        temperature: 0.95,
-      });
-      const raw = completion.choices[0]?.message?.content ?? "";
-      try {
-        const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-        result = JSON.parse(cleaned);
-      } catch {
-        return NextResponse.json({ tags: [], raw });
-      }
+    );
+    const geminiJson = await geminiRes.json();
+    if (geminiJson.error) {
+      return NextResponse.json({ error: `Gemini: ${geminiJson.error.message}` }, { status: 400 });
+    }
+    const raw = extractGeminiText(geminiJson.candidates?.[0]);
+    try {
+      const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+      result = JSON.parse(cleaned);
+    } catch {
+      return NextResponse.json({ tags: [], raw });
     }
 
     return NextResponse.json(result);

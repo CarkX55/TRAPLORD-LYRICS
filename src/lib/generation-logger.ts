@@ -9,6 +9,19 @@ export interface GenerationStageLog {
   durationMs: number;
   prompt: string;
   rawResponse: string;
+  error?: string;
+}
+
+export interface DiagnosticCallAttempt {
+  timestamp: string;
+  model: string;
+  attempt: number;
+  durationMs: number;
+  status: "success" | "error" | "timeout" | "safety_blocked" | "empty";
+  httpCode?: number;
+  error?: string;
+  finishReason?: string;
+  textSnippet?: string;
 }
 
 export interface LanguageDriftStep {
@@ -77,4 +90,6 @@ export interface GenerationProcessLog {
     slangChecklistScore: number;
     issuesCount: number;
   };
+  error?: string;
+  diagnosticAttempts?: DiagnosticCallAttempt[];
 }

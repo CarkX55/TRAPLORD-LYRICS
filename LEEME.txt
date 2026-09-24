@@ -91,7 +91,7 @@ Cambia el puerto: bun run dev -- -p 3001
 ### La generación no funciona
 - Verifica que tu API Key de Gemini es correcta
 - Comprueba que tienes conexión a internet
-- Si el error dice "location not supported", la app está intentando usar el SDK de Z.ai en vez de tu API Key. Asegúrate de pegar la key y guardarla.
+- Asegúrate de guardar la API Key pulsando el botón 💾 o configurándola en tu archivo .env como GEMINI_API_KEY.
 
 ### Los ad-libs son repetitivos
 La app está diseñada para que el LLM improvise ad-libs contextuales. Si se repiten, prueba con:

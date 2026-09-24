@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { analyzeSunoReadiness, type SunoReadinessResult } from "@/lib/language-detector";
 import { parseRawLyricsToAST, stringifyASTToSunoLyrics, type SongDocument } from "@/lib/song-document";
 import type { RepairOperation } from "@/lib/repair-engine";
+import { getEffectiveApiKey, GEMINI_SAFETY_SETTINGS, extractGeminiText } from "@/lib/gemini-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -107,39 +108,29 @@ DEBES devolver EXCLUSIVAMENTE un JSON válido con esta estructura exacta (sin ma
 }`;
 
     let raw = "";
-
-    if (body.geminiApiKey?.trim()) {
-      const rawModel = body.geminiModel?.trim();
-      const model = (rawModel && !rawModel.includes("2.5")) ? rawModel : "gemini-2.0-flash";
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${body.geminiApiKey.trim()}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.3,
-              topP: 0.9,
-            },
-          }),
-        }
-      );
-      const json = await res.json();
-      if (json.error) {
-        throw new Error(`Gemini: ${json.error.message}`);
+    const apiKey = getEffectiveApiKey(body.geminiApiKey);
+    const rawModel = body.geminiModel?.trim();
+    const model = (rawModel && !rawModel.includes("2.5")) ? rawModel : "gemini-2.0-flash";
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            topP: 0.9,
+          },
+          safetySettings: GEMINI_SAFETY_SETTINGS,
+        }),
       }
-      raw = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    } else {
-      const ZAI = (await import("z-ai-web-dev-sdk")).default;
-      const zai = await ZAI.create();
-      const completion = await zai.chat.completions.create({
-        messages: [{ role: "user", content: prompt }],
-        thinking: { type: "disabled" },
-        temperature: 0.3,
-      });
-      raw = completion.choices[0]?.message?.content ?? "";
+    );
+    const json = await res.json();
+    if (json.error) {
+      throw new Error(`Gemini: ${json.error.message}`);
     }
+    raw = extractGeminiText(json.candidates?.[0]);
 
     if (!raw || !raw.trim()) {
       return NextResponse.json({ error: "El crítico no devolvió contenido." }, { status: 502 });
