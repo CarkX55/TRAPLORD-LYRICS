@@ -74,7 +74,7 @@ const CONFIG = {
   spanglishPercent: 20,
   temperature: 0.72,
   topP: 0.95,
-  defaultModel: "gemini-2.0-flash",
+  defaultModel: "gemini-3.5-flash-lite",
 };
 
 export interface TrackCallTelemetry {

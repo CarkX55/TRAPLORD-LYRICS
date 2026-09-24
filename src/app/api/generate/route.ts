@@ -161,7 +161,7 @@ async function callLLM(
       const attemptStart = Date.now();
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s per attempt
+        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s per attempt
 
         // Build generationConfig with safe thinkingConfig
         const generationConfig: Record<string, unknown> = {
@@ -248,10 +248,10 @@ async function callLLM(
             break;
           }
 
-          // If 503 and attempt 1, wait briefly with backoff
-          if (attempt === 1 && errCode === 503) {
-            await new Promise(r => setTimeout(r, 1200));
-            continue;
+          // If 503 (High Demand / Overloaded), cascade immediately to next model to avoid queue delays
+          if (errCode === 503) {
+            console.warn(`[callLLM] Model ${currentModel} is experiencing high demand (503), cascading immediately to avoid queue delay...`);
+            break;
           }
 
           break;
@@ -335,9 +335,9 @@ async function callLLM(
           error: lastError.message,
         });
 
-        // If timed out, do NOT retry same slow model for another 60s - cascade immediately!
+        // If timed out, do NOT retry same slow model - cascade immediately!
         if (isAbort) {
-          lastError = new Error(`Gemini (${currentModel}) agotó el tiempo de espera (timeout 60s).`);
+          lastError = new Error(`Gemini (${currentModel}) agotó el tiempo de espera (timeout 25s).`);
           break;
         }
 
