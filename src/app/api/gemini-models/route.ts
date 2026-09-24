@@ -25,6 +25,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: data.error.message }, { status: 400 });
     }
 
+    if (data.models && Array.isArray(data.models)) {
+      const modelNames = data.models.map((m: any) => m.name?.replace("models/", ""));
+      console.log(`[gemini-models] Google API returned ${modelNames.length} models:`, modelNames.join(", "));
+    }
+
     // Filter out embeddings, vision-only, tts, audio, and all deprecated 1.x/2.x models that return 404
     const models = (data.models || [])
       .filter((m: { name?: string; supportedGenerationMethods?: string[] }) => {
@@ -55,8 +60,6 @@ export async function POST(req: NextRequest) {
           name = `🚀 ${name} (Rápido y Estable · Alta Capacidad)`;
         } else if (id === "gemini-3.6-flash") {
           name = `🔥 ${name} (Recomendado por Google · Ultrarrápido)`;
-        } else if (id.includes("3.6") && (id.includes("lite") || id.includes("flash-lite"))) {
-          name = `⚡ ${name} (Ultra Rápido y Ligero)`;
         } else if (id.includes("3.7") && id.includes("flash")) {
           name = `✨ ${name} (Generación 3.7)`;
         } else if (id.includes("3.8") && id.includes("flash")) {
@@ -73,9 +76,9 @@ export async function POST(req: NextRequest) {
           "gemini-3.5-flash-lite",
           "gemini-3.5-flash",
           "gemini-3.6-flash",
-          "gemini-3.6-flash-lite",
           "gemini-3.7-flash",
           "gemini-3.8-flash",
+          "gemini-3.6-pro",
         ];
         const aIndex = priorityOrder.indexOf(a.id);
         const bIndex = priorityOrder.indexOf(b.id);

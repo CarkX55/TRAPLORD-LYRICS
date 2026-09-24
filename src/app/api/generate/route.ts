@@ -153,7 +153,10 @@ async function callLLM(
     const currentModel = modelCascade[mIdx];
     const isFallback = mIdx > 0;
     if (isFallback) {
-      console.warn(`[callLLM] Cascading to fallback model: ${currentModel} (after ${modelCascade[mIdx - 1]} failed)`);
+      // Exponential backoff between cascade models to allow Google TPU clusters to clear 503 demand spikes
+      const backoffMs = Math.min(1200 * Math.pow(1.4, mIdx - 1), 3500);
+      console.warn(`[callLLM] Cascading to fallback model: ${currentModel} (pausing ${Math.round(backoffMs)}ms backoff after ${modelCascade[mIdx - 1]} failed)`);
+      await new Promise(r => setTimeout(r, backoffMs));
     }
 
     // Try up to 2 attempts on this candidate model (unless aborted/timed out)
