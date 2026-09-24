@@ -56,9 +56,9 @@ export const HOOK_STRATEGIES: Record<HookStrategyType, HookStrategyDefinition> =
     tagline: "Pregunta o afirmación líder en tiempo 1, réplica cínica o golpe en tiempo 3 y 4.",
     sunoAcousticTag: "Call and response dynamic vocal stack, ping-pong stereo adlibs",
     instructionPrompt: `ESTRATEGIA DE CORO: CALL & RESPONSE DIALÉCTICO
-- Cada compás de la voz líder recibe una contrarréplica inmediata entre paréntesis como si fueran dos personas discutiendo o afirmando con complicidad.
-- Las réplicas deben tener personalidad de calle: *(¿cuándo?)*, *(nunca)*, *(olvídalo)*, *(facts)*, *(dime dónde)*.
-- PROHIBIDO rellenar con (Yeah) o traducciones literales en inglés.`,
+- Cada compás de la voz líder recibe una contrarréplica inmediata entre paréntesis como un diálogo reactivo con actitud.
+- Las réplicas deben responder directamente a lo que dice la barra con intención real de réplica, confirmación o contraataque.
+- PROHIBIDO rellenar con muletillas genéricas repetidas mecánicamente o traducciones literales entre idiomas.`,
   },
   melodic_phrase: {
     id: "melodic_phrase",

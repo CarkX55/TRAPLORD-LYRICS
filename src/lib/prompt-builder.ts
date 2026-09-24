@@ -663,33 +663,28 @@ Los versos NO deben tener un ritmo monótono ni la misma cadencia estática de p
   }
 
 
-  // Ad-libs rules & Textured Ad-libs
+  // Ad-libs orgánicos y dimensionales (Cero Few-Shot Pollution, Cero plantillas)
   let adlibsBlock = "";
-  const adlibsStyle: string[] = [];
-  if (artist?.adlibs && artist.adlibs.length > 0) {
-    adlibsStyle.push(`${artist.name}: ${artist.adlibs.map(a => `(${a})`).join(" ")}`);
-  }
-  if (featureArtist?.adlibs && featureArtist.adlibs.length > 0) {
-    adlibsStyle.push(`${featureArtist.name}: ${featureArtist.adlibs.map(a => `(${a})`).join(" ")}`);
-  }
-
   const adlibMode = params.adlibStyle ?? "textured";
   if (adlibMode === "minimal") {
     adlibsBlock = `\n# 🗣️ AD-LIBS: MODO VOCAL LIMPIA (MINIMAL NATIVE)
 - Mínimos ad-libs en toda la canción (máximo 1 o 2 en todo el verso, solo en los remates más fuertes).
 - Deja la voz principal completamente al frente, cruda, íntima y sin distracciones.`;
   } else if (adlibMode === "textured") {
-    adlibsBlock = `\n# 🗣️ AD-LIBS TRIDIMENSIONALES & TEXTURIZADOS (SUNO NATIVE)
-Los ad-libs NO son solo muletillas aisladas al final de la barra. Distribuye ad-libs con estas 3 funciones dinámicas:
-1. **Armonías y Colas Melódicas de Fondo:** Palabras en eco o frases secundarias cantadas que completan el final de la barra: *(no me busques...)*, *(uh-uh)*, *(sola)*, *(dime dónde)*.
-2. **Puntuación Conversacional & Cínica:** Comentarios entre dientes, susurros o réplicas en voz baja: *(¿quién si no?)*, *(nah)*, *(olvídalo)*, *(dime)*, *(por qué)*.
-3. **Pausas y Textura Vocal:** Inserta silencios rítmicos '[Pause]' antes de una entrada contundente y '[Breath]' para que Suno genere pausas y respiraciones hiperrealistas.
-*REGLA DE ORO:* Los ad-libs firma icónicos (${adlibsStyle.join(", ") || "(Yeah)"}) úsalos de forma selectiva y estratégica (máximo 1 o 2 veces en toda la canción) para que golpeen con verdadero peso y sorpresa, NUNCA en cada compás.`;
+    adlibsBlock = `\n# 🗣️ AD-LIBS ORGÁNICOS & REACTIVOS AL CONTEXTO (SUNO NATIVE)
+Los ad-libs NO son muletillas de plantilla repetidas en cada compás. Distribuye ad-libs con funciones dinámicas reales de estudio:
+1. **Ecos de Remate & Armonías de Fondo:** Repetición o eco de la última palabra o remate de la punchline al final de la barra para darle pegada rítmica.
+2. **Réplicas Conversacionales y Reactivas:** Breves réplicas o comentarios en voz baja que responden directamente a lo que afirma la barra, con la actitud y dialecto natural del artista.
+3. **Pausas y Textura Vocal:** Inserta silencios rítmicos '[Pause]' antes de una entrada contundente y compases limpios donde la barra y el bajo 808 manden con fuerza sin ad-libs de relleno.
+*REGLA DE ORO DE IDENTIDAD:* Los ad-libs deben reflejar la gestualidad vocal nativa del artista en cabina, pero queda TERMINANTEMENTE PROHIBIDO que el rapero diga su propio nombre o apodos en los ad-libs.`;
   } else {
     // classic
-    if (adlibsStyle.length > 0) {
-      adlibsBlock = `\n# 🗣️ AD-LIBS NATIVOS PARA SUNO\nEjemplos icónicos:\n${adlibsStyle.join("\n")}\nREGLAS DE AD-LIBS:\n1. Ad-libs SIEMPRE entre paréntesis: (Yeah!), (Brrr!), (Let's go!). Suno los ubicará automáticamente como pistas de fondo en estéreo.\n2. ESPACIO Y AIRE: Máximo 1 ad-lib cada 2 o 3 barras. Deja que la voz principal respire, no satures cada línea.\n3. CONTEXTO: El ad-lib debe responder al remate de la barra previa.`;
-    }
+    adlibsBlock = `\n# 🗣️ AD-LIBS ORGÁNICOS NATIVOS PARA SUNO
+REGLAS DE AD-LIBS DE ESTUDIO:
+1. Ad-libs SIEMPRE entre paréntesis simples: (...). Suno los ubicará automáticamente como pistas secundarias de fondo en estéreo.
+2. ESPACIO Y AIRE: Máximo 1 ad-lib cada 2 o 3 barras. Deja compases limpios para que la voz principal respire; no satures cada línea.
+3. CONTEXTO REACTIVO: El ad-lib debe responder u homenajear el remate de la barra previa según su significado real en la escena.
+4. CERO NAME-DROPPING: Prohibido decir el propio nombre del artista en los ad-libs.`;
   }
 
   const dirty = getDirtyLevel(params.dirtyLevel ?? 2);
@@ -723,7 +718,7 @@ Esta canción o secciones marcadas con [DENSIDAD SPARSE / BOUNCE] deben ejecutar
 Aplica rigurosamente estas 5 reglas de rebote a cada barra:
 1. **Silencio en el Tiempo 1 (Espacio para el 808):** La voz NO debe entrar en el primer golpe del compás. Deja caer el bombo 808 limpio y entra justo en el contratiempo (el 'off-beat').
 2. **Economía de Palabras Estricta:** Entre **3 y 5 palabras por compás (4 a 6 sílabas)** como MÁXIMO absoluto. Queda TERMINANTEMENTE PROHIBIDO redactar oraciones continuas o discursivas de más de 6 palabras. Menos palabras = más rebote.
-3. **Puntuación Elástica para Suno AI:** Usa comas ',' y puntos suspensivos '...' para forzar al motor de Suno a retrasar la voz con swing (*swung delay*): ej: *"Drop top... (skrrt), dentro del BM (yeah)"*, *"Cash flow... (racks), saben quién viene (facts)"*.
+3. **Puntuación Elástica para Suno AI:** Usa comas ',' y puntos suspensivos '...' para forzar al motor de Suno a retrasar la voz con swing (*swung delay*), dejando caer las palabras con retraso rítmico y silencios elásticos.
 4. **Ad-libs de Contrarritmo (Ping-Pong 3D):** Cada compás debe cerrarse con un ad-lib entre paréntesis en el tiempo 4 que responde a la voz líder. El ad-lib funciona como un instrumento de percusión extra.
 5. **Fonética Cortada en Español:** Evita palabras polisilábicas pesadas (3+ sílabas). Emplea vocabulario seco, monosílabos, anglicismos y jerga percusiva.
 *ADAPTACIÓN AL ARTISTA:* Conserva el 100% de la identidad, jerga y actitud de ${artist?.name ?? "Lead"}, pero empaca sus barras dentro de este rebote de Atlanta.`;
@@ -751,16 +746,16 @@ Los estribillos [Chorus / Hook] NO son versos ni deben contener oraciones narrat
       introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: AD-LIB WARMUP & REBOTE DE ATLANTA
 La sección [Intro] NO debe contener oraciones narrativas completas ni versos hablados largos.
 Sigue esta estructura compás a compás:
-1. **Compás 1 (Producer Chat / Studio Setup):** Interacción espontánea con la cabina o el productor: ej: *(“Turn me up...”)*, *(“Sube los cascos”)*, o el Producer Tag entre comillas si está definido.
-2. **Compás 2 y 3 (Ping-Pong de Ad-libs Afinados):** Ad-libs rítmicos entre paréntesis con comas y puntos suspensivos que flotan sobre el pad antes de la batería: ej: *(Yeah, yeah...)*, *(Woah, woah... skrrt)*, *(Mmm... racks)*, *(Facts)*.
-3. **Compás 4 (Pre-Drop Stutter & Tensión):** Repetición rítmica de fragmentos o monosílabos acelerados y aviso del drop: ej: *(Hold up... hold up... [Beat Drop])* o *(Yeah... yeah... let's get it! [Beat Drop])*.
+1. **Compás 1 (Producer Chat / Studio Setup):** Interacción espontánea con la cabina o el productor (saludo breve o ajuste de retorno), o el Producer Tag entre comillas si está definido.
+2. **Compás 2 y 3 (Ping-Pong de Ad-libs Afinados):** Ad-libs rítmicos reactivos y gestos vocales afinados entre paréntesis con comas y puntos suspensivos que flotan sobre el pad antes de la batería.
+3. **Compás 4 (Pre-Drop Stutter & Tensión):** Repetición rítmica de fragmentos o monosílabos acelerados y aviso del drop, preparando la caída en el [Beat Drop].
 4. **Regla de Oro:** El 80-90% de las líneas deben ser ad-libs entre paréntesis. Menos palabras = más espacio y rebote.`;
     } else if (effectiveIntroStyle === "phone_call") {
       introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: NOTA DE VOZ / JAIL CALL
-La sección [Intro] debe recrear una llamada telefónica o nota de audio cruda (estilo Morad / Anuel AA / Drake):
-1. Comienza con sonido o pitido de llamada entre paréntesis: ej: *(Beep... tono de llamada)* o *(Directo desde el módulo 4)*.
-2. Frases habladas con tono de teléfono, sin métrica forzada ni rimas estructuradas, expresando lealtad, calle o mensaje directo: ej: “Oye hermano, dile a la gente que no se duerma, que la calle está caliente...”.
-3. Cierre abrupto con sonido de colgar o aviso justo antes del drop: ej: *(Click... se corta la llamada)* seguido del [Beat Drop].`;
+La sección [Intro] debe recrear una llamada telefónica o nota de audio cruda:
+1. Comienza con indicación de tono de llamada o pitido de conexión entre paréntesis.
+2. Frases habladas con tono de teléfono, sin métrica forzada ni rimas estructuradas, transmitiendo tensión o mensaje directo de calle.
+3. Cierre abrupto con sonido de corte de llamada seguido del [Beat Drop].`;
     } else if (effectiveIntroStyle === "acappella_drop") {
       introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: ENTRADA A CAPELLA AL DROP
 La sección [Intro] debe ser completamente a capella, con voz seca y sin batería (estilo 21 Savage / Duki / J. Cole):
@@ -769,43 +764,43 @@ La sección [Intro] debe ser completamente a capella, con voz seca y sin baterí
 3. El último verso remata en seco y conecta inmediatamente con el [Beat Drop: Explosive sudden 808 sub bass drop].`;
     } else if (effectiveIntroStyle === "lighter_flick") {
       introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: MECHERO & EXHALACIÓN (LIGHTER FLICK)
-La sección [Intro] recrea el icónico ritual de estudio de Lil Wayne, Travis Scott y Wiz Khalifa:
-1. Compás 1: Sonido de chispa de mechero y calada entre paréntesis: *(Click... shhh... prendiendo)*.
-2. Compás 2: Exhalación profunda de humo, carraspeo o tos relajada: *(Exhala humo... cough... yeah)*.
-3. Compás 3 y 4: Frase casual y reflexiva que rompe el silencio mientras el pad y el bajo se hinchan: ej: *(“Sube el humo, ya no miramos pa' abajo...”)* y caída demoledora en el [Beat Drop].`;
+La sección [Intro] recrea el ritual de estudio con encendedor y humo:
+1. Compás 1: Indicador acústico de chispa de mechero entre paréntesis.
+2. Compás 2: Exhalación profunda de humo o respiración relajada entre paréntesis.
+3. Compás 3 y 4: Frase reflexiva y casual que rompe el silencio mientras el pad y el bajo se hinchan hacia el [Beat Drop].`;
     } else if (effectiveIntroStyle === "movie_skit") {
       introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: SAMPLE CINEMATOGRÁFICO / NOTICIERO
-La sección [Intro] abre como una película de culto o crónica de sucesos (estilo Dark Trap / UK Drill / Modo Diablo):
-1. Sample de diálogo o locución de noticiero entre comillas con efecto de vinilo o sirenas lejanas: ej: “Última hora: las autoridades confirman incidentes en el sector sur...”.
+La sección [Intro] abre como una escena de película o crónica de sucesos:
+1. Locución o diálogo de crónica de sucesos entre comillas con efecto de vinilo o sirenas lejanas.
 2. Tono oscuro, cinematográfico y amenazante que establece la narrativa del track.
 3. Entrada del artista con un murmullo o risa sarcástica antes de que explote el [Beat Drop].`;
     } else if (effectiveIntroStyle === "chopped_screwed") {
       introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: CHOPPED & SCREWED (HOUSTON SLOWED)
-La sección [Intro] recrea la psicodelia y pesadez del sonido Screw de Texas (Travis Scott / A$AP Rocky / Don Toliver):
-1. Voz ralentizada con pitch grave y tartamudeo rítmico: ej: *(S-S-Slowed down... en la nave)*, *(Tr-Tr-TrapLord...)*.
-2. Efecto de cinta frenándose (tape stop fx) y repetición de palabras en eco denso: *(Yeah... yeah... chopped)*.
+La sección [Intro] recrea la psicodelia y pesadez del sonido Chopped & Screwed:
+1. Voz ralentizada con pitch grave y tartamudeo rítmico entre paréntesis.
+2. Efecto de cinta frenándose (tape stop fx) y repetición rítmica de palabras en eco denso.
 3. El ritmo cae pesado y ralentizado en el [Beat Drop].`;
     } else if (effectiveIntroStyle === "producer_tag") {
-      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: PRODUCER TAG & ROLL CALL
-La sección [Intro] arranca con la firma legendaria del productor y la presentación del artista (Metro Boomin / Bizarrap / Murda Beatz):
-1. Tag del productor reververado entre comillas: ej: “If Young Metro don't trust you I'm gon' shoot you”, “Bizarrap!”, o el tag del beatmaker asignado.
-2. Roll call del intérprete reclamando su territorio: ej: *(TrapLord en los controles... let's go!)*.
+      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: PRODUCER TAG & ENTRADA DE ENERGÍA
+La sección [Intro] arranca con la firma del productor y la entrada de presencia del artista:
+1. Tag del productor reverberado entre comillas si está definido, o anuncio seco del beatmaker.
+2. Entrada del intérprete reclamando su territorio con actitud en el micrófono (CERO decir su propio nombre).
 3. Riser de caja/hi-hats que acelera en tensión hasta reventar en el [Beat Drop].`;
     } else if (effectiveIntroStyle === "studio_banter") {
       introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: STUDIO BANTER / CHARLA DE CABINA
-La sección [Intro] debe sentirse como una toma real en el estudio (estilo Future / 21 Savage / Drake):
-1. Frases habladas con naturalidad al micrófono antes de empezar la pista: ej: *(“Diles que prendan el mic”)*, *(“Sube el autotune”)*, *(“Yeah... look”)*.
-2. Respiraciones audibles, comentarios de flex casual y pausas reflexivas mientras suena el bajo o teclado filtrado.
+La sección [Intro] debe sentirse como una toma real en cabina:
+1. Frases habladas con naturalidad al micrófono antes de empezar la pista (ajustes de cascos, encendido de mic o comentarios de actitud).
+2. Respiraciones audibles, flex casual y pausas reflexivas mientras suena el bajo o teclado filtrado.
 3. Cierre seco justo antes de la entrada del ritmo.`;
     } else if (effectiveIntroStyle === "pre_drop_hype") {
-      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: PRE-DROP STUTTER & HYPE (RAGE / CARTI)
-La sección [Intro] debe generar máxima tensión y anticipación para el drop de bajo (estilo Travis / Carti / Rage):
-1. Murmullos repetitivos acelerados con delay o reverb: ej: *(What? What? What?)*, *(Yeah... yeah... yeah...)*.
-2. Gritos lejanos de fondo y conteo o aviso explosivo: ej: *(Hold on... hold on... GO!)* justo antes del [Beat Drop].`;
+      introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: PRE-DROP STUTTER & HYPE
+La sección [Intro] debe generar máxima tensión y anticipación para el drop de bajo:
+1. Murmullos repetitivos acelerados con delay o reverb en crescendo rítmico.
+2. Gritos o shouts lejanos de fondo y aviso explosivo justo antes del [Beat Drop].`;
     } else if (effectiveIntroStyle === "minimal_pad") {
       introBlock = `\n# 🎚️ ARQUITECTURA DE LA INTRO: MINIMALIST PAD & ESPACIO
 La sección [Intro] debe ser casi instrumental:
-1. Máximo 1 o 2 ad-libs dispersos en toda la intro: ej: *(Yeah)* o *(Dímelo...)*.
+1. Máximo 1 o 2 ad-libs o gestos vocales dispersos y sutiles en toda la intro.
 2. Deja respirar por completo el sintetizador o melodía principal sin saturar de voces antes de que entren las baterías.`;
     }
   }
@@ -875,7 +870,7 @@ ${adlibsBlock}
 ${rhymeLevelInstruction}
 ${pocketGuideline}
 - **Excepción Obligatoria de Densidad / Bouncy**: Si una sección indica [DENSIDAD SPARSE / BOUNCE] o la canción activa el [American Trap Bounce], la regla general de 8-10 sílabas queda TOTALMENTE ANULADA para esa sección, debiendo usar estrictamente entre 3 y 5 palabras por compás (4 a 6 sílabas) con elipsis '...' y ad-libs de ping-pong.
-${params.syllableSync ? "- **Sincronización Silábica**: Métrica estricta y simétrica compás a compás.\n" : ""}${params.phoneticAdlibs ? "- **Ad-libs Fonéticos**: Usa ad-libs fonéticos percusivos (brrr, skrrt, prr, woo, fah).\n" : ""}- **Puntuación Rítmica**: Utiliza comas ',' y puntos suspensivos '...' para marcar los silencios y respiraciones del cantante.
+${params.syllableSync ? "- **Sincronización Silábica**: Métrica estricta y simétrica compás a compás.\n" : ""}${params.phoneticAdlibs ? "- **Ad-libs Fonéticos**: Usa gestos y ad-libs fonéticos percusivos propios del estilo del artista para marcar el ritmo.\n" : ""}- **Puntuación Rítmica**: Utiliza comas ',' y puntos suspensivos '...' para marcar los silencios y respiraciones del cantante.
 - **Rimas Orgánicas**: ${customScheme ? `Sigue rigurosamente el esquema ${customScheme.pattern} (${customScheme.label}).` : "Rimas AABB o ABAB fluidas."}
 - **Dinámica Acústica Suno v4.5**: Puedes intercalar etiquetas acústicas como '[Vocal Cut]' en la barra de remate antes del estribillo, '[Beat Drop: Sub bass drop]' o '[Layered Chorus: stereo autotune harmonies]' para abrir coros en estéreo.
 - **Prohibido**: JAMÁS menciones el nombre real o apodo de ningún artista en la letra cantada ni en los ad-libs. El reconocimiento debe ser 100% por el flow, la métrica y la actitud rítmica.
@@ -892,7 +887,7 @@ ${params.syllableSync ? "- **Sincronización Silábica**: Métrica estricta y si
 5. **NO REPETICIÓN ENTRE ESTROFAS (MEMORIA NEGATIVA):** Si usas una metáfora, elemento mecánico o prenda en el Verso 1, queda TERMINANTEMENTE PROHIBIDO repetirla en el Verso 2. Varía el vocabulario, las acciones y las imágenes en cada sección.
 
 # 🚫 PROHIBICIÓN RADICAL DEL CORO DE TRADUCCIÓN (ANTI-CORO ESCOLAR):
-Queda TERMINANTEMENTE PROHIBIDO escribir compases de estribillo con el patrón "[Frase en español]... [(traducción literal en inglés)]" (ej: "Fumo loud... (loud), veo el futuro... (clear)"). Un estribillo es un objeto acústico y musical pegadizo, no una clase de idiomas. Los ad-libs deben aportar contratiempo rítmico, ecos melódicos o réplicas dialécticas con actitud *(¿cuándo?)*, *(facts)*, *(olvídalo)*, NUNCA la traducción de la palabra cantada.
+Queda TERMINANTEMENTE PROHIBIDO escribir compases de estribillo con el patrón "[Frase en español]... [(traducción literal en inglés)]" (ej: decir una palabra y colocar su traducción literal entre paréntesis). Un estribillo es un objeto acústico y musical pegadizo, no una clase de idiomas. Los ad-libs deben aportar contratiempo rítmico, ecos melódicos de impacto o réplicas dialécticas con actitud según lo que diga la barra, NUNCA la traducción de la palabra cantada.
 
 # 🚫 LISTA NEGRA DE CLICHÉS & FRASES PROHIBIDAS (ANTI-TROPES FILTER)
 Queda ESTRICTAMENTE PROHIBIDO usar las siguientes frases hechas, rimas baratas y fórmulas artificiales que delatan texto generado por IA. Sustitúyelas por imágenes callejeras concretas, marcas, acciones reales y jerga contemporánea:
@@ -924,7 +919,7 @@ ${structurePlan}
 # 📋 FORMATO DE SALIDA ESTRICTO (SUNO AI NATIVE)
 1. Encabezados de sección EXCLUSIVAMENTE entre corchetes estándar con guía vocal de timbre para Suno: [Intro: Artist - vocal descriptors], [Verse 1: Artist - vocal descriptors], [Chorus: Artist - vocal descriptors], [Pre-Chorus], [Post-Chorus], [Bridge], [Interlude], [Beat Drop], [Outro].
 2. NUNCA uses encabezados markdown '###' ni escribas líneas separadas como '*Intérprete:*' porque Suno intentará cantarlas.
-3. Ad-libs secundarios SIEMPRE entre paréntesis: (Yeah!), (Brrr!).
+3. Ad-libs secundarios SIEMPRE entre paréntesis simples: (...).
 4. ⚡ REGLA ESTRICTA DE BARRAS / COMPASES: Una barra cantada equivale EXACTAMENTE a una línea de texto. Si la sección especifica 'N barras' (ej: 8 barras, 16 barras, 4 barras), DEBES generar EXACTAMENTE ese número de líneas cantadas para esa sección. No omitas compases ni agregues líneas de más.
 5. ${params.regenerateSection ? `⚡ RESPUESTA EXCLUSIVA: Tu respuesta debe contener ÚNICAMENTE la sección [${params.regenerateSection.sectionName}] regenerada, sin ninguna otra parte de la canción.` : "Tu respuesta debe contener ÚNICAMENTE la letra de la canción. Sin introducciones, notas de producción ni texto extra fuera de los corchetes."}`;
 
@@ -1338,7 +1333,7 @@ ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 - Objetivo: Diseña EXACTAMENTE UN ÚNICO bloque [Chorus: ${hookVoice}] de ${targetBars} compases.
 - Cardinalidad canónica: EXACTAMENTE ${targetBars} compases / líneas de texto cantado.${kw ? ` · Palabra/Frase clave obligatoria: "${kw}"` : ""}
 - 🚫 PROHIBIDO generar repeticiones del estribillo (Chorus 2, Chorus 3, etc.) ni duplicar el bloque de texto. El motor de estudio se encargará de instanciarlo a lo largo de la canción.
-- 🚫 PROHIBIDO usar asteriscos * o ** ni formato Markdown en los ad-libs. Usa ÚNICAMENTE paréntesis planos normales: (Yeah), (Facts), (Uh).
+- 🚫 PROHIBIDO usar asteriscos * o ** ni formato Markdown en los ad-libs. Usa ÚNICAMENTE paréntesis planos normales: (...).
 
 # 🎯 DIRECTIVA DE UNICIDAD DE CENTRO SEMÁNTICO DOMINANTE:
 - El Hook/Chorus debe articular EXCLUSIVAMENTE UNA SOLA idea, imagen o tensión nuclear con gancho melódico y rítmico contundente.
@@ -1368,11 +1363,12 @@ ${goldExamples.map(g => `- **${g.technique}**: ${g.description}`).join("\n")}
    - Queda prohibido sonar a folleto publicitario vacío o enunciar marcas sin groove ni justificación física en la escena.
    - 🚫 REGLA DE ORO DE IDENTIDAD: La ÚNICA restricción absoluta es NO nombrar al artista por su nombre propio ("soy X", "aquí Y"). El artista se identifica 100% por su FLOW, CADENCIA, MÉTRICA, AD-LIBS Y TIMBRE.
    - Higiene de Metadatos: Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la bio del artista (ej: 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
-3. **AD-LIBS Y COMENTARIOS REACTIVOS DE ESCENA:**
-   - Cada compás debe tener fuerza propia dentro del groove.
-   - Alterna ad-libs universales en contratiempo: (Yeah), (Facts), (Uh), (Hold up), (Never), (No cap), con comentarios reactivos breves en voz baja que confirman la escena: (Tranquilo), (Hielo), (Pocos), (Pagao), (Mío).
-   - Máximo 1-2 compases seguidos con ad-lib para que la melodía central y el bajo 808 respiren con fuerza.
-   - Queda PROHIBIDO incluir traducciones literales entre idiomas entre paréntesis o saturar con muletillas repetitivas.
+3. **AD-LIBS CONTEXTUALES Y REACTIVOS (CERO PLANTILLAS):**
+   - No uses listas fijas de ad-libs. El artista debe reaccionar de forma orgánica a lo que dice cada compás (eco de la última palabra, confirmación de la escena o gesto vocal nativo de su estilo).
+   - Alterna compases limpios (sin ad-lib) con compases donde el ad-lib entre en el hueco del ritmo para darle pegada y dinamismo.
+   - Queda PROHIBIDO saturar cada compás con ad-libs mecánicos o muletillas repetitivas. Deja que la voz principal y el bajo respiren.
+   - Queda PROHIBIDO incluir traducciones literales entre idiomas dentro de los paréntesis.
+   - 🚫 CERO NAME-DROPPING: El artista jamás debe decir su propio nombre en los ad-libs.
 4. **FLOW CARACTERÍSTICO DEL ARTISTA (SIN NAME-DROPPING NI BIOGRAFÍA PERSONAL):**
    - El rapeo y la melodía del gancho DEBEN capturar de forma inconfundible el flow, la métrica, la cadencia y el bolsillo rítmico de ${hookArtist?.name ?? "el artista"} (${hookFlowProfile?.cadence?.toUpperCase() ?? "STACCATO"}) para que al interpretarse en Suno suene con su pegada y estilo característicos.
    - 🚫 REGLA DE ORO DE PRIVACIDAD & HIGIENE: Queda TERMINANTEMENTE PROHIBIDO mencionar el nombre del artista ("soy ${hookArtist?.name ?? "X"}", "aquí ${hookArtist?.name ?? "X"}") ni de otros artistas reales en la letra cantada o ad-libs. Tampoco calques anécdotas autobiográficas íntimas, familiares fallecidos ni nombres de bandas callejeras reales de su infancia. El parecido debe ser 100% por el FLOW, la MÉTRICA y la ACTITUD MUSICAL.
@@ -1388,8 +1384,8 @@ ${flowSkeletonSummary ? `\n# 📐 GUÍA DE RITMO Y CADENCIA GLOBAL (BEAT-FIRST):
 Devuelve EXCLUSIVAMENTE UN ÚNICO bloque [Chorus: ${hookVoice}] de exactamente ${targetBars} compases limpios (SOLO el nombre de la sección y del artista, SIN notas de estilo ni acústica dentro del corchete).
 Está TERMINANTEMENTE PROHIBIDO incluir introducciones, conclusiones, explicaciones de cambios o frases como "Letra ajustada:", "Se ha resuelto el problema" o "He modificado...". Comienza directamente en el corchete:
 [Chorus: ${hookVoice}]
-Línea 1 (Ad-lib)
-Línea 2 (Ad-lib)
+Línea 1
+Línea 2 (ad-lib reactivo opcional)
 ... hasta ${targetBars} líneas en total
 
 NO escribas notas de producción, repeticiones ni explicaciones fuera de los corchetes.`;
@@ -1541,7 +1537,7 @@ export function buildStage2GhostwriterPrompt(
     }
 
     if (isHype || (isIntro && isHype)) {
-      return `[${s.name}: ${guide.fullHeaderTag}] — 4 compases (Modo Hype Man: 🚫 PROHIBIDO ESCRIBIR VERSOS NARRATIVOS O LÍNEAS CANTADAS. Debe ser EXCLUSIVAMENTE 3 a 5 ad-libs y grunts entre paréntesis: ej: (Yeah... turn me up), (Hold up...), rematando con ([Beat Drop]))`;
+      return `[${s.name}: ${guide.fullHeaderTag}] — 4 compases (Modo Hype Man: 🚫 PROHIBIDO ESCRIBIR VERSOS NARRATIVOS O LÍNEAS CANTADAS. Debe ser EXCLUSIVAMENTE 3 a 5 ad-libs y grunts de calentamiento entre paréntesis preparando la entrada del ritmo, rematando con ([Beat Drop]))`;
     }
 
     return `[${s.name}: ${guide.fullHeaderTag}] — ${barDirective}${densityDirective}${repDirective} [VOZ: ${guide.artistName} | FLOW: ${sectionFlow?.cadence?.toUpperCase() ?? "STACCATO"} (${sectionFlow?.speedLabel ?? "natural"}) | RIMA: ${sectionRhyme?.label ?? "AABB"} (${sectionRhyme?.description ?? ""})]`;
@@ -1624,7 +1620,7 @@ ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 ${currentMood.id === "agresivo" || currentMood.id === "oscuro" || currentMood.id === "menacing"
   ? "   - Actitud Staccato Amenazante & Punchlines Cortantes: Compases secos de alta tensión, ataques rápidos con silencios cortados, ad-libs agresivos en contratiempo y barras de confrontación directa."
   : currentMood.id === "flex" || currentMood.id === "fiesta" || currentMood.id === "confident"
-  ? "   - Bounce Elástico & Swagger Arrogante: Ritmo saltarín y bailable, barras de lujo y victoria con cadencia relajada pero dominante, rimas pegadizas de club y ad-libs de celebración tipo (Yeah), (Facts)."
+  ? "   - Bounce Elástico & Swagger Arrogante: Ritmo saltarín y bailable, barras de lujo y victoria con cadencia relajada pero dominante, rimas pegadizas de club y ad-libs de celebración con actitud arrogante."
   : currentMood.id === "melancolico" || currentMood.id === "romantico" || currentMood.id === "nostalgic" || currentMood.id === "dreamy"
   ? "   - Fraseo Melódico Arrastrado & Emoción Vulnerable: Entrega vocal con autotune etéreo/melódico, líneas que se alargan en el compás con '...', rimas asonantes envolventes y referencias emocionales profundas sin sonar infantil."
   : "   - Realismo Testimonial Crudo & Reflexivo: Narrativa grounded en vivencias reales, detalles físicos del asfalto/bloque, ritmo metódico y sobrio, rimas asonantes densas y cero caricatura."}
@@ -1647,7 +1643,7 @@ ${structurePlan}
 Cada sección DEBE ser interpretada estrictamente por la voz indicada en el encabezado (ej: si la sección indica [Verse 2: ${artist?.name ?? "Lead"}], DEBE ser interpretada por ${artist?.name ?? "Lead"}, NO por el artista invitado). Queda TERMINANTEMENTE PROHIBIDO alterar la voz asignada de una sección a menos que el encabezado indique explícitamente el nombre del artista invitado.
 
 ⚠️ REGLA CRÍTICA DE INTRO / HYPE MAN:
-Si la [Intro] está en modo Hype Man o tiene asignado 'Hype', queda TERMINANTEMENTE PROHIBIDO escribir oraciones completas o versos narrativos cantados. La intro debe consistir EXCLUSIVAMENTE en 3 a 5 grunts, shouts y ad-libs de calentamiento entre paréntesis: (Yeah... turn me up), (Hold up...), rematando con ([Beat Drop]).
+Si la [Intro] está en modo Hype Man o tiene asignado 'Hype', queda TERMINANTEMENTE PROHIBIDO escribir oraciones completas o versos narrativos cantados. La intro debe consistir EXCLUSIVAMENTE en 3 a 5 grunts, shouts y ad-libs de calentamiento entre paréntesis preparando la caída del beat, rematando con ([Beat Drop]).
 
 ================================================================================
 # 📜 CONTRATO 3: FLOW & MOTOR RÍTMICO (FLOW & RHYTHM CONTRACT)
@@ -1688,15 +1684,17 @@ En cada verso, ejecuta una progresión dinámica para evitar monotonía:
 # 📜 CONTRATO 4: CAPA VOCAL, PERFORMANCE & AD-LIBS MASTER (VOCAL CONTRACT)
 ================================================================================
 Como Director Vocal, incorpora la capa de performance con criterio musical:
-1. **Ad-libs con Personalidad & Comentarios Reactivos de Escena:**
-   - Alterna ad-libs clásicos de ritmo y energía (Brrr, Yeah, Uh, Skrrt) con COMENTARIOS REACTIVOS DE UNA O DOS PALABRAS en voz baja que afirman y dan peso dramático a la barra: (Tranquilo), (Hielo), (Pocos), (Pagao), (Huele bien), (Mío), (Seguro), (Págaselo), (Fajas), (No cap).
-   - Regla 2x2 de Respiración: En versos de 8 a 16 barras, alterna compases limpios (2 compases seguidos donde la voz principal y el bajo 808 mandan sin ad-libs de distracción) con compases que llevan ad-libs puntuales en los huecos o contratiempos.
+1. **Ad-libs Orgánicos y Reactivos al Contenido (Sin Listas ni Plantillas):**
+   - Los ad-libs NO son palabras de plantilla repetitivas. Deben nacer orgánicamente de la actitud del artista y de lo que dice cada compás:
+     * Ecos de impacto: Repetir o subrayar la última palabra o remate de la barra.
+     * Réplicas reactivas: Breves respuestas en voz baja que confirman o contraatacan la barra según la escena.
+     * Gestualidad vocal propia del artista: Inflexiones, respiraciones o quejidos viscerales característicos de su estilo.
+   - Regla de Respiración (Compases Limpios): Deja barras limpias (sin ad-lib alguno) para que la voz principal, el fraseo y el bajo 808 manden con contundencia. Prohibido poner ad-libs en todas las barras.
    - LÍMITE DE CONSECUTIVIDAD: Máximo 2 compases seguidos con ad-lib (maxConsecutiveAdlibBars = 2).
-   - Deja compases limpios para que la voz principal y el beat respiren con fuerza.
    - Presupuesto por sección: En Versos: moderado (~40-50% de las barras con ad-lib); en Coros: bajo/moderado; en Outro: sutil/sparse.
-   - PROHIBIDO muletillas infantiles o sonidos caricaturescos repetidos en bucle.
+   - 🚫 CERO NAME-DROPPING: Queda TERMINANTEMENTE PROHIBIDO que el artista diga su propio nombre o apodos en los ad-libs.
 2. **Call & Response Dialéctico:**
-   ${callResponseSections.length > 0 ? `- En las secciones ${callResponseSections.join(", ")}, las líneas líderes deben recibir réplicas dialécticas directas en contratiempo: Voz: "Hablan de lealtad pero no los vi..." ➔ Ad-lib: *(nunca)*.` : "- Si hay diálogos o respuestas, hazlos dialécticos con personalidad."}
+   ${callResponseSections.length > 0 ? `- En las secciones ${callResponseSections.join(", ")}, las líneas líderes deben recibir réplicas dialécticas directas en contratiempo que respondan a la frase líder con actitud de réplica inmediata.` : "- Si hay diálogos o respuestas, hazlos dialécticos con personalidad y reacción real a la barra."}
 3. **Dinámica Acústica Suno AI:**
    - En la barra final de cada verso antes de entrar al estribillo, puedes insertar '[Vocal Cut]' al final de la línea para generar anticipación explosiva.
    - En la intro preparando el beat, remata con '[Beat Drop]'.
@@ -1754,18 +1752,16 @@ ${callResponseSections.length > 0 ? `- Secciones con Call & Response obligatorio
 # 🛠️ TAREAS DEL DIRECTOR VOCAL:
 
 1. **PRODUCCIÓN DE CALL & RESPONSE DIALÉCTICO (EN SECCIONES ASIGNADAS):**
-   - En las secciones marcadas como Call & Response (${callResponseSections.join(", ") || "las indicadas"}), CADA compás líder DEBE recibir una respuesta o réplica dialéctica entre paréntesis en contratiempo:
-     *Réplicas cínicas:* Voz: "Dicen que me van a frenar..." ➔ Ad-lib: *(¿cuándo?)*
-     *Contraataques de calle:* Voz: "Hablan de lealtad pero no los vi..." ➔ Ad-lib: *(nunca)*
-     *Echo Punchlines:* Voz: "Treinta mil en la sudadera Rick..." ➔ Ad-lib: *(Rick Owens)*
-     *Descartes:* Voz: "Piden favores como si fuera su hermano..." ➔ Ad-lib: *(olvídalo)*
-   - PROHIBIDO rellenar el Call & Response con muletillas repetitivas como (Yeah!) en cada compás. Debe ser un diálogo con personalidad.
+   - En las secciones marcadas como Call & Response (${callResponseSections.join(", ") || "las indicadas"}), cada compás líder debe recibir una respuesta dialéctica entre paréntesis en contratiempo que reaccione directamente a la frase o situación dicha.
+   - PROHIBIDO rellenar el Call & Response con muletillas repetitivas o ad-libs genéricos mecánicos. Debe ser un diálogo vivo con actitud y réplica real según la escena.
 
-2. **PULIDO DE AD-LIBS TRIDIMENSIONALES (ANTI-MULETILLAS):**
-   - Reemplaza los ad-libs genéricos muertos por 3 funciones acústicas:
-     a) Colas melódicas en eco: *(no me busques...)*, *(uh-uh)*, *(sola)*.
-     b) Comentarios cínicos entre dientes: *(¿quién si no?)*, *(facts)*, *(dime)*.
-     c) Silencios rítmicos: Inserta '[Pause]' antes de caídas de beat o de barras de impacto pesado.
+2. **PULIDO DE AD-LIBS REACTIVOS & LIMPIEZA DE COMPASES (ANTI-MULETILLAS):**
+   - Elimina ad-libs de plantilla que se repitan compás tras compás como un metrónomo.
+   - Asegura que los ad-libs cumplan funciones sonoras auténticas:
+     a) Ecos de remate: duplicación o énfasis de la palabra final o punchline de la barra.
+     b) Réplica reactiva contextual: comentario o reacción genuina a lo que acaba de afirmar la barra.
+     c) Silencios rítmicos: preserva compases limpios sin ad-libs para que el bajo 808 y la voz principal respiren con fuerza. Inserta '[Pause]' antes de caídas de beat si la barra lo pide.
+   - 🚫 CERO NAME-DROPPING: Elimina cualquier mención al nombre o apodo propio del artista en los ad-libs.
 
 3. **CORTES Y DINÁMICA ACÚSTICA SUNO AI v4.5:**
    - En la barra final de cada verso antes de entrar al estribillo, inserta '[Vocal Cut]' al final de la línea para generar anticipación explosiva.
