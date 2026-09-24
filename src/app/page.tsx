@@ -652,21 +652,17 @@ export default function TrapGhostPage() {
     if (isFastMode) {
       timer1 = setTimeout(() => {
         setGenerationProgress(progressSteps[1]);
-        addLiveLog("info", "🔬 Paso 2: Formateando corchetes Suno y auditando AST...");
       }, 3500);
     } else {
       timer1 = setTimeout(() => {
         setGenerationProgress(progressSteps[1]);
-        addLiveLog("info", "✍️ Fase 2: Master Ghostwriter escribiendo versos...");
-      }, 6000);
+      }, 8000);
       timer2 = setTimeout(() => {
         setGenerationProgress(progressSteps[2]);
-        addLiveLog("info", "🔬 Fase 3: Calibración y Quality Gate AST...");
-      }, 19000);
+      }, 25000);
       timer3 = setTimeout(() => {
         setGenerationProgress(progressSteps[3]);
-        addLiveLog("info", "⚡ Masterización final y empaquetado de versión...");
-      }, 32000);
+      }, 45000);
     }
 
     const configPayload = {

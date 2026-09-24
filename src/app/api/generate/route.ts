@@ -164,7 +164,7 @@ async function callLLM(
       const attemptStart = Date.now();
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s per attempt
+        const timeoutId = setTimeout(() => controller.abort(), 65000); // 65s per attempt for complex 10k+ char prompts
 
         // Build generationConfig with safe thinkingConfig
         const generationConfig: Record<string, unknown> = {
@@ -340,7 +340,7 @@ async function callLLM(
 
         // If timed out, do NOT retry same slow model - cascade immediately!
         if (isAbort) {
-          lastError = new Error(`Gemini (${currentModel}) agotó el tiempo de espera (timeout 25s).`);
+          lastError = new Error(`Gemini (${currentModel}) agotó el tiempo de espera (timeout 65s).`);
           break;
         }
 
