@@ -1,10 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildSystemPrompt, buildSpanglishInstruction, buildSunoStyleResult, type LockedSection, type RegenerateSectionParams, type SectionVoiceAssignment } from "@/lib/prompt-builder";
-import { MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, BEAT_TYPES, generateBeatPrompt, getArtistById, type SongSection, type SongStructure } from "@/lib/trap-data";
+import {
+  buildSystemPrompt,
+  buildStage1ToplinePrompt,
+  buildStage2GhostwriterPrompt,
+  buildSpanglishInstruction,
+  buildSunoStyleResult,
+  type LockedSection,
+  type RegenerateSectionParams,
+  type SectionVoiceAssignment,
+} from "@/lib/prompt-builder";
+import {
+  MOODS,
+  TOPICS,
+  BPM_VIBES,
+  STRUCTURES,
+  NARRATIVE_ARCS,
+  BEAT_TYPES,
+  generateBeatPrompt,
+  getArtistById,
+  type SongSection,
+  type SongStructure,
+} from "@/lib/trap-data";
 import { analyzeLanguageRatio, buildCorrectionInstruction } from "@/lib/language-detector";
 import { getArtistReference } from "@/lib/artist-references";
 import { generateArtistReference } from "@/lib/reference-generator";
 import { analyzeReferenceTrack } from "@/lib/track-analyzer";
+import { getFlowProfile } from "@/lib/artist-flow-profiles";
+import { getMusicalDNAForArtist } from "@/lib/musical-dna";
+import {
+  generatePerformanceArc,
+  generateFlowSkeleton,
+  formatFlowSkeletonForPrompt,
+  generatePlannedVerseIntents,
+  generateAllWritingCells,
+  formatWritingCellsForPrompt,
+} from "@/lib/composition-planner";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // increased for on-the-fly reference generation + track analysis
@@ -121,7 +151,7 @@ export async function POST(req: NextRequest) {
         : Promise.resolve(null),
     ]);
 
-    const prompt = buildSystemPrompt({
+    const promptParams = {
       artistId: body.artistId,
       featureArtistId: body.featureArtistId ?? "",
       moodId,
@@ -163,7 +193,26 @@ export async function POST(req: NextRequest) {
       adlibStyle: body.adlibStyle,
       situationalPresetId: body.situationalPresetId,
       flowPocketMode: body.flowPocketMode,
-    });
+    };
+
+    const prompt = buildSystemPrompt(promptParams);
+
+    let stage1Prompt: string | undefined;
+    let stage2Prompt: string | undefined;
+    try {
+      const flowProfile = getFlowProfile(body.artistId) || undefined;
+      const mainDNA = getMusicalDNAForArtist(body.artistId);
+      const performanceArc = generatePerformanceArc(structure, body.moodId, mainDNA);
+      const flowSkeleton = generateFlowSkeleton(performanceArc, mainDNA, flowProfile, structure, body.flowPocketMode);
+      stage1Prompt = buildStage1ToplinePrompt(promptParams, flowSkeleton.globalIntentionSummary, true);
+
+      const writingCells = generateAllWritingCells(structure, generatePlannedVerseIntents(structure, body.moodId, mainDNA, flowProfile));
+      const writingCellsSnippet = formatWritingCellsForPrompt(writingCells);
+      const flowSkeletonSnippet = formatFlowSkeletonForPrompt(flowSkeleton, "verse_1");
+      stage2Prompt = buildStage2GhostwriterPrompt(promptParams, "[Estribillo canónico predeterminado en Fase 1]", writingCellsSnippet, flowSkeletonSnippet);
+    } catch (e) {
+      console.warn("[build-prompt] could not build 2-pass prompts:", e);
+    }
 
     const spanglishInfo = buildSpanglishInstruction(body.spanglishPercent);
     const beatPrompt = generateBeatPrompt(body.artistId, body.moodId, body.bpmVibeId, body.producerId ?? "none");
@@ -180,6 +229,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       prompt,
+      stage1Prompt,
+      stage2Prompt,
       spanglishLabel: spanglishInfo.label,
       beatPrompt,
       sunoStylePrompt: sunoStyleResult.prompt,

@@ -25,7 +25,7 @@ import {
   MessageSquare, Award, AlertCircle, Lightbulb, AudioLines, Music2,
   Image, Star, Quote, Instagram, Twitter, Video, ListMusic, Radio, Key,
   Plus, ArrowUp, ArrowDown, X, Layers, Volume2, VolumeX, FileSpreadsheet, Terminal,
-  AlertTriangle, SlidersHorizontal
+  AlertTriangle, SlidersHorizontal, Eye
 } from "lucide-react";
 import {
   ARTISTS_DATA, MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, PRODUCERS, RHYME_SCHEMES,
@@ -79,6 +79,7 @@ import {
 
 import type { GenerationProcessLog } from "@/lib/generation-logger";
 import { GenerationLogModal } from "@/components/generation-log-modal";
+import { PreflightPromptModal, type PreflightPromptData } from "@/components/preflight-prompt-modal";
 
 import type { AnalysisSnapshot } from "@/lib/quality-gate";
 import { GEMINI_DEFAULT_MODEL, normalizeGeminiModel } from "@/lib/gemini-config";
@@ -336,6 +337,12 @@ export default function TrapGhostPage() {
   const [hookVariations, setHookVariations] = useState<HookVariationOption[]>([]);
   const [isPlayingFlow, setIsPlayingFlow] = useState<boolean>(false);
 
+  // Preflight Prompt Inspection Modal
+  const [preflightModalOpen, setPreflightModalOpen] = useState<boolean>(false);
+  const [preflightLoading, setPreflightLoading] = useState<boolean>(false);
+  const [preflightData, setPreflightData] = useState<PreflightPromptData | null>(null);
+  const [alwaysShowPreflight, setAlwaysShowPreflight] = useState<boolean>(false);
+
   // Output state
   const [lyrics, setLyrics] = useState<string>("");
   const [songDocument, setSongDocument] = useState<SongDocument | null>(null);
@@ -430,6 +437,8 @@ export default function TrapGhostPage() {
       if (storedPipelineMode === "fast" || storedPipelineMode === "studio") {
         setPipelineMode(storedPipelineMode);
       }
+      const storedPreflight = localStorage.getItem("always_show_preflight");
+      if (storedPreflight === "true") setAlwaysShowPreflight(true);
     } catch {}
   }, []);
 
@@ -607,6 +616,98 @@ export default function TrapGhostPage() {
   const toggleTopic = useCallback((id: string) => {
     setSelectedTopics(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
   }, []);
+
+  // ===== Fetch Preflight Prompt (preview before generate) =====
+  const fetchPreflightPrompt = useCallback(async () => {
+    setPreflightLoading(true);
+    try {
+      const configPayload = {
+        artistId,
+        featureArtistId: featureArtistId === "none" ? "" : featureArtistId,
+        moodId,
+        dirtyLevel,
+        topics: selectedTopics,
+        customTopic,
+        spanglishPercent,
+        spanishFlavor,
+        bpmVibeId,
+        beatTypeId,
+        structureId,
+        customSections: isCustomStructure ? customSections : undefined,
+        narrativeArcId,
+        producerId,
+        producerTag,
+        producerName,
+        customDictionary,
+        dynamicMarkers,
+        featureSimId: featureSimId === "none" ? undefined : featureSimId,
+        customIntro,
+        collabInteraction,
+        altVoiceAsterisks,
+        syllableSync,
+        phoneticAdlibs,
+        smartBarsMode,
+        sunoTagsMode,
+        sectionVoices,
+        chorusLanguageOverride: chorusLangOverride,
+        versesLanguageOverride: versesLangOverride,
+        barCountOverride,
+        temperature,
+        rhymeSchemeId,
+        dynamicSongForm,
+        dynamismMode,
+        adlibStyle,
+        situationalPresetId,
+        flowPocketMode,
+        geminiApiKey: geminiApiKey.trim() || undefined,
+        geminiModel,
+        referenceTrackLyrics: refTrackLyrics.trim() || undefined,
+      };
+
+      const res = await fetch("/api/build-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(configPayload),
+      });
+
+      const data = await res.json();
+      if (data.error) {
+        toast.error(`Error compilando prompt: ${data.error}`);
+        return;
+      }
+
+      const bpmVibe = BPM_VIBES.find(b => b.id === bpmVibeId);
+      setPreflightData({
+        stage1Prompt: data.stage1Prompt,
+        stage2Prompt: data.stage2Prompt,
+        unifiedPrompt: data.prompt,
+        beatPrompt: data.beatPrompt,
+        sunoStylePrompt: data.sunoStylePrompt,
+        sunoLayers: data.sunoLayers,
+        artistName: artist?.name ?? artistId,
+        featureArtistName: featureArtist?.name,
+        modelName: geminiModel,
+        pipelineMode,
+        spanglishPercent,
+        bpmInfo: bpmVibe ? `${bpmVibe.range} BPM (${bpmVibe.label})` : bpmVibeId,
+        temperature,
+      });
+    } catch {
+      toast.error("Error al preparar la inspección de prompt");
+    } finally {
+      setPreflightLoading(false);
+    }
+  }, [
+    artistId, featureArtistId, moodId, dirtyLevel, selectedTopics, customTopic,
+    spanglishPercent, spanishFlavor, bpmVibeId, beatTypeId, structureId,
+    isCustomStructure, customSections, narrativeArcId, producerId, producerTag,
+    producerName, customDictionary, dynamicMarkers, featureSimId, customIntro,
+    collabInteraction, altVoiceAsterisks, syllableSync, phoneticAdlibs, smartBarsMode,
+    sunoTagsMode, sectionVoices, chorusLangOverride, versesLangOverride,
+    barCountOverride, temperature, rhymeSchemeId, dynamicSongForm, dynamismMode,
+    adlibStyle, situationalPresetId, flowPocketMode, geminiApiKey, geminiModel,
+    refTrackLyrics, artist, featureArtist, pipelineMode
+  ]);
 
   // ===== Generate =====
   const handleGenerate = useCallback(async (isRegen: boolean = false) => {
@@ -2084,7 +2185,14 @@ export default function TrapGhostPage() {
       // Ctrl/Cmd + Enter = generate
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
-        if (!loading) handleGenerate(false);
+        if (!loading) {
+          if (alwaysShowPreflight) {
+            setPreflightModalOpen(true);
+            fetchPreflightPrompt();
+          } else {
+            handleGenerate(false);
+          }
+        }
       }
       // Ctrl/Cmd + Shift + C = copy
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "C" || e.key === "c")) {
@@ -3947,7 +4055,14 @@ export default function TrapGhostPage() {
 
               <div className="flex gap-2">
                 <Button
-                  onClick={() => handleGenerate(false)}
+                  onClick={() => {
+                    if (alwaysShowPreflight) {
+                      setPreflightModalOpen(true);
+                      fetchPreflightPrompt();
+                    } else {
+                      handleGenerate(false);
+                    }
+                  }}
                   disabled={loading}
                   className="flex-1 bg-gradient-to-r from-slime to-emerald-400 text-black font-semibold hover:opacity-90 glow-slime h-12"
                 >
@@ -3956,6 +4071,18 @@ export default function TrapGhostPage() {
                   ) : (
                     <><Mic2 className="w-4 h-4 mr-2" />Generar Letra <span className="hidden sm:inline text-[10px] opacity-60 ml-2">⌘↵</span></>
                   )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPreflightModalOpen(true);
+                    fetchPreflightPrompt();
+                  }}
+                  className="border-slime/40 hover:bg-slime/10 hover:text-slime h-12 px-3 text-xs flex items-center gap-1.5"
+                  title="Inspeccionar prompt que se enviará al LLM"
+                >
+                  <Eye className="w-4 h-4 text-slime" />
+                  <span className="hidden md:inline">Ver Prompt</span>
                 </Button>
                 <Button variant="outline" onClick={handleRandomize} className="border-cyber/30 hover:bg-cyber/10 hover:text-cyber h-12" title="Configuración aleatoria (inspiración)">
                   <Shuffle className="w-4 h-4" />
@@ -6595,6 +6722,22 @@ export default function TrapGhostPage() {
         open={logModalOpen}
         onOpenChange={setLogModalOpen}
         log={generationLog}
+      />
+
+      {/* Preflight Prompt Inspection Modal */}
+      <PreflightPromptModal
+        open={preflightModalOpen}
+        onOpenChange={setPreflightModalOpen}
+        promptData={preflightData}
+        loading={preflightLoading}
+        onConfirmGenerate={() => handleGenerate(false)}
+        alwaysShow={alwaysShowPreflight}
+        onToggleAlwaysShow={(val) => {
+          setAlwaysShowPreflight(val);
+          try {
+            localStorage.setItem("always_show_preflight", String(val));
+          } catch {}
+        }}
       />
     </div>
   );
