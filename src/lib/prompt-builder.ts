@@ -886,10 +886,10 @@ ${params.syllableSync ? "- **Sincronización Silábica**: Métrica estricta y si
 
 # 🚫 FILTRO ANTI-ENCASILLAMIENTO & DIVERSIFICACIÓN LÉXICA (ANTI-CHECKLIST & LIBERTAD CULTURAL)
 1. **PROHIBIDO EL CHECKLISTING / LISTA DE LA COMPRA:** No trates los ad-libs, jerga o temas como una lista de supermercado que deba aparecer en cada compás. Queda TERMINANTEMENTE PROHIBIDO usar las etiquetas temáticas del menú ("Dinero y hustle", "Hierba y humo", "Coca y polvo", "Drogas y lean", "Cuentas claras") como palabras literales en las barras. Son la atmósfera conceptual abstracta, no una lista de la compra.
-2. **LIBERTAD TOTAL DE MARCAS, CEPAS Y COCHES REALES:** Utiliza libremente nombres auténticos de marcas (Amiri, Rick Owens, Chrome Hearts, Balenciaga, Moncler, Goyard), cepas de hierba (Gelato, Runtz, Biscotti, ZaZa, Gary Payton), modelos exactos de coches (Trackhawk, Hellcat, TRX, Urus, AMG, Maybach, Porsche, Beamer V8) y hardware callejero (Glock con switch, Draco, peines de 30). Cero pudor corporativo: el realismo crudo del trap exige estos detalles concretos. Lo único prohibido es anunciar marcas sin groove o sonar a folleto publicitario.
+2. **ESPECIFICIDAD MATERIAL Y ENTORNO FÍSICO REAL:** Utiliza libremente el universo material tangible contemporáneo (motorización de alto rendimiento, alta moda urbana, botánica y cepas de cultivo, relojería de precisión, dispositivos y artefactos cotidianos de calle). Cero pudor corporativo: el realismo crudo del trap exige objetos tangibles reales de la cultura, no abstracciones genéricas. Selecciona los elementos libremente según la escena, sin sonar a folleto publicitario.
 3. **DESARROLLO POR ACCIONES FÍSICAS:** Una vez que un elemento físico de la escena se introduce, la estrofa debe avanzar mediante consecuencias físicas, llamadas, decisiones y detalles visuales concretos (Show, Don't Tell), NO volviendo a listar sustantivos temáticos.
 4. **LÍMITE DE PALABRAS FIRMA:** Cada término firma o ad-lib icónico solo puede aparecer como MÁXIMO 1 o 2 veces en TODA la canción como golpe de efecto sorpresa, NUNCA como muletilla constante en cada compás.
-5. **NO REPETICIÓN ENTRE ESTROFAS (MEMORIA NEGATIVA):** Si usas una metáfora, marca de coche o prenda en el Verso 1, queda TERMINANTEMENTE PROHIBIDO repetirla en el Verso 2. Varía el vocabulario, las acciones y las imágenes en cada sección.
+5. **NO REPETICIÓN ENTRE ESTROFAS (MEMORIA NEGATIVA):** Si usas una metáfora, elemento mecánico o prenda en el Verso 1, queda TERMINANTEMENTE PROHIBIDO repetirla en el Verso 2. Varía el vocabulario, las acciones y las imágenes en cada sección.
 
 # 🚫 PROHIBICIÓN RADICAL DEL CORO DE TRADUCCIÓN (ANTI-CORO ESCOLAR):
 Queda TERMINANTEMENTE PROHIBIDO escribir compases de estribillo con el patrón "[Frase en español]... [(traducción literal en inglés)]" (ej: "Fumo loud... (loud), veo el futuro... (clear)"). Un estribillo es un objeto acústico y musical pegadizo, no una clase de idiomas. Los ad-libs deben aportar contratiempo rítmico, ecos melódicos o réplicas dialécticas con actitud *(¿cuándo?)*, *(facts)*, *(olvídalo)*, NUNCA la traducción de la palabra cantada.
@@ -913,9 +913,9 @@ Queda ESTRICTAMENTE PROHIBIDO usar las siguientes frases hechas, rimas baratas y
    - ❌ "Trap / rap / map / cap" (Cadena de rimas floja de IA)
    - ❌ "Shining like a star / driving fast cars"
    - ❌ "Money, power, respect / counting my checks"
-3. **DIRECTIVA DE SUSTITUCIÓN (REALISMO DE CALLE):**
-   - En lugar de frases abstractas como *"tengo mucho dinero"*, escribe el detalle exacto: *"tres mil pavos en la sudadera Rick Owens"*, *"el contador de billetes sonando en la mesa de cristal"*, *"patek con bisel helado"*.
-   - En lugar de *"la calle es dura"*, narra la escena: *"patrullas dando vueltas a las cuatro en el portal"*, *"el Glock con el selector quemando el bolsillo"*, *"tres llamadas perdidas del abogado"*.
+3. **DIRECTIVA DE SUSTITUCIÓN POR ESPECIFICIDAD FÍSICA (SHOW, DON'T TELL):**
+   - En lugar de frases abstractas o autocomplacientes ("tengo mucho dinero", "soy el mejor"), narra transacciones tangibles, peso material, compras reales y consecuencias físicas concretas en la escena.
+   - En lugar de generalizaciones vagas ("la calle es dura"), construye tensión dramática mediante acciones observables, movimientos de patrullas, llamadas tensas, cerrojos, pesajes o fricciones tangibles del entorno.
 
 # 🎼 ESTRUCTURA DE LA CANCIÓN (SUNO NATIVE)
 Sigue esta estructura sin omitir ni añadir secciones:
@@ -1353,19 +1353,20 @@ ${hookVariationsEnabled ? `
 - **Frecuencia de Ad-libs**: ${getHookDensityProfile(hookArtistId).adlibDensity >= 0.4 ? "Ad-libs rítmicos en contratiempo con actitud." : "Ad-libs comedidos y selectivos."}
 - **Regla Blanda**: Trata estas directivas como preferencias de bolsillo y respiración para el gancho, no como cuotas matemáticas fijas.
 ` : ""}
-# 💎 ANCLAS COMPOSITIVAS NEUTRALES (TÉCNICA DE ESTUDIO):
-${goldExamples.map(g => `- **${g.technique}** (${g.description}):\n  Barra 1: "${g.bars[0]}"\n  Barra 2: "${g.bars[1]}"`).join("\n")}
+# 💎 TÉCNICAS COMPOSITIVAS DE ESTUDIO (PRINCIPIOS ABSTRACTOS):
+${goldExamples.map(g => `- **${g.technique}**: ${g.description}`).join("\n")}
 
 # 🏀 REGLAS DE ARQUITECTURA TOPLINE (MÚSICA REAL DE ESTUDIO):
 1. **FRASEO MUSICAL, BARRAS COMPLETAS & ESPECIFICIDAD VÍVIDA:**
    - Escribe compases que fluyan con ritmo natural, swing y musicalidad real de hit de trap.
    - Construye el estribillo sobre hechos físicos tangibles, compras, activos o detalles sensoriales concretos que enganchen de inmediato (ej: el notario firmando, el oro en la mesa, la maleta sellada, el olor a dinero y plástico nuevo), en lugar de vaguedades genéricas.
    - Queda TERMINANTEMENTE PROHIBIDO sonar a telegrama inconexo o lista de palabras sueltas. El estribillo debe tener melodía, sentido y pegada.
-2. **LIBERTAD TOTAL DE ATREZZO CULTURAL, MARCAS REALES Y CALIDAD DE ESTUDIO:**
-   - El vocabulario y el atrezzo son 100% LIBRES, crudos y realistas.
-   - TIENES TOTAL LIBERTAD para utilizar referencias reales de la cultura urbana contemporánea: marcas de ropa de diseñador (Amiri, Rick Owens, Chrome Hearts, Balenciaga, Moncler, Goyard), cepas de hierba (Gelato, Runtz, Biscotti, ZaZa, Gary Payton), modelos exactos de coches y motores (Trackhawk, Hellcat, Urus, AMG, Maybach, Porsche, Beamer V8), relojes (Patek, AP, Richard Mille, Cartier), bebidas (Wockhardt, Tris, Clase Azul, Casamigos) y hardware callejero (Glock con switch, Draco, peines de caracol, chaleco) siempre que aporten textura física, actitud y autenticidad cruda de trap.
-   - Cero pudor ni censura corporativa: el trap real vive de estos detalles concretos. Lo único prohibido es sonar como un folleto publicitario vacío o enunciar marcas sin groove.
-   - 🚫 REGLA DE ORO DE IDENTIDAD: La ÚNICA restricción absoluta es NO nombrar al artista por su nombre propio ("soy Yovngchimi", "aquí Takeoff"). El artista se identifica 100% por su FLOW, CADENCIA, MÉTRICA, AD-LIBS Y TIMBRE.
+2. **ESPECIFICIDAD MATERIAL Y ENTORNO FÍSICO REAL (GUIADO ABSTRACTO):**
+   - El vocabulario y el atrezzo material son 100% LIBRES, crudos y realistas.
+   - Tienes plena libertad para recurrir al universo material tangible contemporáneo (alta moda urbana, motorización de alto rendimiento, botánica y cepas de cultivo, relojería de precisión, dispositivos y artefactos reales del entorno callejero).
+   - No te limites a sustantivos genéricos abstractos: invoca el mundo tangible a través de objetos físicos reales que pertenezcan naturalmente al universo del narrador, sin que el sistema te imponga una lista fija de cuáles elegir. Deja que surjan orgánicamente de la escena.
+   - Queda prohibido sonar a folleto publicitario vacío o enunciar marcas sin groove ni justificación física en la escena.
+   - 🚫 REGLA DE ORO DE IDENTIDAD: La ÚNICA restricción absoluta es NO nombrar al artista por su nombre propio ("soy X", "aquí Y"). El artista se identifica 100% por su FLOW, CADENCIA, MÉTRICA, AD-LIBS Y TIMBRE.
    - Higiene de Metadatos: Queda PROHIBIDO citar literalmente términos técnicos o nombres de sellos de la bio del artista (ej: 'Quality Control', 'rey del tresillo') a menos que el usuario los haya pedido expresamente.
 3. **AD-LIBS Y COMENTARIOS REACTIVOS DE ESCENA:**
    - Cada compás debe tener fuerza propia dentro del groove.
@@ -1598,9 +1599,9 @@ ${params.languageDNA ? params.languageDNA.instructionBlock : spanglish.prompt}
 2. **Temáticas Abstractas vs. Cero Lista de la Compra (Anti-Template):**
    - Las temáticas elegidas son el tono dramático y el marco conceptual abstracto de la canción. NO son una lista de la compra para tachar compás a compás. Queda TERMINANTEMENTE PROHIBIDO escribir barras que citen literalmente las etiquetas de los temas ("Dinero y hustle", "Hierba y humo", "Coca y polvo", "Drogas y lean", "Cuentas claras").
    - Si el usuario introdujo un término exclusivo personalizado en 'customTopic' (ej: un token, un apodo o una palabra clave concreta), incorpóralo de forma orgánica sin cambiarlo ni forzarlo.
-3. **Libertad Total de Marcas, Cepas, Coches y Atrezzo Callejero:**
-   - TIENES PLENA LIBERTAD para usar marcas de diseño (Amiri, Rick Owens, Chrome Hearts, Balenciaga, Moncler, Goyard), modelos exactos de coches y motores (Trackhawk, Hellcat, TRX, Urus, AMG, Maybach, Porsche), cepas de hierba (Gelato, Runtz, Biscotti, ZaZa), relojes (Patek, AP, Richard Mille), bebidas y calibres de calle (Glock con switch, Draco, peines de 30).
-   - Estos elementos le dan el peso físico, la textura y la autenticidad que separan un tema real de estudio de una parodia genérica de IA.
+3. **Especificidad Material y Textura de Calle (Sin Listas Rígidas):**
+   - Tienes plena libertad para recurrir al universo material tangible de la cultura contemporánea: alta costura urbana, motorización de alto rendimiento, botánica y cepas de cultivo, relojería de precisión, bebidas y artefactos del bajo mundo.
+   - Estos elementos tangibles aportan el peso físico, la fricción y la autenticidad que distinguen a una obra de estudio real de una abstracción genérica de IA. No necesitas que el sistema te liste marcas: selecciona libremente los objetos físicos que la escena y el estamento social del personaje requieran.
 4. **Memoria Negativa Radical & Cero Checklisting Inter-Estrofas:**
    - Prohibido rotar mecánicamente los mismos dominios metafóricos: si en el Verso 1 usas una analogía deportiva / de baloncesto (ej: Shaq), en el Verso 2 queda TERMINANTEMENTE PROHIBIDO volver a usar otra analogía de baloncesto (cero Kobe, cero NBA). Si en el Verso 1 hablas de coches, en el Verso 2 explora la mesa, el dinero en mano, la patrulla o la tensión entre socios.
    - Prohibido el checklisting en bucle: NUNCA repitas la misma lista de ingredientes en cada estrofa como si fuera una plantilla. Cada verso debe traer objetos, ángulos y consecuencias completamente diferentes.
@@ -1666,8 +1667,8 @@ ${featureContrast ? `${featureContrast.instruction}\n` : ""}- ${rhymeLevelInstru
 
 - Directiva Rítmica para Suno: Estructura la longitud de cada línea y la colocación de pausas para que el modelo de voz de Suno reproduzca fielmente el bolsillo rítmico del artista original (tresillos cortantes, legato arrastrado, o staccato frío según corresponda), manteniendo las barras compactas y sin atropellos silábicos.
 
-# 💎 ANCLAS COMPOSITIVAS NEUTRALES (TÉCNICA DE ESTUDIO):
-${goldExamples.map(g => `- **${g.technique}** (${g.description}):\n  Barra 1: "${g.bars[0]}"\n  Barra 2: "${g.bars[1]}"`).join("\n")}
+# 💎 TÉCNICAS COMPOSITIVAS DE ESTUDIO (PRINCIPIOS ABSTRACTOS):
+${goldExamples.map(g => `- **${g.technique}**: ${g.description}`).join("\n")}
 
 # 🧱 CONTINUIDAD ESCÉNICA Y CAUSAL EN CÉLULAS DE ESCRITURA (4-BAR SCENE PROGRESSION):
 Cada célula o bloque de 4 compases debe mantener estricta continuidad física y causal:

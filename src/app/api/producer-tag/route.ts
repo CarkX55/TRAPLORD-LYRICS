@@ -211,21 +211,21 @@ export async function POST(req: NextRequest) {
     let archetypeConstraint = "";
     if (archetype && archetype.id !== "smart") {
       archetypeConstraint = `
-ARQUETIPO OBLIGATORIO:
-- Estilo: "${archetype.name}" (${archetype.vibe})
-- Tag de referencia icónico: "${archetype.referenceTag}"
-- Descripción del arquetipo: ${archetype.description}
-- Debes imitar con total precisión la cadencia, el tono y el golpe del tag de referencia pero adaptándolo al nombre "${producerName}" y a la vibra de la letra.`;
+PERFIL ACÚSTICO Y ENERGÍA DEL TAG:
+- Arquetipo de producción: ${archetype.name}
+- Atmósfera e intensidad: ${archetype.vibe}
+- Enfoque sonoro: ${archetype.description}
+- Directiva estilística: Compón una firma sonora original que capture con máxima precisión la cadencia, la síncopa y la presencia vocal de esta atmósfera, centrada exclusivamente en el nombre "${producerName}". Queda estrictamente prohibido plagiar o copiar frases célebres existentes; crea frases 100% inéditas y exclusivas sin copiar ningún tag ajeno.`;
     } else if (archetype && archetype.id === "smart") {
       archetypeConstraint = `
-ARQUETIPO OBLIGATORIO:
-- Estilo: "Smart Contextual (100% Letra)"
-- Analiza las mejores punchlines y la narrativa de la letra proporcionada.
-- Crea tags únicos y originales para "${producerName}" que conecten directamente con los conceptos de la canción (ej. dinero, traición, joyas, calle, noche).`;
+PERFIL ACÚSTICO Y ENERGÍA DEL TAG:
+- Arquetipo: Fusión Contextual Narrativa
+- Directiva estilística: Analiza la atmósfera, el conflicto y la imaginería dominante de la letra adjunta. Extrae la tensión central y formula firmas sonoras originales para "${producerName}" que actúen como preludio orgánico a la narrativa de la canción, sin citar categorías genéricas.`;
     } else {
       archetypeConstraint = `
-ARQUETIPOS VARIADOS:
-Genera tags inspirados en diferentes leyendas del trap (Metro Boomin, Tay Keith, Pi'erre Bourne, Southside/808 Mafia, BNYX/F1lthy, Bizarrap), adaptados a "${producerName}".`;
+PERFIL ACÚSTICO Y ENERGÍA DEL TAG:
+- Arquetipo: Diversidad Sonora de Estudio
+- Directiva estilística: Genera una variedad balanceada de entregas vocales (susurrada de baja frecuencia, grito distorsionado de alta energía, fraseo melódico con reverberación espacial, y staccato seco y percusivo), todas construidas alrededor del nombre "${producerName}".`;
     }
 
     const prompt = `Eres un productor de audio legendario y ghostwriter de trap. Genera entre 4 y 5 Producer Tags icónicos para el productor "${producerName}".
@@ -236,24 +236,24 @@ Genera tags inspirados en diferentes leyendas del trap (Metro Boomin, Tay Keith,
 - Mood / Vibra: ${mood}
 ${lyricsSnippet ? `- Letra / Barras de la canción (para extraer conceptos y jerga):\n${lyricsSnippet}` : ""}
 
-# 🎛️ REGLAS DE GENERACIÓN:
+# 🎛️ REGLAS DE GENERACIÓN (PRINCIPIOS ABSTRACTOS):
 ${archetypeConstraint}
 1. El nombre "${producerName}" DEBE aparecer en cada tag.
-2. Cada tag debe ser CORTO y CONTUNDENTE (máximo 8-10 palabras).
-3. Debe sonar extremadamente pegadizo, callejero y profesional.
+2. Cada tag debe ser CORTO y CONTUNDENTE (máximo 4 a 8 palabras).
+3. Debe sonar extremadamente pegadizo, callejero, original e inédito.
 4. Genera variedad de idiomas: al menos uno en inglés americano (US Trap), uno en español callejero y uno en Spanglish orgánico.
-5. NO uses el nombre real de otros productores en el tag cantado (solo "${producerName}").
-6. Formatea cada tag para que en Suno AI suene como un audio tag perfecto al inicio del tema.
+5. Queda TERMINANTEMENTE PROHIBIDO copiar o reproducir tags famosos existentes de otros productores. Crea frases completamente nuevas y distintivas.
+6. Formatea cada tag para que en Suno AI actúe como directiva acústica perfecta de intro antes de la caída del beat.
 
 Devuelve EXCLUSIVAMENTE un JSON válido con esta estructura (sin markdown, sin explicaciones):
 {
   "tags": [
     {
-      "text": "Frase del tag aquí",
-      "style": "Amenazante / Hype / Trippy / Melódico / Minimal",
+      "text": "Frase del tag",
+      "style": "Descriptor del estilo sonoro",
       "language": "en | es | spanglish",
-      "archetypeName": "Metro Style / Tay Keith / Pi'erre / Smart Context / etc.",
-      "sunoFormatted": "[Intro: Whispered Producer Tag]\\n\\\"Frase del tag aquí\\\"\\n(Yeah!)\\n\\n[Beat Drop - Heavy 808]"
+      "archetypeName": "Arquetipo de entrega vocal",
+      "sunoFormatted": "[Intro: Descriptor acústico para Suno]\\n\\\"Frase del tag\\\"\\n(Ad-lib rítmico)\\n\\n[Beat Drop]"
     }
   ]
 }`;
