@@ -118,6 +118,7 @@ interface GenerateBody {
   writingCellsEnabled?: boolean;
   hookVariationsEnabled?: boolean;
   spanishFlavor?: SpanishFlavor;
+  hideArtistNames?: boolean;
   // Ghostwriter Engine v2.2 Fields:
   editedGenerationPrompt?: string;
   compositionMode?: CompositionMode;
@@ -530,6 +531,7 @@ export async function POST(req: NextRequest) {
       semanticAnchor,
       languageDNA,
       spanishFlavor: body.spanishFlavor,
+      hideArtistNames: body.hideArtistNames !== false,
     };
 
     const temperature = typeof body.temperature === "number" ? body.temperature : 0.72;
@@ -590,6 +592,7 @@ export async function POST(req: NextRequest) {
         artistId: body.artistId,
         featureArtistId: body.featureArtistId,
         sectionVoices: body.sectionVoices,
+        stripArtistNames: body.hideArtistNames !== false,
       });
       pipelineStagesCompleted = ["single_section_regenerated"];
       stageLogs.push({
@@ -738,6 +741,7 @@ export async function POST(req: NextRequest) {
         artistId: body.artistId,
         featureArtistId: body.featureArtistId,
         sectionVoices: body.sectionVoices,
+        stripArtistNames: body.hideArtistNames !== false,
       });
       let candidateAST = parseRawLyricsToAST(candidateLyrics);
 
@@ -817,6 +821,7 @@ ${candidateLyrics}`;
               artistId: body.artistId,
               featureArtistId: body.featureArtistId,
               sectionVoices: body.sectionVoices,
+              stripArtistNames: body.hideArtistNames !== false,
             });
             finalAST = parseRawLyricsToAST(lyrics);
             pipelineStagesCompleted.push("exceptional_repair_calibrated");
@@ -888,6 +893,7 @@ ${candidateLyrics}`;
         artistId: body.artistId,
         featureArtistId: body.featureArtistId,
         sectionVoices: body.sectionVoices,
+        stripArtistNames: body.hideArtistNames !== false,
       });
       pipelineStagesCompleted = ["holistic_generation_completed"];
       stageLogs.push({

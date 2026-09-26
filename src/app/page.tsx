@@ -25,7 +25,7 @@ import {
   MessageSquare, Award, AlertCircle, Lightbulb, AudioLines, Music2,
   Image, Star, Quote, Instagram, Twitter, Video, ListMusic, Radio, Key,
   Plus, ArrowUp, ArrowDown, X, Layers, Volume2, VolumeX, FileSpreadsheet, Terminal,
-  AlertTriangle, SlidersHorizontal, Eye
+  AlertTriangle, SlidersHorizontal, Eye, UserX
 } from "lucide-react";
 import {
   ARTISTS_DATA, MOODS, TOPICS, BPM_VIBES, STRUCTURES, NARRATIVE_ARCS, PRODUCERS, RHYME_SCHEMES,
@@ -44,7 +44,7 @@ import {
   type SongSection, type SongStructure, type SectionTemplate, type FlowPocketOption, type IntroStyleOption, type IntroStyleId, type OutroStyleOption, type OutroStyleId, type ProducerCategoryId
 } from "@/lib/trap-data";
 import type { HookVariationOption } from "@/app/api/hook-variations/route";
-import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, cleanSunoBracketHeaders, resolveArtistVocalGuide, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
+import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, cleanSunoBracketHeaders, stripArtistNamesFromLyrics, resolveArtistVocalGuide, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
 import { type SpanishFlavor, SPANISH_FLAVOR_CATALOG } from "@/lib/dialect-engine";
 import { ArtistSearchCombobox } from "@/components/artist-search-combobox";
 import { SectionVoiceCombobox } from "@/components/section-voice-combobox";
@@ -288,6 +288,7 @@ export default function TrapGhostPage() {
   const [sunoStylePrompt, setSunoStylePrompt] = useState<string>("");
   const [sunoLayers, setSunoLayers] = useState<SunoStyleLayers | null>(null);
   const [sunoTagsMode, setSunoTagsMode] = useState<"detailed" | "minimal">("detailed");
+  const [hideArtistNames, setHideArtistNames] = useState<boolean>(true);
   const [dynamismMode, setDynamismMode] = useState<"classic" | "vanguard">("vanguard");
   const [adlibStyle, setAdlibStyle] = useState<"textured" | "classic" | "minimal">("textured");
   const [situationalPresetId, setSituationalPresetId] = useState<string>("none");
@@ -812,6 +813,7 @@ export default function TrapGhostPage() {
       adlibStyle,
       situationalPresetId: situationalPresetId !== "none" ? situationalPresetId : undefined,
       flowPocketMode: flowPocketMode !== "auto" ? flowPocketMode : undefined,
+      hideArtistNames,
       useLegacySinglePass: false,
       compositionMode: (isMultipass ? "multipass" : "holistic") as "holistic" | "guided" | "multipass",
       editedGenerationPrompt: editedPrompt || undefined,
@@ -876,7 +878,12 @@ export default function TrapGhostPage() {
         setRefTrackAnalysis(data.refTrackSummary);
       }
 
-      const cleanLyrics = cleanSunoBracketHeaders(data.lyrics, { artistId, featureArtistId: featureArtist?.id, sectionVoices });
+      const cleanLyrics = cleanSunoBracketHeaders(data.lyrics, {
+        artistId,
+        featureArtistId: featureArtist?.id,
+        sectionVoices,
+        stripArtistNames: hideArtistNames,
+      });
       const readiness = analyzeSunoReadiness(cleanLyrics);
       setLyrics(cleanLyrics);
       const doc = data.songDocument || parseRawLyricsToAST(cleanLyrics);
@@ -930,19 +937,41 @@ export default function TrapGhostPage() {
       syllableSync, phoneticAdlibs, smartBarsMode, sectionVoices, sunoTagsMode,
       geminiApiKey, hasServerKey, geminiModel, producerName, refTrackOpen, refTrackLyrics, dynamicSongForm,
       dynamismMode, adlibStyle, situationalPresetId, customSections, isCustomStructure, flowPocketMode,
-      pipelineMode, addLiveLog]);
+      pipelineMode, addLiveLog, hideArtistNames]);
 
   // ===== Copy for Suno AI (Clean Bracketed Format with Vocal Guides) =====
   const handleCopySuno = useCallback(async () => {
     if (!lyrics) return;
     try {
-      const clean = cleanSunoBracketHeaders(lyrics, { artistId, featureArtistId: featureArtist?.id, sectionVoices });
+      const clean = cleanSunoBracketHeaders(lyrics, {
+        artistId,
+        featureArtistId: featureArtist?.id,
+        sectionVoices,
+        stripArtistNames: hideArtistNames,
+      });
       await navigator.clipboard.writeText(clean);
-      toast.success("⚡ Letra copiada con guías vocales para Suno AI");
+      toast.success(hideArtistNames
+        ? "⚡ Letra copiada limpia para Suno AI (sin nombres de artistas)"
+        : "⚡ Letra copiada con guías vocales para Suno AI");
     } catch {
       toast.error("No se pudo copiar");
     }
-  }, [lyrics, artistId, featureArtist, sectionVoices]);
+  }, [lyrics, artistId, featureArtist, sectionVoices, hideArtistNames]);
+
+  // ===== Strip artist names directly from current lyrics in editor =====
+  const handleStripArtistNamesFromCurrentLyrics = useCallback(() => {
+    if (!lyrics) return;
+    const artistNames: string[] = [];
+    if (artist?.name) artistNames.push(artist.name);
+    if (featureArtist?.name) artistNames.push(featureArtist.name);
+    const stripped = stripArtistNamesFromLyrics(lyrics, artistNames);
+    if (stripped !== lyrics) {
+      setLyrics(stripped);
+      toast.success("✅ Nombres de artistas eliminados de la letra (guías acústicas conservadas)");
+    } else {
+      toast.info("La letra ya no contiene referencias a nombres de artistas");
+    }
+  }, [lyrics, artist, featureArtist]);
 
   // ===== Copy lyrics (raw) =====
   const handleCopy = useCallback(async () => {
@@ -1527,6 +1556,7 @@ export default function TrapGhostPage() {
           rhymeSchemeId,
           temperature,
           flowPocketMode: flowPocketMode !== "auto" ? flowPocketMode : undefined,
+          hideArtistNames,
           geminiApiKey: geminiApiKey || undefined,
           geminiModel,
           thinkingBudget,
@@ -1544,7 +1574,12 @@ export default function TrapGhostPage() {
       const data: GenerateResponse & { error?: string } = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || "Error en re-generación");
       // Replace just the section in the existing lyrics with clean format
-      const newSectionText = cleanSunoBracketHeaders(data.lyrics);
+      const newSectionText = cleanSunoBracketHeaders(data.lyrics, {
+        artistId,
+        featureArtistId: featureArtist?.id,
+        sectionVoices,
+        stripArtistNames: hideArtistNames,
+      });
       // Safe replacement: find the old section by tag and replace with new
       const escapedName = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const sectionRegex = new RegExp(`(?:###?\\s*)?\\[${escapedName}[^\\]]*\\][^]*?(?=(?:###?\\s*\\[|$))`, "i");
@@ -1587,7 +1622,7 @@ export default function TrapGhostPage() {
       bpmVibeId, structureId, narrativeArcId, producerId, producerTag, customDictionary,
       dynamicMarkers, chorusLangOverride, versesLangOverride, barCountOverride,
       rhymeSchemeId, temperature, lyrics, customSections, isCustomStructure, flowPocketMode,
-      geminiApiKey, hasServerKey]);
+      geminiApiKey, hasServerKey, hideArtistNames]);
 
   // ===== Share URL (encode config into URL hash) =====
   const handleShareUrl = useCallback(() => {
@@ -3814,6 +3849,12 @@ export default function TrapGhostPage() {
                     <Switch checked={sunoTagsMode === "detailed"} onCheckedChange={(checked) => setSunoTagsMode(checked ? "detailed" : "minimal")} />
                   </div>
 
+                  {/* Quitar Nombres de Artistas en Letra / Encabezados */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2"><UserX className="w-4 h-4 text-red-400" /><div><Label className="text-[13px] cursor-pointer">Omitir Nombres de Artistas en la Letra</Label><p className="text-[11px] text-muted-foreground">Elimina referencias y nombres en los corchetes [Verse: ...], conservando solo los timbres vocales para Suno</p></div></div>
+                    <Switch checked={hideArtistNames} onCheckedChange={setHideArtistNames} />
+                  </div>
+
                   {/* --- Dinamismo Profundo & Vanguardia Lírica --- */}
                   <div className="rounded-xl border border-slime/30 bg-slime/5 p-4 space-y-3.5">
                     <div className="flex items-center justify-between gap-3">
@@ -4571,6 +4612,15 @@ export default function TrapGhostPage() {
                   <div className="ml-auto flex gap-1.5 flex-wrap items-center">
                     <Button variant="default" size="sm" onClick={handleCopySuno} className="bg-slime text-black font-semibold hover:bg-slime/90 glow-slime h-8 px-3" title="Copiar letra 100% limpia para Suno AI (sin markdown)">
                       <Zap className="w-3.5 h-3.5 mr-1 fill-black" />Copiar para Suno
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleStripArtistNamesFromCurrentLyrics}
+                      className="border-red-500/40 text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 px-2.5 text-xs font-medium"
+                      title="Quitar referencias y nombres de artistas de los corchetes de la letra actual (preservando descriptores vocales para Suno)"
+                    >
+                      <UserX className="w-3.5 h-3.5 mr-1 text-red-400" />Sin Artistas
                     </Button>
                     <Button variant="ghost" size="sm" onClick={handleCopy} className="text-muted-foreground hover:text-slime h-8" title="Copiar texto plano">
                       <Copy className="w-3.5 h-3.5 mr-1" />Copiar
