@@ -44,7 +44,7 @@ import {
   type SongSection, type SongStructure, type SectionTemplate, type FlowPocketOption, type IntroStyleOption, type IntroStyleId, type OutroStyleOption, type OutroStyleId, type ProducerCategoryId
 } from "@/lib/trap-data";
 import type { HookVariationOption } from "@/app/api/hook-variations/route";
-import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, cleanSunoBracketHeaders, stripArtistNamesFromLyrics, resolveArtistVocalGuide, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
+import { buildSpanglishInstruction, buildSunoStylePrompt, buildSunoStyleResult, cleanSunoBracketHeaders, stripArtistNamesFromLyrics, stripArtistMentionsFromLyricBody, resolveArtistVocalGuide, type SunoStyleLayers, type LockedSection, type SectionVoiceAssignment } from "@/lib/prompt-builder";
 import { type SpanishFlavor, SPANISH_FLAVOR_CATALOG } from "@/lib/dialect-engine";
 import { ArtistSearchCombobox } from "@/components/artist-search-combobox";
 import { SectionVoiceCombobox } from "@/components/section-voice-combobox";
@@ -882,7 +882,6 @@ export default function TrapGhostPage() {
         artistId,
         featureArtistId: featureArtist?.id,
         sectionVoices,
-        stripArtistNames: hideArtistNames,
       });
       const readiness = analyzeSunoReadiness(cleanLyrics);
       setLyrics(cleanLyrics);
@@ -947,29 +946,26 @@ export default function TrapGhostPage() {
         artistId,
         featureArtistId: featureArtist?.id,
         sectionVoices,
-        stripArtistNames: hideArtistNames,
       });
       await navigator.clipboard.writeText(clean);
-      toast.success(hideArtistNames
-        ? "⚡ Letra copiada limpia para Suno AI (sin nombres de artistas)"
-        : "⚡ Letra copiada con guías vocales para Suno AI");
+      toast.success("⚡ Letra copiada con guías vocales para Suno AI (ad-libs limpios)");
     } catch {
       toast.error("No se pudo copiar");
     }
-  }, [lyrics, artistId, featureArtist, sectionVoices, hideArtistNames]);
+  }, [lyrics, artistId, featureArtist, sectionVoices]);
 
-  // ===== Strip artist names directly from current lyrics in editor =====
+  // ===== Strip artist names from ad-libs in current lyrics =====
   const handleStripArtistNamesFromCurrentLyrics = useCallback(() => {
     if (!lyrics) return;
     const artistNames: string[] = [];
     if (artist?.name) artistNames.push(artist.name);
     if (featureArtist?.name) artistNames.push(featureArtist.name);
-    const stripped = stripArtistNamesFromLyrics(lyrics, artistNames);
+    const stripped = stripArtistMentionsFromLyricBody(lyrics, artistNames);
     if (stripped !== lyrics) {
       setLyrics(stripped);
-      toast.success("✅ Nombres de artistas eliminados de la letra (guías acústicas conservadas)");
+      toast.success("✅ Nombres de artistas eliminados de los ad-libs (corchetes de Suno conservados)");
     } else {
-      toast.info("La letra ya no contiene referencias a nombres de artistas");
+      toast.info("La letra no contiene nombres de artistas en los ad-libs");
     }
   }, [lyrics, artist, featureArtist]);
 
@@ -1578,7 +1574,6 @@ export default function TrapGhostPage() {
         artistId,
         featureArtistId: featureArtist?.id,
         sectionVoices,
-        stripArtistNames: hideArtistNames,
       });
       // Safe replacement: find the old section by tag and replace with new
       const escapedName = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -3849,9 +3844,15 @@ export default function TrapGhostPage() {
                     <Switch checked={sunoTagsMode === "detailed"} onCheckedChange={(checked) => setSunoTagsMode(checked ? "detailed" : "minimal")} />
                   </div>
 
-                  {/* Quitar Nombres de Artistas en Letra / Encabezados */}
+                  {/* Purga de Nombres en Ad-libs (...) */}
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2"><UserX className="w-4 h-4 text-red-400" /><div><Label className="text-[13px] cursor-pointer">Omitir Nombres de Artistas en la Letra</Label><p className="text-[11px] text-muted-foreground">Elimina referencias y nombres en los corchetes [Verse: ...], conservando solo los timbres vocales para Suno</p></div></div>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <div>
+                        <Label className="text-[13px] cursor-pointer">Ad-libs Anónimos (Cero Nombres en la Voz)</Label>
+                        <p className="text-[11px] text-muted-foreground">Impide que la voz de Suno cante nombres de artistas o sellos en ( ... ), conservando los corchetes intactos</p>
+                      </div>
+                    </div>
                     <Switch checked={hideArtistNames} onCheckedChange={setHideArtistNames} />
                   </div>
 
@@ -4617,10 +4618,10 @@ export default function TrapGhostPage() {
                       variant="outline"
                       size="sm"
                       onClick={handleStripArtistNamesFromCurrentLyrics}
-                      className="border-red-500/40 text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 px-2.5 text-xs font-medium"
-                      title="Quitar referencias y nombres de artistas de los corchetes de la letra actual (preservando descriptores vocales para Suno)"
+                      className="border-amber-500/40 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 h-8 px-2.5 text-xs font-medium"
+                      title="Limpiar nombres de artistas de los ad-libs entre paréntesis (...), conservando los corchetes [Verse: Artist] para Suno"
                     >
-                      <UserX className="w-3.5 h-3.5 mr-1 text-red-400" />Sin Artistas
+                      <Sparkles className="w-3.5 h-3.5 mr-1 text-amber-400" />Limpiar Ad-libs
                     </Button>
                     <Button variant="ghost" size="sm" onClick={handleCopy} className="text-muted-foreground hover:text-slime h-8" title="Copiar texto plano">
                       <Copy className="w-3.5 h-3.5 mr-1" />Copiar
