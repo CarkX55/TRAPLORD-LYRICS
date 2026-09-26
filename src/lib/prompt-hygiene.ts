@@ -373,3 +373,23 @@ export function auditCliches(
     findings,
   };
 }
+
+/**
+ * Detects whether a string contains an API-key-like secret or authorization token.
+ * Used for pre-generation prompt validation (rejecting with HTTP 400 rather than silently mutating).
+ */
+export function detectApiKeyLikeContent(text: string): boolean {
+  if (!text) return false;
+  // Google Gemini API keys: AIzaSy... (39 chars)
+  if (/AIzaSy[0-9A-Za-z_-]{33}/.test(text)) return true;
+  // OpenAI API keys: sk-... or sk-proj-... (20+ chars)
+  if (/sk-[a-zA-Z0-9_-]{20,}/.test(text)) return true;
+  // Anthropic API keys: sk-ant-...
+  if (/sk-ant-[a-zA-Z0-9_-]{20,}/.test(text)) return true;
+  // Bearer tokens or generic secret tokens
+  if (/Bearer\s+[a-zA-Z0-9_\-\.]{25,}/i.test(text)) return true;
+  // Generic high-entropy hex or base64 key assignments (e.g., api_key = "...", apiKey: "...")
+  if (/(?:api_?key|secret|token)\s*[:=]\s*['"][a-zA-Z0-9_\-]{20,}['"]/i.test(text)) return true;
+  return false;
+}
+

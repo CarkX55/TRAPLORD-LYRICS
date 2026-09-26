@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import {
   buildSystemPrompt,
+  buildHolisticPrompt,
   buildStage1ToplinePrompt,
   buildStage2GhostwriterPrompt,
   buildStage3VocalDirectorPrompt,
@@ -12,6 +14,7 @@ import {
   type RegenerateSectionParams,
   type SectionVoiceAssignment,
   type PromptParams,
+  type CompositionMode,
 } from "@/lib/prompt-builder";
 import type { GenerationProcessLog, GenerationStageLog, DiagnosticCallAttempt } from "@/lib/generation-logger";
 
@@ -35,7 +38,7 @@ import { parseRawLyricsToAST, stringifyASTToSunoLyrics, createHookContract, bind
 import { synthesizeSemanticAnchor } from "@/lib/motif-engine";
 import { buildLanguageDNA, buildLanguageTarget, calculateSyllableLanguageRatio } from "@/lib/language-dna";
 import { auditDialectAndTranslationArtifacts, type SpanishFlavor } from "@/lib/dialect-engine";
-import { auditPromptContamination, sanitizeUserInput, auditMetadataLeakage } from "@/lib/prompt-hygiene";
+import { auditPromptContamination, sanitizeUserInput, auditMetadataLeakage, detectApiKeyLikeContent } from "@/lib/prompt-hygiene";
 import { auditSunoBudget, type SunoBudgetAudit } from "@/lib/suno-budget";
 import type { LanguageDriftStep } from "@/lib/generation-logger";
 import {
@@ -58,7 +61,7 @@ import {
   type InitialAuditContext,
   type SectionCardinalityExpectation,
 } from "@/lib/quality-gate";
-import { createInitialVersionGraph } from "@/lib/version-graph";
+import { createInitialVersionGraph, type VersionNodeMeta } from "@/lib/version-graph";
 import { getFlowProfile } from "@/lib/artist-flow-profiles";
 import { getMusicalDNAForArtist } from "@/lib/musical-dna";
 import type { SongDocument } from "@/lib/song-document";
@@ -115,6 +118,9 @@ interface GenerateBody {
   writingCellsEnabled?: boolean;
   hookVariationsEnabled?: boolean;
   spanishFlavor?: SpanishFlavor;
+  // Ghostwriter Engine v2.2 Fields:
+  editedGenerationPrompt?: string;
+  compositionMode?: CompositionMode;
 }
 
 import {
@@ -401,6 +407,19 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as GenerateBody;
     capturedBody = body;
+
+    // P0: Seguridad & Privacidad — Rechazar explícitamente posibles secretos en el prompt editado (HTTP 400).
+    // Nunca alterar silenciosamente el prompt activo del usuario.
+    if (body.editedGenerationPrompt && body.editedGenerationPrompt.trim()) {
+      const secretMatch = detectApiKeyLikeContent(body.editedGenerationPrompt);
+      if (secretMatch) {
+        return NextResponse.json(
+          { error: "El prompt contiene una posible clave de API o secreto. Elimínalo antes de generar." },
+          { status: 400 }
+        );
+      }
+    }
+
     const rawModelInit = body.geminiModel?.trim();
     if (rawModelInit) modelUsed = normalizeGeminiModel(rawModelInit);
 
@@ -516,6 +535,7 @@ export async function POST(req: NextRequest) {
     const temperature = typeof body.temperature === "number" ? body.temperature : 0.72;
     const rawModel = body.geminiModel?.trim();
     modelUsed = normalizeGeminiModel(rawModel);
+    const userExplicitTerms = [body.customTopic, body.customDictionary, ...(body.topics || [])].filter(Boolean) as string[];
     let finalAST: SongDocument | null = null;
     let auditContext: InitialAuditContext | null = null;
     let dialectAudit: any = null;
@@ -541,12 +561,29 @@ export async function POST(req: NextRequest) {
       decision: "soft_pass",
     });
 
-    // CASE 1: Single section regeneration
+    let compiledPromptResolved = "";
+    let activePromptResolved = "";
+    let promptHashResolved = "";
+    let promptWasEditedResolved = false;
+    let promptOriginResolved: "compiled" | "edited" = "compiled";
+
+    // CASE 1: Single section regeneration (con contexto completo de canción y Ficha Operativa)
     if (body.regenerateSection) {
       processMode = "regenerate_section";
-      const singlePrompt = buildSystemPrompt(promptParams);
+      const compiledPrompt = buildSystemPrompt(promptParams);
+      const isEdited = Boolean(body.editedGenerationPrompt?.trim() && body.editedGenerationPrompt.trim() !== compiledPrompt.trim());
+      const activePrompt = isEdited ? body.editedGenerationPrompt!.trim() : compiledPrompt;
+      const promptOrigin: "compiled" | "edited" = isEdited ? "edited" : "compiled";
+      const promptHash = crypto.createHash("sha256").update(activePrompt).digest("hex");
+
+      compiledPromptResolved = compiledPrompt;
+      activePromptResolved = activePrompt;
+      promptHashResolved = promptHash;
+      promptWasEditedResolved = isEdited;
+      promptOriginResolved = promptOrigin;
+
       const t0 = Date.now();
-      const rawLyrics = await callLLM(singlePrompt, body, temperature, diagnosticAttempts);
+      const rawLyrics = await callLLM(activePrompt, body, temperature, diagnosticAttempts);
       const dMs = Date.now() - t0;
       finalRaw = rawLyrics;
       lyrics = cleanSunoBracketHeaders(rawLyrics, {
@@ -558,41 +595,16 @@ export async function POST(req: NextRequest) {
       stageLogs.push({
         stageId: "regenerate_section",
         stageName: `Regenerar Sección: ${body.regenerateSection.sectionName}`,
-        description: "Re-escritura aislada de una sección manteniendo el contexto de la canción",
+        description: isEdited ? "Re-escritura con prompt editado manteniendo el contexto" : "Re-escritura aislada de una sección manteniendo el contexto de la canción",
         model: modelUsed,
         temperature,
         durationMs: dMs,
-        prompt: singlePrompt,
+        prompt: activePrompt,
         rawResponse: rawLyrics,
       });
     }
-    // CASE 2: Legacy single-pass prompt (if explicitly requested)
-    else if (body.useLegacySinglePass) {
-      processMode = "legacy_single_pass";
-      const singlePrompt = buildSystemPrompt(promptParams);
-      const t0 = Date.now();
-      const rawLyrics = await callLLM(singlePrompt, body, temperature, diagnosticAttempts);
-      const dMs = Date.now() - t0;
-      finalRaw = rawLyrics;
-      lyrics = cleanSunoBracketHeaders(rawLyrics, {
-        artistId: body.artistId,
-        featureArtistId: body.featureArtistId,
-        sectionVoices: body.sectionVoices,
-      });
-      pipelineStagesCompleted = ["legacy_single_pass"];
-      stageLogs.push({
-        stageId: "legacy_single_pass",
-        stageName: "Generación Monolítica (1 Pasada)",
-        description: "Generación clásica en un único prompt",
-        model: modelUsed,
-        temperature,
-        durationMs: dMs,
-        prompt: singlePrompt,
-        rawResponse: rawLyrics,
-      });
-    }
-    // CASE 3: STUDIO PIPELINE SNAPPY (2-PASS PRIMARY + EXCEPTIONAL REPAIR ONLY)
-    else {
+    // CASE 2: MULTIPASS LAB (Solo si explícitamente se solicita compositionMode === "multipass" o useLegacySinglePass)
+    else if (body.compositionMode === "multipass" || body.useLegacySinglePass) {
       processMode = "pipeline_2_pass_primary";
 
       // --- ETAPA PREVIA: PLANIFICACIÓN RÍTMICA BEAT-FIRST (Determinista Local <5ms) ---
@@ -730,7 +742,6 @@ export async function POST(req: NextRequest) {
       let candidateAST = parseRawLyricsToAST(candidateLyrics);
 
       // --- AUDITORÍA DE FUGA DE METADATOS (USER EXPLICIT PRECEDENCE) ---
-      const userExplicitTerms = [body.customTopic, body.customDictionary, ...(body.topics || [])].filter(Boolean) as string[];
       const leakReport = auditMetadataLeakage(candidateLyrics, userExplicitTerms);
       if (leakReport.hasLeak) {
         candidateLyrics = leakReport.sanitizedLyrics;
@@ -854,6 +865,75 @@ ${candidateLyrics}`;
         targetBarsCount: repairPlan.targetBars.length,
       };
     }
+    // CASE 3: MOTOR GHOSTWRITER HOLÍSTICO (MODO PRIMARIO & POR DEFECTO EN PRODUCCIÓN v2.2)
+    else {
+      processMode = "holistic_ghostwriter";
+      const compiledPrompt = buildHolisticPrompt(promptParams);
+      const isEdited = Boolean(body.editedGenerationPrompt?.trim() && body.editedGenerationPrompt.trim() !== compiledPrompt.trim());
+      const activePrompt = isEdited ? body.editedGenerationPrompt!.trim() : compiledPrompt;
+      const promptOrigin: "compiled" | "edited" = isEdited ? "edited" : "compiled";
+      const promptHash = crypto.createHash("sha256").update(activePrompt).digest("hex");
+
+      compiledPromptResolved = compiledPrompt;
+      activePromptResolved = activePrompt;
+      promptHashResolved = promptHash;
+      promptWasEditedResolved = isEdited;
+      promptOriginResolved = promptOrigin;
+
+      const t0 = Date.now();
+      const rawLyrics = await callLLM(activePrompt, body, temperature, diagnosticAttempts);
+      const dMs = Date.now() - t0;
+      finalRaw = rawLyrics;
+      lyrics = cleanSunoBracketHeaders(rawLyrics, {
+        artistId: body.artistId,
+        featureArtistId: body.featureArtistId,
+        sectionVoices: body.sectionVoices,
+      });
+      pipelineStagesCompleted = ["holistic_generation_completed"];
+      stageLogs.push({
+        stageId: "holistic_ghostwriter",
+        stageName: "Ghostwriter Holístico (1 Pasada Global)",
+        description: isEdited ? "Generación con prompt personalizado y verificado" : "Generación holística con contexto global y jerarquía de prioridades",
+        model: modelUsed,
+        temperature,
+        durationMs: dMs,
+        prompt: activePrompt,
+        rawResponse: rawLyrics,
+      });
+
+      finalAST = parseRawLyricsToAST(lyrics);
+
+      // Auditoría no destructiva (Quality Gate observador, CERO auto-reparaciones destructivas)
+      const flowProfile = getFlowProfile(body.artistId) || undefined;
+      const structuralExpectations: Record<string, SectionCardinalityExpectation> = {};
+      for (const sec of structure.sections) {
+        const spec = resolveSectionSpec(structure.sections, body.sectionVoices, sec.type);
+        const sectionVa = body.sectionVoices?.find(v => v.sectionName === sec.name);
+        if (sectionVa?.bars) {
+          structuralExpectations[sec.name] = { exact: sectionVa.bars };
+        } else {
+          structuralExpectations[sec.name] = { min: spec.minBars, max: spec.maxBars };
+        }
+      }
+
+      if (languageDNA.flavorProfile && languageDNA.leadDialectProfile) {
+        dialectAudit = auditDialectAndTranslationArtifacts(
+          finalAST,
+          languageDNA.flavorProfile,
+          languageDNA.leadDialectProfile,
+          languageDNA.featureDialectProfile
+        );
+      }
+
+      auditContext = runInitialDeliveryAudit(
+        finalAST,
+        parsedBpm,
+        flowProfile,
+        userExplicitTerms,
+        structuralExpectations,
+        dialectAudit
+      );
+    }
 
     if (!lyrics || !lyrics.trim()) {
       return NextResponse.json({ error: "El motor de estudio no devolvió contenido válido." }, { status: 502 });
@@ -952,12 +1032,36 @@ ${candidateLyrics}`;
       docHash
     );
 
-    // --- VERSION GRAPH (Inmutable con AnalysisSnapshot adjunto) ---
+    // --- VERSION GRAPH (Inmutable con AnalysisSnapshot adjunto y Metadatos de Trazabilidad) ---
+    const resolvedTopP = 0.95;
+    const isSectionRegen = Boolean(body.regenerateSection);
+    const nodeMeta: VersionNodeMeta = {
+      source: isSectionRegen ? "section-regeneration" : "initial",
+      promptOrigin: promptOriginResolved,
+      compiledPrompt: compiledPromptResolved,
+      activePrompt: activePromptResolved,
+      promptHash: promptHashResolved,
+      promptWasEdited: promptWasEditedResolved,
+      topP: resolvedTopP,
+      lyrics,
+    };
+
     const versionGraph = createInitialVersionGraph(
       finalAST,
-      "Studio 2-Pass Generation (Beat-First)",
-      analysisSnapshot
+      isSectionRegen
+        ? `Regeneración de [${body.regenerateSection?.sectionName}]`
+        : promptWasEditedResolved
+        ? "Ghostwriter Holístico (Prompt Editado)"
+        : "Ghostwriter Holístico v2.2",
+      analysisSnapshot,
+      nodeMeta
     );
+
+    const promptPreviewLabel = isSectionRegen
+      ? `Regeneración de sección [${body.regenerateSection?.sectionName}]`
+      : promptWasEditedResolved
+      ? `Ghostwriter Holístico (Prompt Editado — ${activePromptResolved.length} caracteres)`
+      : `Ghostwriter Holístico v2.2 (1 Pasada — ${activePromptResolved.length} caracteres)`;
 
     return NextResponse.json({
       lyrics,
@@ -966,7 +1070,7 @@ ${candidateLyrics}`;
       versionGraph,
       analysis,
       spanglishLabel: spanglishInfo.label,
-      promptPreview: `Pipeline de Estudio (${stageLogs.length} ${stageLogs.length === 1 ? "Pasada" : "Pasadas"}) completado con éxito: ${pipelineStagesCompleted.join(" ➔ ")}`,
+      promptPreview: promptPreviewLabel,
       temperature,
       beatPrompt,
       sunoStylePrompt: sunoStyleResult.prompt,

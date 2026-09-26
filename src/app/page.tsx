@@ -355,7 +355,7 @@ export default function TrapGhostPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [generationProgress, setGenerationProgress] = useState<{ step: number; title: string; detail: string; percent?: number } | null>(null);
   const [regenCount, setRegenCount] = useState<number>(0);
-  const [pipelineMode, setPipelineMode] = useState<"fast" | "studio">("studio");
+  const [pipelineMode, setPipelineMode] = useState<"fast" | "studio">("fast");
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [liveStudioLogs, setLiveStudioLogs] = useState<LiveStudioLogEntry[]>([]);
   const [liveMonitorOpen, setLiveMonitorOpen] = useState<boolean>(true);
@@ -681,6 +681,7 @@ export default function TrapGhostPage() {
         stage1Prompt: data.stage1Prompt,
         stage2Prompt: data.stage2Prompt,
         unifiedPrompt: data.prompt,
+        holisticPrompt: data.holisticPrompt || data.prompt,
         beatPrompt: data.beatPrompt,
         sunoStylePrompt: data.sunoStylePrompt,
         sunoLayers: data.sunoLayers,
@@ -710,7 +711,7 @@ export default function TrapGhostPage() {
   ]);
 
   // ===== Generate =====
-  const handleGenerate = useCallback(async (isRegen: boolean = false) => {
+  const handleGenerate = useCallback(async (isRegen: boolean = false, editedPrompt?: string) => {
     const hasKey = Boolean(geminiApiKey.trim() || hasServerKey);
     if (!hasKey) {
       setApiKeyOpen(true);
@@ -731,18 +732,18 @@ export default function TrapGhostPage() {
     setRegenCount(isRegen ? regenCount + 1 : 0);
     setGenerationError(null);
 
-    const isFastMode = pipelineMode === "fast";
+    const isMultipass = pipelineMode === "studio";
     addLiveLog("info", `🚀 Iniciando generación para [${artist?.name ?? artistId}] • ${bpmVibeId} BPM`);
-    addLiveLog("info", `🎛️ Modo: ${isFastMode ? "Rápido (1 Pasada)" : "Estudio (2 Pasadas)"} • Modelo: ${geminiModel || GEMINI_DEFAULT_MODEL} • Spanglish: ${spanglishPercent}%`);
+    addLiveLog("info", `⚡ Modo: ${editedPrompt ? "Prompt Editado" : "Ghostwriter Holístico (1 Pasada)"} • Modelo: ${geminiModel || GEMINI_DEFAULT_MODEL} • Spanglish: ${spanglishPercent}%`);
 
-    const progressSteps = isFastMode ? [
-      { step: 1, title: "⚡ Generación Rápida (1 Pasada)", detail: "Componiendo letra completa en un único pase de estudio...", percent: 50 },
-      { step: 2, title: "🔬 Formateo Suno v4.5 & AST", detail: "Estructurando corchetes, dialecto y rimas...", percent: 90 },
-    ] : [
+    const progressSteps = isMultipass ? [
       { step: 1, title: "🎛️ Fase 1/3: Topliner & Hook Contract", detail: "Diseñando concepto melódico, ganchos canónicos y mantras vocales...", percent: 25 },
       { step: 2, title: "✍️ Fase 2/3: Master Ghostwriter", detail: "Escribiendo versos completos con 4-Bar Writing Cells y rimas métricas...", percent: 60 },
       { step: 3, title: "🔬 Fase 3/3: Calibración & Quality Gate AST", detail: "Auditando fonética, dialecto, rimas y formato Suno v4.5...", percent: 85 },
       { step: 4, title: "⚡ Masterización Final", detail: "Reconciliando AST inmutable y empaquetando versión definitiva...", percent: 95 },
+    ] : [
+      { step: 1, title: "⚡ Ghostwriter Holístico (1 Pasada)", detail: "Componiendo letra completa en un único pase orgánico con contexto global...", percent: 50 },
+      { step: 2, title: "🔬 Observación de Calidad & Telemetría", detail: "Auditando rimas, dialecto y métrica sin alterar el contenido creativo...", percent: 90 },
     ];
 
     setGenerationProgress(progressSteps[0]);
@@ -750,7 +751,7 @@ export default function TrapGhostPage() {
     let timer2: NodeJS.Timeout | undefined;
     let timer3: NodeJS.Timeout | undefined;
 
-    if (isFastMode) {
+    if (!isMultipass) {
       timer1 = setTimeout(() => {
         setGenerationProgress(progressSteps[1]);
       }, 3500);
@@ -811,7 +812,9 @@ export default function TrapGhostPage() {
       adlibStyle,
       situationalPresetId: situationalPresetId !== "none" ? situationalPresetId : undefined,
       flowPocketMode: flowPocketMode !== "auto" ? flowPocketMode : undefined,
-      useLegacySinglePass: isFastMode,
+      useLegacySinglePass: false,
+      compositionMode: (isMultipass ? "multipass" : "holistic") as "holistic" | "guided" | "multipass",
+      editedGenerationPrompt: editedPrompt || undefined,
     };
 
     if (!isRegen) {
@@ -820,7 +823,7 @@ export default function TrapGhostPage() {
 
     try {
       // Notificación de inicio del pipeline de estudio
-      toast.info(isFastMode ? "⚡ Generación rápida iniciada (1 Pasada)..." : "🎛️ Sesión de estudio iniciada (2 Pasadas)...");
+      toast.info(isMultipass ? "🔬 Sesión de laboratorio multipass iniciada..." : "⚡ Ghostwriter Holístico iniciado (1 Pasada)...");
       addLiveLog("info", "📡 Transmitiendo prompt a /api/generate...");
 
       const res = await fetch("/api/generate", {
@@ -1461,11 +1464,43 @@ export default function TrapGhostPage() {
 
     setLoading(true);
     try {
-      // Build context: all lyrics EXCEPT the section being regenerated
-      const context = lyrics.replace(
-        new RegExp(`###?\\s*\\[${sectionName}\\][^]*?(?=###?\\s*\\[|$)`, "i"),
-        `### [${sectionName}] — [REGENERAR]`
-      );
+      // Extraer contexto de vecindad y anclas de estribillo desde las letras actuales
+      const allSections = lyrics
+        .split(/(?=\[(?:Intro|Verse|Chorus|Hook|Bridge|Outro|Beat Drop|Drop|Pre-Chorus|Post-Chorus)[^\]]*\])/i)
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      const secIdx = allSections.findIndex(s => {
+        const headerMatch = s.match(/^\[([^\]:]+)/);
+        return headerMatch && headerMatch[1].trim().toLowerCase() === sectionName.trim().toLowerCase();
+      });
+
+      let previousSectionTail = "";
+      let nextSectionHead = "";
+      let neighborHookAnchor = "";
+
+      if (secIdx > 0) {
+        const prevSec = allSections[secIdx - 1];
+        const prevLines = prevSec.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("["));
+        previousSectionTail = prevLines.slice(-2).join("\n");
+        if (/chorus|hook/i.test(prevSec) && prevLines.length > 0) {
+          neighborHookAnchor = prevLines[0];
+        }
+      }
+
+      if (secIdx >= 0 && secIdx < allSections.length - 1) {
+        const nextSec = allSections[secIdx + 1];
+        const nextLines = nextSec.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("["));
+        nextSectionHead = nextLines.slice(0, 2).join("\n");
+        if (/chorus|hook/i.test(nextSec) && nextLines.length > 0 && !neighborHookAnchor) {
+          neighborHookAnchor = nextLines[0];
+        }
+      }
+
+      const isInstrumental = /instrumental|beat drop/i.test(sectionName);
+      const contentLines = sectionContent.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("["));
+      const exactLines = !isInstrumental && contentLines.length > 0 ? contentLines.length : undefined;
+
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1497,7 +1532,12 @@ export default function TrapGhostPage() {
           thinkingBudget,
           regenerateSection: {
             sectionName,
-            keepContext: context,
+            keepContext: lyrics, // Canción completa real sin truncar
+            sectionType: isInstrumental ? "instrumental" : "lyrical",
+            exactLines,
+            previousSectionTail,
+            nextSectionHead,
+            neighborHookAnchor,
           },
         }),
       });
@@ -1517,6 +1557,26 @@ export default function TrapGhostPage() {
       setLyrics(updatedLyrics);
       setAnalysis(analyzeLanguageRatio(updatedLyrics, spanglishPercent));
       if (data.generationLog) setGenerationLog(data.generationLog);
+      if (data.versionGraph) {
+        setVersionGraph(data.versionGraph);
+      } else if (data.songDocument) {
+        setVersionGraph(prev => {
+          if (!prev) return null;
+          return addVersionNode(
+            prev,
+            data.songDocument!,
+            `Regeneración de [${sectionName}]`,
+            data.songDocument!.sections.find(s => s.name === sectionName)?.bars.map(b => b.id) || [],
+            data.analysisSnapshot,
+            {
+              source: "section-regeneration",
+              promptOrigin: "compiled",
+              topP: 0.95,
+              lyrics: updatedLyrics,
+            }
+          );
+        });
+      }
       toast.success(`Sección "${sectionName}" re-generada`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error desconocido");
@@ -3964,7 +4024,7 @@ export default function TrapGhostPage() {
 
             {/* --- Generate Button --- */}
             <Card className="glass-card p-5 space-y-3 sticky top-20 z-20">
-              {/* Pipeline Mode Switcher: Fast vs Studio */}
+              {/* Pipeline Mode Switcher: Ghostwriter Holístico vs Laboratorio Multipass */}
               <div className="flex items-center justify-between gap-1.5 p-1 rounded-lg bg-black/40 border border-white/10 text-xs">
                 <button
                   type="button"
@@ -3974,13 +4034,13 @@ export default function TrapGhostPage() {
                   }}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md font-medium transition-all ${
                     pipelineMode === "fast"
-                      ? "bg-amber-400/20 text-amber-300 border border-amber-400/50 shadow-sm"
+                      ? "bg-slime/20 text-slime border border-slime/50 shadow-sm"
                       : "text-muted-foreground hover:text-white hover:bg-white/5"
                   }`}
-                  title="Modo Rápido: Compone la canción en 1 sola pasada (~5-8 segundos). Ideal para probar modelos rápidamente o evitar límites de cuota (429)."
+                  title="Modo Ghostwriter Holístico v2.2: Generación en 1 sola llamada global con contexto holístico de 5 capas, rimas libres y naturalidad orgánica."
                 >
-                  <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="truncate">⚡ Modo Rápido (1 Pasada · ~6s)</span>
+                  <Zap className="w-3.5 h-3.5 text-slime" />
+                  <span className="truncate">⚡ Ghostwriter Holístico (Producción v2.2)</span>
                 </button>
                 <button
                   type="button"
@@ -3990,13 +4050,13 @@ export default function TrapGhostPage() {
                   }}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md font-medium transition-all ${
                     pipelineMode === "studio"
-                      ? "bg-slime/20 text-slime border border-slime/50 shadow-sm"
+                      ? "bg-purple-500/20 text-purple-300 border border-purple-500/50 shadow-sm"
                       : "text-muted-foreground hover:text-white hover:bg-white/5"
                   }`}
-                  title="Modo Estudio: Arquitectura completa de producción en 2 pasadas (Topliner Hook Contract + Master Ghostwriter + Quality Gate)."
+                  title="Modo Laboratorio Multipass: Pipeline experimental en 2 pasadas (Topliner Hook Contract + Master Ghostwriter) para pruebas de benchmark."
                 >
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-slime" />
-                  <span className="truncate">🎛️ Modo Estudio (2 Pasadas · ~30s)</span>
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="truncate">🔬 Lab Multipass (Benchmark)</span>
                 </button>
               </div>
 
@@ -6730,7 +6790,7 @@ export default function TrapGhostPage() {
         onOpenChange={setPreflightModalOpen}
         promptData={preflightData}
         loading={preflightLoading}
-        onConfirmGenerate={() => handleGenerate(false)}
+        onConfirmGenerate={(editedPrompt) => handleGenerate(false, editedPrompt)}
         alwaysShow={alwaysShowPreflight}
         onToggleAlwaysShow={(val) => {
           setAlwaysShowPreflight(val);

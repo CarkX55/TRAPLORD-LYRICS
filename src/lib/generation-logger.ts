@@ -36,7 +36,7 @@ export interface LanguageDriftStep {
 
 export interface GenerationProcessLog {
   timestamp: string;
-  mode: "pipeline_2_pass_primary" | "pipeline_3_pass" | "legacy_single_pass" | "regenerate_section";
+  mode: "pipeline_2_pass_primary" | "pipeline_3_pass" | "legacy_single_pass" | "regenerate_section" | "holistic_ghostwriter";
   modelUsed: string;
   totalDurationMs: number;
   stages: GenerationStageLog[];

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -22,12 +22,14 @@ import {
   FileCode2,
   Sparkles,
   Music2,
-  Mic2,
   Sliders,
   Send,
-  X,
-  Layers,
-  Terminal,
+  RotateCcw,
+  AlertTriangle,
+  CheckCircle2,
+  Edit3,
+  RefreshCw,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { BeatPrompt } from "@/lib/trap-data";
@@ -37,16 +39,18 @@ export interface PreflightPromptData {
   stage1Prompt?: string;
   stage2Prompt?: string;
   unifiedPrompt?: string;
+  holisticPrompt?: string;
   beatPrompt?: BeatPrompt;
   sunoStylePrompt?: string;
   sunoLayers?: SunoStyleLayers;
   artistName?: string;
   featureArtistName?: string;
   modelName?: string;
-  pipelineMode?: "studio" | "fast";
+  pipelineMode?: "studio" | "fast" | "holistic";
   spanglishPercent?: number;
   bpmInfo?: string;
   temperature?: number;
+  inputsChangedSinceCompile?: boolean;
 }
 
 interface PreflightPromptModalProps {
@@ -54,7 +58,8 @@ interface PreflightPromptModalProps {
   onOpenChange: (open: boolean) => void;
   promptData: PreflightPromptData | null;
   loading: boolean;
-  onConfirmGenerate: () => void;
+  onConfirmGenerate: (editedPrompt?: string) => void;
+  onRecompile?: () => void;
   alwaysShow: boolean;
   onToggleAlwaysShow: (val: boolean) => void;
 }
@@ -65,11 +70,32 @@ export function PreflightPromptModal({
   promptData,
   loading,
   onConfirmGenerate,
+  onRecompile,
   alwaysShow,
   onToggleAlwaysShow,
 }: PreflightPromptModalProps) {
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("stage1");
+  const [activeTab, setActiveTab] = useState<string>("active");
+  const [editedPrompt, setEditedPrompt] = useState<string>("");
+
+  const compiledPrompt =
+    promptData?.holisticPrompt ||
+    promptData?.unifiedPrompt ||
+    promptData?.stage1Prompt ||
+    "";
+
+  // Sync edited prompt with compiled prompt whenever new data arrives or modal opens
+  useEffect(() => {
+    if (compiledPrompt) {
+      setEditedPrompt(compiledPrompt);
+    }
+  }, [compiledPrompt, open]);
+
+  const isEdited = Boolean(
+    editedPrompt.trim() &&
+      compiledPrompt.trim() &&
+      editedPrompt.trim() !== compiledPrompt.trim()
+  );
 
   const handleCopy = (text: string, tabKey: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -78,13 +104,16 @@ export function PreflightPromptModal({
     setTimeout(() => setCopiedTab(null), 2000);
   };
 
-  const stage1Text = promptData?.stage1Prompt || promptData?.unifiedPrompt || "";
-  const stage2Text = promptData?.stage2Prompt || "";
-  const unifiedText = promptData?.unifiedPrompt || "";
+  const handleRestoreCompiled = () => {
+    setEditedPrompt(compiledPrompt);
+    toast.info("Prompt restaurado al estado original compilado");
+  };
+
+  const isLongPrompt = editedPrompt.length > 12000;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] bg-card/95 border-border/70 backdrop-blur-xl flex flex-col p-6 overflow-hidden">
+      <DialogContent className="max-w-4xl max-h-[92vh] bg-card/95 border-border/70 backdrop-blur-xl flex flex-col p-6 overflow-hidden">
         <DialogHeader className="shrink-0 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -93,10 +122,10 @@ export function PreflightPromptModal({
               </div>
               <div>
                 <DialogTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
-                  Inspección Pre-Vuelo: Prompt para IA
+                  Inspección Pre-Vuelo: Ghostwriter Prompt
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Revisa con precisión de estudio los prompts y parámetros que se transmitirán a Google Gemini antes de ejecutar.
+                  Inspecciona o edita el prompt antes de transmitirlo a Google Gemini. Se enviará exactamente el texto activo.
                 </DialogDescription>
               </div>
             </div>
@@ -111,11 +140,9 @@ export function PreflightPromptModal({
                   ⚡ {promptData.modelName}
                 </Badge>
               )}
-              {promptData?.pipelineMode && (
-                <Badge variant="outline" className="border-purple-400/40 text-purple-300 bg-purple-400/5 font-mono text-[10px]">
-                  🎛️ {promptData.pipelineMode === "studio" ? "Estudio (2 Pasadas)" : "Rápido (1 Pasada)"}
-                </Badge>
-              )}
+              <Badge variant="outline" className="border-emerald-400/40 text-emerald-300 bg-emerald-400/5 font-mono text-[10px]">
+                {isEdited ? "✏️ Prompt Editado" : "⚡ Holístico (1 Pasada)"}
+              </Badge>
             </div>
           </div>
         </DialogHeader>
@@ -124,7 +151,7 @@ export function PreflightPromptModal({
           <div className="flex-1 min-h-[350px] flex flex-col items-center justify-center gap-3">
             <div className="trap-spinner !w-8 !h-8 !border-2" />
             <p className="text-xs text-muted-foreground animate-pulse">
-              Compilando arquitectura de prompts, ADN musical y células de escritura...
+              Compilando arquitectura holística en 5 capas, ADN musical y contexto vocal...
             </p>
           </div>
         ) : (
@@ -135,104 +162,108 @@ export function PreflightPromptModal({
           >
             <div className="flex items-center justify-between border-b border-border/50 pb-2 shrink-0">
               <TabsList className="bg-black/40 border border-border/40 p-0.5">
-                <TabsTrigger value="stage1" className="text-xs data-[state=active]:bg-slime data-[state=active]:text-black">
-                  🎛️ Pasada 1 (Topliner)
+                <TabsTrigger value="active" className="text-xs data-[state=active]:bg-slime data-[state=active]:text-black flex items-center gap-1">
+                  <Edit3 className="w-3.5 h-3.5" /> Prompt Activo {isEdited && "(Modificado)"}
                 </TabsTrigger>
-                {stage2Text && (
-                  <TabsTrigger value="stage2" className="text-xs data-[state=active]:bg-slime data-[state=active]:text-black">
-                    ✍️ Pasada 2 (Ghostwriter)
-                  </TabsTrigger>
-                )}
-                {unifiedText && (
-                  <TabsTrigger value="unified" className="text-xs data-[state=active]:bg-slime data-[state=active]:text-black">
-                    📄 Prompt Unificado
-                  </TabsTrigger>
-                )}
-                <TabsTrigger value="suno" className="text-xs data-[state=active]:bg-slime data-[state=active]:text-black">
-                  🎚️ Suno & Beat
+                <TabsTrigger value="suno" className="text-xs data-[state=active]:bg-slime data-[state=active]:text-black flex items-center gap-1">
+                  <Music2 className="w-3.5 h-3.5" /> Suno & Beat
                 </TabsTrigger>
               </TabsList>
 
               <div className="flex items-center gap-2">
-                {activeTab === "stage1" && stage1Text && (
+                {isEdited && (
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-7 text-xs border-border/50 text-muted-foreground hover:text-foreground"
-                    onClick={() => handleCopy(stage1Text, "stage1", "Prompt de Pasada 1")}
+                    className="h-7 text-xs border-amber-500/40 text-amber-300 hover:bg-amber-500/10 flex items-center gap-1"
+                    onClick={handleRestoreCompiled}
+                    title="Restaurar el texto original compilado desde los controles de la UI"
                   >
-                    {copiedTab === "stage1" ? <Check className="w-3.5 h-3.5 text-slime mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
-                    {copiedTab === "stage1" ? "Copiado" : "Copiar"}
+                    <RotateCcw className="w-3.5 h-3.5" /> Restaurar Compilado
                   </Button>
                 )}
-                {activeTab === "stage2" && stage2Text && (
+                {onRecompile && promptData?.inputsChangedSinceCompile && (
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-7 text-xs border-border/50 text-muted-foreground hover:text-foreground"
-                    onClick={() => handleCopy(stage2Text, "stage2", "Prompt de Pasada 2")}
+                    className="h-7 text-xs border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/10 flex items-center gap-1"
+                    onClick={onRecompile}
                   >
-                    {copiedTab === "stage2" ? <Check className="w-3.5 h-3.5 text-slime mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
-                    {copiedTab === "stage2" ? "Copiado" : "Copiar"}
+                    <RefreshCw className="w-3.5 h-3.5" /> Recompilar
                   </Button>
                 )}
-                {activeTab === "unified" && unifiedText && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs border-border/50 text-muted-foreground hover:text-foreground"
-                    onClick={() => handleCopy(unifiedText, "unified", "Prompt unificado")}
-                  >
-                    {copiedTab === "unified" ? <Check className="w-3.5 h-3.5 text-slime mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
-                    {copiedTab === "unified" ? "Copiado" : "Copiar"}
-                  </Button>
-                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs border-border/50 text-muted-foreground hover:text-foreground"
+                  onClick={() => handleCopy(editedPrompt, "active", "Prompt activo")}
+                >
+                  {copiedTab === "active" ? <Check className="w-3.5 h-3.5 text-slime mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
+                  {copiedTab === "active" ? "Copiado" : "Copiar"}
+                </Button>
               </div>
             </div>
 
-            {/* TAB: STAGE 1 */}
-            <TabsContent value="stage1" className="flex-1 flex flex-col min-h-0 pt-2 m-0 data-[state=inactive]:hidden">
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1 pb-1">
-                <span>Instrucción maestra para Topliner: Hooks canónicos, mantras y dialecto.</span>
-                <span>{stage1Text.length.toLocaleString()} caracteres (~{Math.round(stage1Text.length / 4)} tokens)</span>
+            {/* TAB: ACTIVE PROMPT (EDITABLE) */}
+            <TabsContent value="active" className="flex-1 flex flex-col min-h-0 pt-2 m-0 data-[state=inactive]:hidden">
+              {/* Telemetría y estado de caracteres */}
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1 pb-2 flex-wrap gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono">
+                    Compilado: <strong>{compiledPrompt.length.toLocaleString()}</strong> chars
+                  </span>
+                  <span>•</span>
+                  <span className="font-mono">
+                    Activo: <strong className={isEdited ? "text-amber-400 font-bold" : "text-slate-300"}>{editedPrompt.length.toLocaleString()}</strong> chars
+                  </span>
+                  <span>•</span>
+                  <span>
+                    Estado:{" "}
+                    {isEdited ? (
+                      <span className="text-amber-300 font-medium inline-flex items-center gap-1">
+                        <Edit3 className="w-3 h-3" /> Modificado manualmente
+                      </span>
+                    ) : (
+                      <span className="text-emerald-400 font-medium inline-flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Sin editar (Compilado puro)
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <Info className="w-3.5 h-3.5 text-cyber" />
+                  <span>Se enviará exactamente el prompt activo.</span>
+                </div>
               </div>
-              <ScrollArea className="flex-1 rounded-lg border border-border/50 bg-black/60 p-4 font-mono text-xs leading-relaxed text-slate-300">
-                <pre className="whitespace-pre-wrap font-mono">{stage1Text || "No disponible."}</pre>
-              </ScrollArea>
+
+              {/* Advertencia si supera los 12.000 caracteres */}
+              {isLongPrompt && (
+                <div className="mb-2 p-2 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span>
+                    El prompt supera los 12.000 caracteres ({editedPrompt.length.toLocaleString()}). Puede causar tiempos de respuesta más lentos o alto consumo de cuota en Google Gemini.
+                  </span>
+                </div>
+              )}
+
+              {/* Editor directo de prompt */}
+              <div className="flex-1 min-h-[300px] flex flex-col rounded-lg border border-border/50 bg-black/70 overflow-hidden focus-within:border-slime/50 transition-colors">
+                <textarea
+                  value={editedPrompt}
+                  onChange={(e) => setEditedPrompt(e.target.value)}
+                  className="w-full flex-1 p-4 bg-transparent font-mono text-xs leading-relaxed text-slate-200 resize-none outline-none selection:bg-slime/20 selection:text-slime"
+                  placeholder="Escribe o edita el prompt que se transmitirá a Gemini..."
+                  spellCheck={false}
+                />
+              </div>
             </TabsContent>
-
-            {/* TAB: STAGE 2 */}
-            {stage2Text && (
-              <TabsContent value="stage2" className="flex-1 flex flex-col min-h-0 pt-2 m-0 data-[state=inactive]:hidden">
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1 pb-1">
-                  <span>Instrucción maestra para Ghostwriter: Versos completos, células de escritura y flow skeleton.</span>
-                  <span>{stage2Text.length.toLocaleString()} caracteres (~{Math.round(stage2Text.length / 4)} tokens)</span>
-                </div>
-                <ScrollArea className="flex-1 rounded-lg border border-border/50 bg-black/60 p-4 font-mono text-xs leading-relaxed text-slate-300">
-                  <pre className="whitespace-pre-wrap font-mono">{stage2Text}</pre>
-                </ScrollArea>
-              </TabsContent>
-            )}
-
-            {/* TAB: UNIFIED */}
-            {unifiedText && (
-              <TabsContent value="unified" className="flex-1 flex flex-col min-h-0 pt-2 m-0 data-[state=inactive]:hidden">
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1 pb-1">
-                  <span>Prompt consolidado de arquitectura de estudio (Direct Pipeline).</span>
-                  <span>{unifiedText.length.toLocaleString()} caracteres (~{Math.round(unifiedText.length / 4)} tokens)</span>
-                </div>
-                <ScrollArea className="flex-1 rounded-lg border border-border/50 bg-black/60 p-4 font-mono text-xs leading-relaxed text-slate-300">
-                  <pre className="whitespace-pre-wrap font-mono">{unifiedText}</pre>
-                </ScrollArea>
-              </TabsContent>
-            )}
 
             {/* TAB: SUNO & BEAT */}
             <TabsContent value="suno" className="flex-1 flex flex-col min-h-0 pt-2 m-0 space-y-3 overflow-y-auto data-[state=inactive]:hidden">
               <div className="space-y-2 p-3 bg-black/40 border border-border/50 rounded-lg">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slime flex items-center gap-1.5">
-                    <Music2 className="w-3.5 h-3.5" /> Prompt de Estilo Suno v4.5
+                    <Music2 className="w-3.5 h-3.5" /> Prompt de Estilo Suno v4.5 (4 Capas)
                   </span>
                   {promptData?.sunoStylePrompt && (
                     <Button
@@ -293,7 +324,7 @@ export function PreflightPromptModal({
               onCheckedChange={onToggleAlwaysShow}
             />
             <Label htmlFor="always-show-preflight" className="text-xs text-muted-foreground cursor-pointer select-none">
-              Mostrar siempre esta inspección antes de generar
+              Mostrar siempre inspección antes de generar
             </Label>
           </div>
 
@@ -310,11 +341,12 @@ export function PreflightPromptModal({
               size="sm"
               onClick={() => {
                 onOpenChange(false);
-                onConfirmGenerate();
+                onConfirmGenerate(isEdited ? editedPrompt : undefined);
               }}
               className="text-xs h-9 bg-gradient-to-r from-slime to-emerald-400 text-black font-semibold hover:opacity-90 glow-slime flex items-center gap-1.5"
             >
-              <Send className="w-3.5 h-3.5" /> Confirmar y Transmitir al LLM
+              <Send className="w-3.5 h-3.5" />
+              {isEdited ? "Disparar con Prompt Editado" : "Confirmar y Transmitir al LLM"}
             </Button>
           </div>
         </DialogFooter>

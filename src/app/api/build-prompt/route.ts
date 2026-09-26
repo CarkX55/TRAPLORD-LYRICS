@@ -229,6 +229,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       prompt,
+      holisticPrompt: prompt,
       stage1Prompt,
       stage2Prompt,
       spanglishLabel: spanglishInfo.label,

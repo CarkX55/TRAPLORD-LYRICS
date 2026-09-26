@@ -42,9 +42,11 @@ export interface StructuralCardinalityAudit {
 }
 
 export type GateDecision = "PASS" | "PASS_WITH_REPAIR" | "REPAIR" | "REGENERATE";
+export type QualityGateStatus = "OK" | "ATENCIÓN" | "REVISAR";
 
 export interface QualityGateResult {
   decision: GateDecision;
+  status: QualityGateStatus;
   layersPassed: {
     musical: boolean;     // Pocket, density, cadence & phonetics
     narrative: boolean;   // Scene progression & physical anchors
@@ -420,8 +422,18 @@ export function evaluateFinalQualityGate(
     }
   }
 
+  let status: QualityGateStatus = "OK";
+  if (!technicalPassed) {
+    status = "REVISAR"; // Technical failure: budget truncation or missing outro
+  } else if (!musicalPassed || !narrativePassed || !linguisticPassed || !structuralPassed) {
+    status = "ATENCIÓN"; // Creative or diagnostic observations
+  } else {
+    status = "OK";
+  }
+
   const qualityGate: QualityGateResult = {
     decision,
+    status,
     layersPassed: {
       musical: musicalPassed,
       narrative: narrativePassed,

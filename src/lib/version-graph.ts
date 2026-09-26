@@ -4,7 +4,18 @@
 import { type SongDocument, cloneSongDocument } from "./song-document";
 import type { AnalysisSnapshot } from "./quality-gate";
 
-export interface SongVersionNode {
+export interface VersionNodeMeta {
+  source?: "initial" | "section-regeneration";
+  promptOrigin?: "compiled" | "edited";
+  compiledPrompt?: string;
+  activePrompt?: string;
+  promptHash?: string;
+  promptWasEdited?: boolean;
+  topP?: number;
+  lyrics?: string;
+}
+
+export interface SongVersionNode extends VersionNodeMeta {
   id: string;                  // e.g. "v_1", "v_2"
   songId: string;
   parentVersionId?: string;     // Allows branching and future merges
@@ -28,7 +39,8 @@ export interface SongVersionGraph {
 export function createInitialVersionGraph(
   doc: SongDocument,
   reason: string = "Initial Studio Generation",
-  analysisSnapshot?: AnalysisSnapshot
+  analysisSnapshot?: AnalysisSnapshot,
+  meta?: VersionNodeMeta
 ): SongVersionGraph {
   const versionId = doc.versionId || "v_1";
   const node: SongVersionNode = {
@@ -39,6 +51,7 @@ export function createInitialVersionGraph(
     createdAt: doc.createdAt || Date.now(),
     changedBarIds: doc.sections.flatMap(s => s.bars.map(b => b.id)),
     analysisSnapshot,
+    ...meta,
   };
 
   return {
@@ -60,7 +73,8 @@ export function addVersionNode(
   newDoc: SongDocument,
   reason: string,
   changedBarIds: string[] = [],
-  analysisSnapshot?: AnalysisSnapshot
+  analysisSnapshot?: AnalysisSnapshot,
+  meta?: VersionNodeMeta
 ): SongVersionGraph {
   const newVersionId = newDoc.versionId || `v_${Date.now()}`;
   const parentId = graph.currentVersionId;
@@ -74,6 +88,7 @@ export function addVersionNode(
     createdAt: Date.now(),
     changedBarIds,
     analysisSnapshot,
+    ...meta,
   };
 
   return {
