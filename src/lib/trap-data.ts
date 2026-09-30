@@ -1295,6 +1295,7 @@ export function getFlowPocketOptionById(id: string): FlowPocketOption | undefine
 // ===== INTRO STYLES (EXPANDED TRAP ARCHETYPES) =====
 export type IntroStyleId =
   | "auto"
+  | "maybach_skit"
   | "bouncy_warmup"
   | "phone_call"
   | "acappella_drop"
@@ -1325,6 +1326,15 @@ export const INTRO_STYLE_OPTIONS: IntroStyleOption[] = [
     description: "Introducción atmosférica estándar según el flow nativo del artista.",
     sunoAcousticTag: "Atmospheric filtered pad, spoken intro",
     instruction: "Intro atmosférica y melódica según el estilo del artista.",
+  },
+  {
+    id: "maybach_skit",
+    label: "Maybach Skit / Enciende esa Mierda",
+    badge: "Maybach Skit",
+    icon: "🏎️",
+    description: "Intro cinemática icónica con sample Maybach ('Heh, what is this? Hahaha'), Producer Tag ('Ayy, {PRODUCER}, enciende esa mierda') y texturas de estudio / FX.",
+    sunoAcousticTag: "Instrumental intro, cinematic luxury sample skit, laughing dialogue fx, hard producer tag, vinyl scratch, heavy 808 drop",
+    instruction: "Intro cinematográfica con sample y tag icónico: 1. Abre con [Instrumental Intro], risa y sample ('Heh, what is this? *(Maybach music)* (Sweet!) Hahahaha'). 2. Tag de cabina: '\"Ayy, {PRODUCER}, enciende esa mierda\"'. 3. Opcional: FX ambiental de estudio o calle entre corchetes o paréntesis, como [Dog Barking] (\"Huff! Huff! Grrr!\"), *(DJ… drop that shit!)* o [Gunshots] (brrt! grrah!).",
   },
   {
     id: "bouncy_warmup",

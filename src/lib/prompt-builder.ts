@@ -401,6 +401,14 @@ export function buildStructurePlan(params: PromptParams): string {
     }
 
     const tag = vocalGuideResult.vocalGuide ? ` - ${vocalGuideResult.vocalGuide}` : "";
+    const isIntro = s.type === "intro" || s.name.toLowerCase().includes("intro");
+    if (isIntro && voiceAssign?.introStyle && voiceAssign.introStyle !== "auto") {
+      const opt = getIntroStyleOptionById(voiceAssign.introStyle);
+      const producerName = params.producerName?.trim() || (params.producerId && params.producerId !== "none" ? getProducerById(params.producerId)?.name : "") || "Markoff";
+      let instruction = opt?.instruction ?? "";
+      instruction = instruction.replace(/\{PRODUCER\}/gi, producerName).replace(/\{NAME\}/gi, producerName);
+      return `[${s.name}: ${vocalGuideResult.artistName}${tag}] — ~${barsNum} líneas [ARQUETIPO INTRO: ${opt?.label ?? voiceAssign.introStyle}] (${instruction})`;
+    }
     return `[${s.name}: ${vocalGuideResult.artistName}${tag}] — ~${barsNum} líneas aproximadas`;
   }).join("\n");
 }
@@ -488,14 +496,18 @@ ${narrativeConflict}
 ${sceneBrief ? `${sceneBrief}\n` : ""}- Detalles Concretos (Show, Don't Tell): Describe transacciones, objetos físicos, marcas o acciones tangibles de calle. Evita formulaciones genéricas o moralejas de autoayuda.
 - REGLA DE ORO DE AD-LIBS Y LETRA (P3 INVIOLABLE):
   * Los corchetes [Section: Artist - Timbre] DEBEN llevar el nombre del artista para que Suno AI modele la voz y el flow adecuado.
-  * PERO en el cuerpo de la letra y muy especialmente dentro de los paréntesis de ad-libs ( ... ) queda TERMINANTEMENTE PROHIBIDO que el rapero mencione, cante o grite su propio nombre, nombres de artistas de referencia, apodos o sellos discográficos (PROHIBIDO poner ad-libs como "(Takeoff!)", "(Fredo!)", "(Santana!)", "(Duki!)", "(Savage Squad!)", "(Quavo!)", "(Offset!)", "(Carti!)").
-  * Los paréntesis ( ... ) deben contener EXCLUSIVAMENTE onomatopeyas rítmicas puras o palabras neutras de calle: (Grrah!), (Yeah!), (What!), (Skrrt!), (Brrr!), (Bow!), (No cap!), (Hold on!). NUNCA nombres de personas, porque Suno canta literalmente lo que hay entre paréntesis.
+  * PERO en el cuerpo de la letra y muy especialmente dentro de los paréntesis de ad-libs ( ... ) queda TERMINANTEMENTE PROHIBIDO que el rapero mencione, cante o grite su propio nombre, nombres de artistas de referencia, apodos o sellos discográficos (PROHIBIDO poner ad-libs como "(Takeoff!)", "(Fredo!)", "(Santana!)", "(Duki!)", "(Savage Squad!)", "(Quavo!)", "(Offset!)", "(Carti!)"). NUNCA nombres de personas, porque Suno canta literalmente lo que hay entre paréntesis.
+  * ECOS RÍTMICOS DE REMATE (Migos / Atlanta Style): Se alienta fuertemente usar ad-libs que hagan eco de la última palabra o remate de la barra anterior (ej: "Trap como narco (Narco)", "Moviendo los gramos (Gramos)", "Corto el brick con el fajo (Fajo)").
+  * AD-LIBS DE ACCIÓN, REMATE Y ACTITUD: Usa onomatopeyas y reacciones callejeras cortantes que aporten ritmo y textura (ej: (Click!), (Facts), (Cash!), (Bling), (Cha-ching!), (Next!), (Baa!), (Skrrt!), (Brrt!), (Grrah!), (Woo!), (No cap!), (Hold on!)).
+  * CUES CINEMÁTICOS DE AUDIO FX PARA SUNO: En intros, pausas o entre barras, puedes insertar etiquetas cinematográficas entre corchetes o paréntesis como [Dog Barking] ("Huff! Huff! Grrr!"), [Gunshots] (brrt! grrah!), [Pistols], o [Pausa]. Suno los interpreta como efectos de producción reales.
 ${producerLine ? `${producerLine}\n` : ""}
 # CAPA 3: IDENTIDAD VOCAL FUNCIONAL, IDIOMA & POCKET
 - Voz Principal: Timbre ${leadStyle.timbre}. Cadencia ${leadStyle.cadence}. Textura de rima: ${leadStyle.rhymeTexture}. Actitud: ${leadStyle.emotionalPosture}.
 ${featStyle ? `- Voz Feature: Timbre ${featStyle.timbre}. Cadencia ${featStyle.cadence}. Textura: ${featStyle.rhymeTexture}.\n` : ""}- Dialecto & Slang: ${leadStyle.dialectAndVocabulary}${params.customDictionary?.trim() ? ` + Diccionario local: { ${params.customDictionary.trim()} }` : ""}
 - Idioma (Spanglish): ${spanglishGuideline}
 - Pocket & BPM: ${pocketGuideline}
+- POCKET DE BARRAS CONCISAS (ATLANTA STACCATO & TRIPLETS): Prioriza barras cortas, directas y percusivas (5 a 8 sílabas promedio) que dejen respirar al 808 y los hats. Evita oraciones largas de prosa explicativa.
+- PUNCHLINES DE FLEXING & CULTURA POP: Emplea comparaciones extravagantes y humor irreverente de marcas, tecnología y comida (estilo 2 Chainz / Migos: Amazon Prime, Sears, joystick, Birkin, Takis, Hibachi, Urus, Lear, etc.) para que la letra tenga chispa y swagger sin caer en dramatismos monótonos.
 
 # CAPA 4: MAPA ESTRUCTURAL
 Sigue este esqueleto. Para el conteo operativo de la aplicación, cada línea se tratará como una unidad aproximada de interpretación. No sacrifiques naturalidad para forzar una división métrica artificial:
@@ -1382,7 +1394,10 @@ export function buildStage2GhostwriterPrompt(
 
     if (isIntro && va?.introStyle && va.introStyle !== "auto") {
       const opt = getIntroStyleOptionById(va.introStyle);
-      return `[${s.name}: ${guide.fullHeaderTag}] — 4 compases [ARQUETIPO INTRO: ${opt?.label ?? va.introStyle}] (${opt?.instruction ?? ""})`;
+      const producerName = params.producerName?.trim() || (params.producerId && params.producerId !== "none" ? getProducerById(params.producerId)?.name : "") || "Markoff";
+      let instruction = opt?.instruction ?? "";
+      instruction = instruction.replace(/\{PRODUCER\}/gi, producerName).replace(/\{NAME\}/gi, producerName);
+      return `[${s.name}: ${guide.fullHeaderTag}] — 4 compases [ARQUETIPO INTRO: ${opt?.label ?? va.introStyle}] (${instruction})`;
     }
 
     const isOutro = s.type === "outro" || s.name.toLowerCase().includes("outro") || s.name.toLowerCase().includes("final");
