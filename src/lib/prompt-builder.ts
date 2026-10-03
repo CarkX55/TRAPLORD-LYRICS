@@ -24,6 +24,7 @@ import {
 } from "./motif-engine";
 import type { LanguageDNA } from "./language-dna";
 import { formatSectionHeader, resolveSectionSpec, stripMetaReasoning } from "./song-document";
+import { SPANISH_FLAVOR_CATALOG, type SpanishFlavor } from "./dialect-engine";
 
 export { getRhymeTier, getHookDensityProfile, type HookDensityProfile };
 
@@ -422,8 +423,9 @@ export function buildHolisticPrompt(params: PromptParams): string {
   const featureArtist = params.featureArtistId ? getArtistById(params.featureArtistId) : null;
   const leadStyle = resolveFunctionalArtistStyle(params.artistId);
   const featStyle = featureArtist ? resolveFunctionalArtistStyle(featureArtist.id) : null;
+  const flowProfile = getFlowProfile(params.artistId);
 
-  // CAPA 2: NÚCLEO CREATIVO & CONFLICTO
+  // CAPA 2: NÚCLEO CREATIVO, CONFLICTO & NIVEL DE CRUDEZA (DIRTY LEVEL)
   const establishedFacts = params.customTopic?.trim()
     ? `HECHOS ESTABLECIDOS: "${params.customTopic.trim()}" (prioridad temática fáctica establecida por el usuario; consérvalos como verdaderos).`
     : "";
@@ -443,6 +445,10 @@ export function buildHolisticPrompt(params: PromptParams): string {
     }
   }
 
+  // Dirty Level (Nivel de crudeza / explicitud)
+  const dirty = getDirtyLevel(params.dirtyLevel ?? 2);
+  const dirtyGuideline = `- NIVEL DE CRUDEZA & EXPLICITUD [${dirty.label}]: ${dirty.instruction}`;
+
   // Producer tag
   let producerLine = "";
   const producer = params.producerId ? getProducerById(params.producerId) : null;
@@ -456,7 +462,25 @@ export function buildHolisticPrompt(params: PromptParams): string {
     producerLine = `- Producer Tag en [Intro]: "${params.producerTag.trim()}"`;
   }
 
-  // CAPA 3: POCKET & BPM (3 ZONAS FLEXIBLES)
+  // Custom intro frase
+  let customIntroGuideline = "";
+  if (params.customIntro?.trim()) {
+    customIntroGuideline = `- Frase Obligatoria en [Intro]: "${params.customIntro.trim()}"`;
+  }
+
+  // Reference track analysis
+  let refTrackGuideline = "";
+  if (params.referenceTrack?.summary) {
+    refTrackGuideline = `- Dinámica de Referencia: Tempo ~${params.referenceTrack.summary.bpm} BPM, energía ${params.referenceTrack.summary.energy}, esquema rítmico ${params.referenceTrack.summary.detectedRhymeScheme}, pockets: ${params.referenceTrack.summary.flowPockets.join(", ")}.`;
+  }
+
+  // Locked sections
+  let lockedSectionsBlock = "";
+  if (params.lockedSections && params.lockedSections.length > 0) {
+    lockedSectionsBlock = `- COMPASES BLOQUEADOS POR EL USUARIO (INMUTABLES):\n${params.lockedSections.map(s => `  [${s.name}]:\n${s.content}`).join("\n")}\nConserva estas secciones exactamente como están en la letra final.`;
+  }
+
+  // CAPA 3: POCKET, BEAT TYPE & BPM
   const bpmParts = params.bpmVibe.range.split("-").map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n));
   const avgBpm = bpmParts.length === 2 ? Math.round((bpmParts[0] + bpmParts[1]) / 2) : (bpmParts[0] ?? 130);
 
@@ -469,8 +493,90 @@ export function buildHolisticPrompt(params: PromptParams): string {
     pocketGuideline = `Rápido (> 140 BPM): Densidad, frases cortas percusivas, triplets (tresillos) y staccato.`;
   }
 
-  // Spanglish global flexible
-  const spanglishGuideline = `Objetivo global aproximado: ${100 - params.spanglishPercent}% español y ${params.spanglishPercent}% inglés (tolerancia flexible). Code-switching donde lo pida la voz, la rima, el remate o el slang de la escena. Cero alternancia matemática forzada compás a compás.`;
+  // Beat Type Guidance
+  let beatTypeGuideline = "";
+  if (params.beatType) {
+    beatTypeGuideline = `- Estilo de Beat [${params.beatType.label}]: ${params.beatType.description}. Articula el groove y los cortes al estilo de este subgénero (${params.beatType.sunoTags.slice(0, 4).join(", ")}).`;
+  }
+
+  // Flow Pocket Mode
+  let flowPocketGuideline = "";
+  if (params.flowPocketMode && params.flowPocketMode !== "auto") {
+    const pocketOpt = getFlowPocketOptionById(params.flowPocketMode);
+    if (pocketOpt) {
+      flowPocketGuideline = `- Bolsillo Rítmico UI [${pocketOpt.label}]: ${pocketOpt.description}`;
+    }
+  }
+
+  // Spanish flavor
+  let spanishFlavorGuideline = "";
+  const activeFlavor: SpanishFlavor = params.spanishFlavor && params.spanishFlavor !== "auto"
+    ? params.spanishFlavor
+    : (leadStyle.dialectAndVocabulary.toLowerCase().includes("españa") || leadStyle.dialectAndVocabulary.toLowerCase().includes("madrid") || leadStyle.dialectAndVocabulary.toLowerCase().includes("barcelona") ? "spain"
+      : leadStyle.dialectAndVocabulary.toLowerCase().includes("puerto rico") || leadStyle.dialectAndVocabulary.toLowerCase().includes("caribe") ? "puerto_rico"
+      : leadStyle.dialectAndVocabulary.toLowerCase().includes("argentina") ? "argentina"
+      : leadStyle.dialectAndVocabulary.toLowerCase().includes("méxico") || leadStyle.dialectAndVocabulary.toLowerCase().includes("mexico") ? "mexico"
+      : leadStyle.dialectAndVocabulary.toLowerCase().includes("dominicana") || leadStyle.dialectAndVocabulary.toLowerCase().includes("república dominicana") ? "dominican"
+      : "auto");
+
+  if (activeFlavor !== "auto" && SPANISH_FLAVOR_CATALOG[activeFlavor]) {
+    const flv = SPANISH_FLAVOR_CATALOG[activeFlavor];
+    spanishFlavorGuideline = `- Sabor & Dialecto Regional (${flv.label}): ${flv.linguisticDescription}. Sintaxis: ${flv.syntaxCharacteristics.slice(0, 2).join("; ")}.`;
+  }
+
+  // Spanglish global flexible & overrides
+  let spanglishGuideline = `Objetivo global aproximado: ${100 - params.spanglishPercent}% español y ${params.spanglishPercent}% inglés (tolerancia flexible). Code-switching donde lo pida la voz, la rima, el remate o el slang de la escena. Cero alternancia matemática forzada compás a compás.`;
+  if (params.chorusLanguageOverride && params.chorusLanguageOverride !== "auto") {
+    spanglishGuideline += ` (Estribillo [Hook/Chorus] obligatoriamente en ${params.chorusLanguageOverride === "es" ? "Español" : "Inglés"}).`;
+  }
+  if (params.versesLanguageOverride && params.versesLanguageOverride !== "auto") {
+    spanglishGuideline += ` (Estrofas [Verses] obligatoriamente en ${params.versesLanguageOverride === "es" ? "Español" : "Inglés"}).`;
+  }
+
+  // Rhyme Scheme
+  let rhymeSchemeGuideline = "";
+  if (params.rhymeSchemeId && params.rhymeSchemeId !== "rs_free") {
+    const rs = getRhymeSchemeById(params.rhymeSchemeId);
+    if (rs) {
+      rhymeSchemeGuideline = `- Esquema de Rima [${rs.label} - ${rs.pattern}]: ${rs.description}. Rimas orgánicas, asonancias y rimas internas sin forzar simetrías rígidas.`;
+    }
+  }
+
+  // Few-Shot Peak-Era Anchor Bars
+  const mainRef = params.mainArtistReference || getArtistReference(params.artistId);
+  const featRef = params.featureArtistReference || (params.featureArtistId ? getArtistReference(params.featureArtistId) : null);
+  let goldenAnchorBlock = "";
+  if (mainRef && (mainRef.verseBars?.length || mainRef.hookBars?.length || mainRef.signatureBar)) {
+    const mainSampleLines = [
+      mainRef.verseBars?.[0] ? `* Verso de Referencia: "${mainRef.verseBars[0]}"` : "",
+      mainRef.hookBars?.[0] ? `* Gancho de Referencia: "${mainRef.hookBars[0]}"` : "",
+      mainRef.signatureBar ? `* Barra Icónica: "${mainRef.signatureBar}"` : "",
+    ].filter(Boolean).join("\n  ");
+
+    let featSampleLine = "";
+    if (featRef && featRef.verseBars?.[0]) {
+      featSampleLine = `\n  * Feature (${featureArtist?.name || "Colaborador"} — Era ${featRef.peakEra}): "${featRef.verseBars[0]}"`;
+    }
+
+    goldenAnchorBlock = `- ANCLAJES DE CADENCIA Y PEGADA DE ÉPOCA DORADA:
+  [Benchmark de Estilo: Era ${mainRef.peakEra}]
+  ${mainSampleLines}${featSampleLine}
+  ⚠️ REGLA DE ORO DE REFERENCIAS: Usa estas barras como termómetro de cadencia, soltura, actitud y nivel de impacto. PROHIBIDO copiarlas literalmente; escribe barras 100% nuevas e inéditas que alcancen este mismo estándar y pegada.`;
+  }
+
+  // Tangible concrete imagery bank
+  const concreteImagery = flowProfile?.imageryBank && flowProfile.imageryBank.length > 0
+    ? flowProfile.imageryBank.slice(0, 6).join(", ")
+    : "";
+
+  // Collab interaction & trading bars
+  let collabGuideline = "";
+  if (featureArtist && params.collabInteraction) {
+    collabGuideline = `- DINÁMICA DE COLABORACIÓN (TRADING BARS & QUÍMICA DE ESTUDIO):
+  * Química viva entre ${leadStyle.timbre.split(",")[0]} y ${featStyle?.timbre.split(",")[0]}.
+  * Ad-libs cruzados de reacción y respaldo en las estrofas del otro (ej. cuando uno remata, el otro suelta un (Facts!) o repite la palabra clave).
+  * En secciones conjuntas o 'Trading Bars', alternar de 2 en 2 compases con contraste de flow y pique callejero.`;
+  }
 
   // CAPA 4: ESTRUCTURA
   const structurePlan = buildStructurePlan(params);
@@ -491,9 +597,10 @@ Tu objetivo primordial es lograr una voz con personalidad arrolladora, continuid
 Cuando dos preferencias entren en tensión, cumple primero la de mayor prioridad. Satisface la intención de manera orgánica y conserva la musicalidad.
 
 # CAPA 2: NÚCLEO CREATIVO & CONFLICTO
+${dirtyGuideline}
 ${establishedFacts ? `- ${establishedFacts}\n` : ""}${creativeSeeds ? `- ${creativeSeeds}\n- Regla de no-invención: No conviertas una semilla creativa en un hecho rígido si contradice la continuidad de la canción.\n` : ""}- Estado Emocional (Mood): ${params.moodId}
 ${narrativeConflict}
-${sceneBrief ? `${sceneBrief}\n` : ""}- Detalles Concretos (Show, Don't Tell): Describe transacciones, objetos físicos, marcas o acciones tangibles de calle. Evita formulaciones genéricas o moralejas de autoayuda.
+${sceneBrief ? `${sceneBrief}\n` : ""}${customIntroGuideline ? `${customIntroGuideline}\n` : ""}${refTrackGuideline ? `${refTrackGuideline}\n` : ""}${lockedSectionsBlock ? `${lockedSectionsBlock}\n` : ""}- Detalles Concretos (Show, Don't Tell): Describe transacciones, objetos físicos, marcas o acciones tangibles de calle. Evita formulaciones genéricas o moralejas de autoayuda.
 - REGLA DE ORO DE AD-LIBS Y LETRA (P3 INVIOLABLE):
   * Los corchetes [Section: Artist - Timbre] DEBEN llevar el nombre del artista para que Suno AI modele la voz y el flow adecuado.
   * PERO en el cuerpo de la letra y muy especialmente dentro de los paréntesis de ad-libs ( ... ) queda TERMINANTEMENTE PROHIBIDO que el rapero mencione, cante o grite su propio nombre, nombres de artistas de referencia, apodos o sellos discográficos (PROHIBIDO poner ad-libs como "(Takeoff!)", "(Fredo!)", "(Santana!)", "(Duki!)", "(Savage Squad!)", "(Quavo!)", "(Offset!)", "(Carti!)"). NUNCA nombres de personas, porque Suno canta literalmente lo que hay entre paréntesis.
@@ -504,10 +611,18 @@ ${producerLine ? `${producerLine}\n` : ""}
 # CAPA 3: IDENTIDAD VOCAL FUNCIONAL, IDIOMA & POCKET
 - Voz Principal: Timbre ${leadStyle.timbre}. Cadencia ${leadStyle.cadence}. Textura de rima: ${leadStyle.rhymeTexture}. Actitud: ${leadStyle.emotionalPosture}.
 ${featStyle ? `- Voz Feature: Timbre ${featStyle.timbre}. Cadencia ${featStyle.cadence}. Textura: ${featStyle.rhymeTexture}.\n` : ""}- Dialecto & Slang: ${leadStyle.dialectAndVocabulary}${params.customDictionary?.trim() ? ` + Diccionario local: { ${params.customDictionary.trim()} }` : ""}
-- Idioma (Spanglish): ${spanglishGuideline}
+${spanishFlavorGuideline ? `${spanishFlavorGuideline}\n` : ""}- Idioma (Spanglish): ${spanglishGuideline}
 - Pocket & BPM: ${pocketGuideline}
-- POCKET DE BARRAS CONCISAS (ATLANTA STACCATO & TRIPLETS): Prioriza barras cortas, directas y percusivas (5 a 8 sílabas promedio) que dejen respirar al 808 y los hats. Evita oraciones largas de prosa explicativa.
-- PUNCHLINES DE FLEXING & CULTURA POP: Emplea comparaciones extravagantes y humor irreverente de marcas, tecnología y comida (estilo 2 Chainz / Migos: Amazon Prime, Sears, joystick, Birkin, Takis, Hibachi, Urus, Lear, etc.) para que la letra tenga chispa y swagger sin caer en dramatismos monótonos.
+${beatTypeGuideline ? `${beatTypeGuideline}\n` : ""}${flowPocketGuideline ? `${flowPocketGuideline}\n` : ""}${rhymeSchemeGuideline ? `${rhymeSchemeGuideline}\n` : ""}${goldenAnchorBlock ? `${goldenAnchorBlock}\n` : ""}${collabGuideline ? `${collabGuideline}\n` : ""}- POCKET DE BARRAS CONCISAS (ATLANTA STACCATO & TRIPLETS): Prioriza barras cortas, directas y percusivas (5 a 8 sílabas promedio) que dejen respirar al 808 y los hats. Evita oraciones largas de prosa explicativa.
+- INGENIERÍA DE PUNCHLINES CON PEGADA (SETUP + PUNCH + TWIST):
+  * Cada estrofa debe incluir 2 a 3 barras memorables ('quotables') con remate contundente y actitud.
+  * Estructura Setup -> Twist: Compás 1 plantea la imagen o situación; Compás 2 remata con una comparación inesperada, juego de palabras o doble sentido ingenioso.
+  * Show, Don't Tell (Detalles Concretos): Describe objetos tangibles, marcas de diseñador, calzado, vehículos, transacciones o tecnología${concreteImagery ? ` (ej: ${concreteImagery})` : ""}. CERO discurso abstracto genérico ('tengo poder', 'nadie me para').
+  * Anti-Cliché Estricto: TERMINANTEMENTE PROHIBIDO usar rimas trilladas infantiles de fin de compás como 'calle/detalle', 'camino/destino', 'fuego/juego', 'dinero/primero', 'fama/cama'. Prioriza rimas asonantes, rimas internas cruzadas y silencios.
+- ARQUITECTURA DEL GANCHO [HOOK / CHORUS] (MANTRA HIPNÓTICO):
+  * El estribillo NO es otra estrofa narrativa: es el corazón adictivo, bailable y contagioso de la canción.
+  * Constrúyelo en torno a un MANTRA de 2 a 4 compases de alto impacto, repetición rítmica y cadencia melódica fácil de corear.
+  * Hook Anchor: Mantén la frase ancla central y el concepto en cada repetición del hook, admitiendo variaciones secundarias en ad-libs o palabras de transición.
 
 # CAPA 4: MAPA ESTRUCTURAL
 Sigue este esqueleto. Para el conteo operativo de la aplicación, cada línea se tratará como una unidad aproximada de interpretación. No sacrifiques naturalidad para forzar una división métrica artificial:
@@ -577,6 +692,8 @@ TAREA LÍRICA:
 Reescribe desde cero ÚNICAMENTE esta sección.
 - Conserva la función narrativa y los hechos ya establecidos en la canción.
 - Cambia completamente la formulación lírica, la cadencia del flow, los patrones de rima y los punchlines para que suenen más frescos y originales.
+- Remates y Pegada: Incluye al menos 1 o 2 punchlines memorables con estructura Setup -> Twist y detalles físicos o de flex concretos (Show, Don't Tell).
+- CERO Clichés Infantiles: Prohibido usar rimas trilladas de fin de compás como calle/detalle, camino/destino, fuego/juego, dinero/primero.
 - PROHIBIDO copiar versos literales de la versión previa de esta sección (salvo los elementos ancla autorizados).
 
 SALIDA ESTRICTA:

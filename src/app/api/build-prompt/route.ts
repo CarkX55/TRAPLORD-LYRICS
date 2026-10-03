@@ -83,6 +83,7 @@ interface BuildPromptBody {
   adlibStyle?: "textured" | "classic" | "minimal";
   situationalPresetId?: string;
   flowPocketMode?: "auto" | "bouncy" | "triplets" | "heavy";
+  spanishFlavor?: import("@/lib/dialect-engine").SpanishFlavor;
 }
 
 function resolveTopics(topicIds: string[]): string[] {
@@ -193,6 +194,7 @@ export async function POST(req: NextRequest) {
       adlibStyle: body.adlibStyle,
       situationalPresetId: body.situationalPresetId,
       flowPocketMode: body.flowPocketMode,
+      spanishFlavor: body.spanishFlavor,
     };
 
     const prompt = buildSystemPrompt(promptParams);
