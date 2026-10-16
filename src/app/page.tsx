@@ -106,6 +106,7 @@ interface Preset {
   bpm: string;
   structure: string;
   customSections?: SongSection[];
+  sectionVoices?: SectionVoiceAssignment[];
   spanglish: number;
   topics: string[];
   label: string;
@@ -894,7 +895,6 @@ export default function TrapGhostPage() {
       if (data.beatPrompt) setBeatPrompt(data.beatPrompt);
       if (data.sunoStylePrompt) setSunoStylePrompt(data.sunoStylePrompt);
       if (data.sunoLayers) setSunoLayers(data.sunoLayers);
-      if (lockedSections.length > 0) setLockedSections([]);
 
       const moodLabel = MOODS.find(m => m.id === moodId)?.label ?? moodId;
       const entry: HistoryEntry = {
@@ -1477,7 +1477,7 @@ export default function TrapGhostPage() {
   }, []);
 
   // ===== Regenerate single section =====
-  const handleRegenerateSection = useCallback(async (sectionName: string, sectionContent: string) => {
+  const handleRegenerateSection = useCallback(async (sectionName: string, sectionContent: string, targetIndex?: number) => {
     const hasKey = Boolean(geminiApiKey.trim() || hasServerKey);
     if (!hasKey) {
       setApiKeyOpen(true);
@@ -1495,10 +1495,12 @@ export default function TrapGhostPage() {
         .map(s => s.trim())
         .filter(Boolean);
 
-      const secIdx = allSections.findIndex(s => {
-        const headerMatch = s.match(/^\[([^\]:]+)/);
-        return headerMatch && headerMatch[1].trim().toLowerCase() === sectionName.trim().toLowerCase();
-      });
+      const secIdx = (targetIndex !== undefined && targetIndex >= 0 && targetIndex < allSections.length)
+        ? targetIndex
+        : allSections.findIndex(s => {
+            const headerMatch = s.match(/^\[([^\]:]+)/);
+            return headerMatch && headerMatch[1].trim().toLowerCase() === sectionName.trim().toLowerCase();
+          });
 
       let previousSectionTail = "";
       let nextSectionHead = "";
@@ -1574,39 +1576,62 @@ export default function TrapGhostPage() {
         artistId,
         featureArtistId: featureArtist?.id,
         sectionVoices,
+        stripArtistNames: hideArtistNames,
       });
-      // Safe replacement: find the old section by tag and replace with new
-      const escapedName = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const sectionRegex = new RegExp(`(?:###?\\s*)?\\[${escapedName}[^\\]]*\\][^]*?(?=(?:###?\\s*\\[|$))`, "i");
-      let updatedLyrics = lyrics;
-      if (sectionRegex.test(lyrics)) {
-        updatedLyrics = lyrics.replace(sectionRegex, `${newSectionText}\n\n`);
-      } else {
-        updatedLyrics = lyrics + `\n\n${newSectionText}`;
-      }
-      setLyrics(updatedLyrics);
-      setAnalysis(analyzeLanguageRatio(updatedLyrics, spanglishPercent));
-      if (data.generationLog) setGenerationLog(data.generationLog);
-      if (data.versionGraph) {
-        setVersionGraph(data.versionGraph);
-      } else if (data.songDocument) {
-        setVersionGraph(prev => {
-          if (!prev) return null;
-          return addVersionNode(
-            prev,
-            data.songDocument!,
-            `Regeneración de [${sectionName}]`,
-            data.songDocument!.sections.find(s => s.name === sectionName)?.bars.map(b => b.id) || [],
-            data.analysisSnapshot,
-            {
-              source: "section-regeneration",
-              promptOrigin: "compiled",
-              topP: 0.95,
-              lyrics: updatedLyrics,
-            }
-          );
+
+      // Split into discrete section blocks to preserve the exact occurrence
+      const sectionBlocks = lyrics.split(/\n(?=(?:#{1,6}\s*)?\[[^\]\n]+\])/).map(b => b.trim()).filter(Boolean);
+      let replaceIdx = targetIndex;
+      if (replaceIdx === undefined || replaceIdx < 0 || replaceIdx >= sectionBlocks.length) {
+        replaceIdx = sectionBlocks.findIndex(b => {
+          const match = b.match(/^\[([^\]:]+)/);
+          return match && match[1].trim().toLowerCase() === sectionName.trim().toLowerCase();
         });
       }
+
+      let updatedLyrics = lyrics;
+      if (replaceIdx !== -1 && replaceIdx < sectionBlocks.length) {
+        sectionBlocks[replaceIdx] = newSectionText.trim();
+        updatedLyrics = sectionBlocks.join("\n\n");
+      } else {
+        const escapedName = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const sectionRegex = new RegExp(`(?:###?\\s*)?\\[${escapedName}[^\\]]*\\][^]*?(?=(?:###?\\s*\\[|$))`, "i");
+        if (sectionRegex.test(lyrics)) {
+          updatedLyrics = lyrics.replace(sectionRegex, `${newSectionText}\n\n`);
+        } else {
+          updatedLyrics = lyrics + `\n\n${newSectionText}`;
+        }
+      }
+
+      setLyrics(updatedLyrics);
+      const newAST = parseRawLyricsToAST(updatedLyrics);
+      setSongDocument(newAST);
+      setAnalysis(analyzeLanguageRatio(updatedLyrics, spanglishPercent));
+      if (data.generationLog) setGenerationLog(data.generationLog);
+
+      setVersionGraph(prev => {
+        if (!prev) {
+          return createInitialVersionGraph(newAST, `Regeneración de [${sectionName}]`);
+        }
+        const changedSec = (targetIndex !== undefined && targetIndex >= 0 && targetIndex < newAST.sections.length)
+          ? newAST.sections[targetIndex]
+          : newAST.sections.find(s => s.name.toLowerCase() === sectionName.toLowerCase());
+        const targetBarIds = changedSec?.bars.map(b => b.id) || [];
+        return addVersionNode(
+          prev,
+          newAST,
+          `Regeneración de [${sectionName}]`,
+          targetBarIds,
+          data.analysisSnapshot,
+          {
+            source: "section-regeneration",
+            promptOrigin: "compiled",
+            topP: 0.95,
+            lyrics: updatedLyrics,
+          }
+        );
+      });
+
       toast.success(`Sección "${sectionName}" re-generada`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error desconocido");
@@ -1617,7 +1642,7 @@ export default function TrapGhostPage() {
       bpmVibeId, structureId, narrativeArcId, producerId, producerTag, customDictionary,
       dynamicMarkers, chorusLangOverride, versesLangOverride, barCountOverride,
       rhymeSchemeId, temperature, lyrics, customSections, isCustomStructure, flowPocketMode,
-      geminiApiKey, hasServerKey, hideArtistNames]);
+      geminiApiKey, hasServerKey, hideArtistNames, sectionVoices, featureArtist]);
 
   // ===== Share URL (encode config into URL hash) =====
   const handleShareUrl = useCallback(() => {
@@ -1625,6 +1650,7 @@ export default function TrapGhostPage() {
       a: artistId, f: featureArtistId, m: moodId, t: selectedTopics,
       ct: customTopic, sp: spanglishPercent, bpm: bpmVibeId, st: structureId,
       csec: isCustomStructure ? customSections : undefined,
+      secv: sectionVoices.length > 0 ? sectionVoices : undefined,
       na: narrativeArcId, p: producerId, pt: producerTag, cd: customDictionary,
       dm: dynamicMarkers, cl: chorusLangOverride, vl: versesLangOverride,
       bc: barCountOverride, rs: rhymeSchemeId, tp: temperature,
@@ -1641,7 +1667,7 @@ export default function TrapGhostPage() {
   }, [artistId, featureArtistId, moodId, selectedTopics, customTopic, spanglishPercent,
       bpmVibeId, structureId, narrativeArcId, producerId, producerTag, customDictionary,
       dynamicMarkers, chorusLangOverride, versesLangOverride, barCountOverride,
-      rhymeSchemeId, temperature, customSections, isCustomStructure, flowPocketMode]);
+      rhymeSchemeId, temperature, customSections, isCustomStructure, flowPocketMode, sectionVoices]);
 
   // ===== Load config from URL hash on mount =====
   useEffect(() => {
@@ -1663,6 +1689,7 @@ export default function TrapGhostPage() {
         setCustomSections(config.csec);
         setIsCustomStructure(true);
       }
+      if (config.secv && Array.isArray(config.secv)) setSectionVoices(config.secv);
       if (config.na) setNarrativeArcId(config.na);
       if (config.p) setProducerId(config.p);
       if (config.pt !== undefined) setProducerTag(config.pt);
@@ -2308,6 +2335,7 @@ export default function TrapGhostPage() {
       bpm: bpmVibeId,
       structure: structureId,
       customSections: isCustomStructure ? customSections : undefined,
+      sectionVoices: sectionVoices.length > 0 ? sectionVoices : undefined,
       spanglish: spanglishPercent,
       topics: selectedTopics,
       label: `${artist?.name ?? "Libre"} · ${structure.label.split(" ")[0]} · ${spanglishPercent}%EN`,
@@ -2316,7 +2344,7 @@ export default function TrapGhostPage() {
     setPresets(updated);
     try { localStorage.setItem("trapghost_presets", JSON.stringify(updated)); } catch {}
     toast.success("Preset guardado");
-  }, [artistId, moodId, bpmVibeId, structureId, spanglishPercent, selectedTopics, presets, artist, structure, customSections, isCustomStructure]);
+  }, [artistId, moodId, bpmVibeId, structureId, spanglishPercent, selectedTopics, presets, artist, structure, customSections, isCustomStructure, sectionVoices]);
 
   const loadPreset = useCallback((p: Preset) => {
     setArtistId(p.artist);
@@ -2332,6 +2360,11 @@ export default function TrapGhostPage() {
         setCustomSections([...found.sections]);
         setIsCustomStructure(false);
       }
+    }
+    if (p.sectionVoices && Array.isArray(p.sectionVoices)) {
+      setSectionVoices(p.sectionVoices);
+    } else {
+      setSectionVoices([]);
     }
     setSpanglishPercent(p.spanglish);
     setSelectedTopics(p.topics);
@@ -3430,6 +3463,18 @@ export default function TrapGhostPage() {
                                   </Badge>
                                 </div>
                               )
+                            ) : isOutro ? (
+                              outroStyle && outroStyle.id !== "auto" && (
+                                <div className="flex items-center gap-2 pl-2.5 pr-2 py-1 rounded border border-purple-400/30 bg-purple-400/5 text-[10px] flex-wrap">
+                                  <span className="text-purple-300 shrink-0 font-medium flex items-center gap-1">
+                                    <span>{outroStyle.icon}</span> {outroStyle.label}:
+                                    <span className="text-muted-foreground font-normal ml-1 truncate max-w-[260px] sm:max-w-md">{outroStyle.description}</span>
+                                  </span>
+                                  <Badge variant="outline" className="text-[9px] border-purple-400/40 text-purple-300 bg-purple-400/10 ml-auto">
+                                    {outroStyle.badge}
+                                  </Badge>
+                                </div>
+                              )
                             ) : (
                               repPattern && repPattern.id !== "none" && (
                                 <div className="flex items-center gap-2 pl-2.5 pr-2 py-1 rounded border border-cyber/30 bg-cyber/5 text-[10px]">
@@ -3462,9 +3507,12 @@ export default function TrapGhostPage() {
                                 sectionName: sec.name,
                                 isChorus,
                                 isIntro,
+                                isOutro,
                                 isTrading2x2: assign?.voice === "trading_2x2",
                                 isHype: assign?.voice === "hype",
                                 introStyle: assign?.introStyle,
+                                outroStyle: assign?.outroStyle,
+                                hideArtistNames,
                               });
                               return (
                                 <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground/80 px-1 pt-1 border-t border-border/15 font-mono overflow-hidden">
@@ -4913,7 +4961,7 @@ export default function TrapGhostPage() {
                                 {locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
                               </button>
                               <button
-                                onClick={() => handleRegenerateSection(secName, sectionContent)}
+                                onClick={() => handleRegenerateSection(secName, sectionContent, i)}
                                 disabled={loading}
                                 className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-muted-foreground hover:text-cyber disabled:opacity-30"
                                 title="Re-generar solo esta sección"

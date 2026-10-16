@@ -359,10 +359,10 @@ export const STRUCTURES: SongStructure[] = [
   { id: "std_epic", label: "Épico (Intro-V1-PreC-C-V2-PreC-C-Bridge-C-Outro)", sections: [
     { name: "Intro", type: "intro" },
     { name: "Verse 1", type: "verse" },
-    { name: "Pre-Chorus", type: "bridge" },
+    { name: "Pre-Chorus", type: "pre-chorus" },
     { name: "Chorus", type: "chorus" },
     { name: "Verse 2", type: "verse" },
-    { name: "Pre-Chorus", type: "bridge" },
+    { name: "Pre-Chorus", type: "pre-chorus" },
     { name: "Chorus", type: "chorus" },
     { name: "Bridge", type: "bridge" },
     { name: "Chorus", type: "chorus" },

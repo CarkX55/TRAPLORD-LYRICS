@@ -476,6 +476,10 @@ export async function POST(req: NextRequest) {
       let voiceArtistId = body.artistId;
       if (va?.voice === "feature" || s.name.toLowerCase().includes("feat")) {
         voiceArtistId = body.featureArtistId || body.artistId;
+      } else if (va?.voice && va.voice !== "auto" && va.voice !== "main" && va.voice !== "both" && va.voice !== "trading_2x2" && va.voice !== "hype") {
+        if (getArtistById(va.voice)) {
+          voiceArtistId = va.voice;
+        }
       }
       return {
         id: s.name.toLowerCase().replace(/\s+/g, "_"),

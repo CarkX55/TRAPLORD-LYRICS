@@ -147,6 +147,33 @@ export interface VocalGuideResult {
 }
 
 /**
+ * Resuelve el ID del artista real asignado a una sección a partir de su voiceId.
+ * Soporta roles abstractos ("main", "feature", "auto") e IDs específicos de artistas de ARTISTS_DATA.
+ */
+export function resolveSectionArtistId(
+  voiceId: string | undefined,
+  mainArtistId: string,
+  featureArtistId?: string,
+  isFeatureDefault: boolean = false
+): string {
+  if (!voiceId || voiceId === "auto") {
+    return (isFeatureDefault && featureArtistId && featureArtistId !== "none") ? featureArtistId : mainArtistId;
+  }
+  if (voiceId === "main") return mainArtistId;
+  if (voiceId === "feature") return (featureArtistId && featureArtistId !== "none") ? featureArtistId : mainArtistId;
+  if (voiceId === "both" || voiceId === "trading_2x2" || voiceId === "hype") return mainArtistId;
+  if (voiceId.startsWith("instrumental:")) return mainArtistId;
+
+  // Si es un ID de artista específico registrado en ARTISTS_DATA
+  const assigned = getArtistById(voiceId);
+  if (assigned) {
+    return assigned.id;
+  }
+
+  return mainArtistId;
+}
+
+/**
  * Resuelve la guía vocal concisa optimizada para Suno AI a partir del artista o rol asignado.
  * Guía al modelo de Suno con timbre, género vocal, autotune, efectos y cadencia.
  */
@@ -159,15 +186,18 @@ export function resolveArtistVocalGuide(
     sectionName?: string;
     isChorus?: boolean;
     isIntro?: boolean;
+    isOutro?: boolean;
     isTrading2x2?: boolean;
     isHype?: boolean;
     introStyle?: IntroStyleId;
+    outroStyle?: OutroStyleId;
+    hideArtistNames?: boolean;
   } = {}
 ): VocalGuideResult {
   const mainArtist = options.mainArtistId ? getArtistById(options.mainArtistId) : null;
   const featArtist = options.featureArtistId ? getArtistById(options.featureArtistId) : null;
-  const mainName = mainArtist?.name ?? "Lead";
-  const featName = featArtist?.name ?? "Feature";
+  const mainName = options.hideArtistNames ? "Lead" : (mainArtist?.name ?? "Lead");
+  const featName = options.hideArtistNames ? "Feature" : (featArtist?.name ?? "Feature");
 
   const getGuideForId = (id?: string): string => {
     if (!id || id === "none") return "male vocal, modern autotune";
@@ -183,6 +213,7 @@ export function resolveArtistVocalGuide(
 
   const isChorus = options.isChorus || options.sectionType === "chorus" || options.sectionType === "hook" || options.sectionName?.toLowerCase().includes("chorus") || options.sectionName?.toLowerCase().includes("hook") || options.sectionName?.toLowerCase().includes("estribillo");
   const isIntro = options.isIntro || options.sectionType === "intro" || options.sectionName?.toLowerCase().includes("intro");
+  const isOutro = options.isOutro || options.sectionType === "outro" || options.sectionName?.toLowerCase().includes("outro") || options.sectionName?.toLowerCase().includes("final");
 
   if (voiceId === "main" || voiceId === "auto") {
     artistName = mainName;
@@ -191,10 +222,10 @@ export function resolveArtistVocalGuide(
     artistName = featName;
     vocalGuide = getGuideForId(options.featureArtistId);
   } else if (voiceId === "both") {
-    artistName = `${mainName} & ${featName}`;
+    artistName = options.hideArtistNames ? "Lead & Feature" : `${mainName} & ${featName}`;
     vocalGuide = "dual vocals in unison, wide stereo mix, stacked autotune harmonies";
   } else if (voiceId === "trading_2x2" || options.isTrading2x2) {
-    artistName = `${mainName} & ${featName}`;
+    artistName = options.hideArtistNames ? "Lead & Feature" : `${mainName} & ${featName}`;
     vocalGuide = "trading bars 2x2, rapid vocal back-and-forth, contrasting vocal flows";
   } else if (voiceId === "hype" || options.isHype) {
     artistName = mainName;
@@ -209,12 +240,12 @@ export function resolveArtistVocalGuide(
   } else {
     const assignedArtist = getArtistById(voiceId);
     if (assignedArtist) {
-      artistName = assignedArtist.name;
+      artistName = options.hideArtistNames ? "Guest" : assignedArtist.name;
       vocalGuide = getGuideForId(assignedArtist.id);
     }
   }
 
-  // Contextual nuance for Chorus / Intro
+  // Contextual nuance for Chorus / Intro / Outro
   if (isChorus && voiceId !== "both" && voiceId !== "trading_2x2") {
     const primaryTimbre = vocalGuide.split(",")[0]?.trim() || "melodic male vocal";
     vocalGuide = `${primaryTimbre}, layered stereo autotune harmonies, anthemic vocal stack`;
@@ -229,6 +260,18 @@ export function resolveArtistVocalGuide(
       }
     } else {
       vocalGuide = `${primaryTimbre}, spoken whisper intro, filtered vocal texture`;
+    }
+  } else if (isOutro && voiceId !== "hype") {
+    const primaryTimbre = vocalGuide.split(",")[0]?.trim() || "atmospheric male vocal";
+    if (options.outroStyle && options.outroStyle !== "auto") {
+      const outroOpt = getOutroStyleOptionById(options.outroStyle);
+      if (outroOpt?.sunoAcousticTag) {
+        vocalGuide = `${primaryTimbre}, ${outroOpt.sunoAcousticTag}`;
+      } else {
+        vocalGuide = `${primaryTimbre}, atmospheric fade out, decaying reverb tail`;
+      }
+    } else {
+      vocalGuide = `${primaryTimbre}, atmospheric fade out, decaying reverb tail`;
     }
   }
 
@@ -370,6 +413,9 @@ export function buildStructurePlan(params: PromptParams): string {
     }
 
     const voiceAssign = params.sectionVoices?.find(v => v.sectionName === s.name);
+    const isChorus = s.type === "chorus" || s.type === "hook" || s.name.toLowerCase().includes("chorus") || s.name.toLowerCase().includes("hook") || s.name.toLowerCase().includes("estribillo");
+    const isIntro = s.type === "intro" || s.name.toLowerCase().includes("intro");
+    const isOutro = s.type === "outro" || s.name.toLowerCase().includes("outro") || s.name.toLowerCase().includes("final");
     const isTrading2x2 = voiceAssign?.voice === "trading_2x2" || (s.name.toLowerCase().includes("trading") && !!featureArtist);
     const isHype = voiceAssign?.voice === "hype";
 
@@ -380,11 +426,14 @@ export function buildStructurePlan(params: PromptParams): string {
         featureArtistId: params.featureArtistId,
         sectionType: s.type,
         sectionName: s.name,
-        isChorus: s.type === "chorus" || s.type === "hook",
-        isIntro: s.type === "intro",
+        isChorus,
+        isIntro,
+        isOutro,
         isTrading2x2,
         isHype,
         introStyle: voiceAssign?.introStyle,
+        outroStyle: voiceAssign?.outroStyle,
+        hideArtistNames: params.hideArtistNames,
       }
     );
 
@@ -395,22 +444,110 @@ export function buildStructurePlan(params: PromptParams): string {
       barsNum = params.barCountOverride;
     } else if (s.type === "verse") {
       barsNum = 12;
-    } else if (s.type === "chorus" || s.type === "hook") {
+    } else if (isChorus) {
       barsNum = 8;
     } else {
       barsNum = 4;
     }
 
     const tag = vocalGuideResult.vocalGuide ? ` - ${vocalGuideResult.vocalGuide}` : "";
-    const isIntro = s.type === "intro" || s.name.toLowerCase().includes("intro");
+    const header = `[${s.name}: ${vocalGuideResult.artistName}${tag}]`;
+
+    // 1. MODO HYPE MAN
+    if (isHype || (isIntro && isHype)) {
+      return `${header} — 4 compases [MODO HYPE MAN: 🚫 PROHIBIDO ESCRIBIR VERSOS NARRATIVOS O LÍNEAS CANTADAS. Debe ser EXCLUSIVAMENTE 3 a 5 ad-libs y grunts de calentamiento entre paréntesis preparando la entrada del ritmo, rematando con ([Beat Drop])]`;
+    }
+
+    // 2. ARQUETIPO INTRO
     if (isIntro && voiceAssign?.introStyle && voiceAssign.introStyle !== "auto") {
       const opt = getIntroStyleOptionById(voiceAssign.introStyle);
       const producerName = params.producerName?.trim() || (params.producerId && params.producerId !== "none" ? getProducerById(params.producerId)?.name : "") || "Markoff";
       let instruction = opt?.instruction ?? "";
       instruction = instruction.replace(/\{PRODUCER\}/gi, producerName).replace(/\{NAME\}/gi, producerName);
-      return `[${s.name}: ${vocalGuideResult.artistName}${tag}] — ~${barsNum} líneas [ARQUETIPO INTRO: ${opt?.label ?? voiceAssign.introStyle}] (${instruction})`;
+      return `${header} — ~${barsNum} líneas [ARQUETIPO INTRO: ${opt?.label ?? voiceAssign.introStyle}] (${instruction})`;
     }
-    return `[${s.name}: ${vocalGuideResult.artistName}${tag}] — ~${barsNum} líneas aproximadas`;
+
+    // 3. ARQUETIPO OUTRO
+    if (isOutro && voiceAssign?.outroStyle && voiceAssign.outroStyle !== "auto") {
+      const opt = getOutroStyleOptionById(voiceAssign.outroStyle);
+      return `${header} — ~${barsNum} líneas [ARQUETIPO OUTRO: ${opt?.label ?? voiceAssign.outroStyle}] (${opt?.instruction ?? ""})`;
+    }
+
+    // 4. TRADING BARS 2x2
+    if (isTrading2x2 && featureArtist) {
+      const mainArtist = getArtistById(params.artistId);
+      return `${header} — ~${barsNum} líneas [TRADING 2x2: Alternar bloques de 2 en 2 compases entre [${mainArtist?.name ?? "Lead"}] y [${featureArtist.name}] con corte vocal, pique callejero y contraste de flows]`;
+    }
+
+    const sectionArtistId = resolveSectionArtistId(
+      voiceAssign?.voice,
+      params.artistId,
+      params.featureArtistId,
+      s.name.toLowerCase().includes("feature")
+    );
+    const sectionArtist = getArtistById(sectionArtistId);
+    const sectionFlow = getFlowProfile(sectionArtistId);
+    const sectionDna = getMusicalDNAForArtist(sectionArtistId);
+    const isCustomVoice = sectionArtistId !== params.artistId;
+
+    // 5. CHORUS (HOOK): Técnica Vocal, Contraste de Mood y Palabra Clave
+    if (isChorus) {
+      const hookDirectives: string[] = [`~${barsNum} líneas (Hook/Mantra)`];
+      if (isCustomVoice && sectionArtist) {
+        hookDirectives.push(`[INTÉRPRETE: ${sectionArtist.name} | FLOW MELÓDICO: ${sectionFlow?.cadence?.toUpperCase() || sectionDna?.flow?.cadenceType?.toUpperCase() || "MELÓDICO"} (${sectionFlow?.speedLabel || "natural"})]`);
+        if (sectionFlow?.hookStyle) {
+          hookDirectives.push(`[ESTILO HOOK: ${sectionFlow.hookStyle}]`);
+        }
+      }
+      if (voiceAssign?.hookStyle && voiceAssign.hookStyle !== "auto") {
+        const hStyle = getHookStyleOptionById(voiceAssign.hookStyle);
+        if (hStyle) hookDirectives.push(`[TÉCNICA VOCAL: ${hStyle.label} - ${hStyle.description}]`);
+      }
+      if (voiceAssign?.hookMood && voiceAssign.hookMood !== "auto") {
+        const hMood = MOODS.find(m => m.id === voiceAssign.hookMood);
+        if (hMood) hookDirectives.push(`[CONTRASTE EMOCIONAL: ${hMood.label} - ${hMood.description}]`);
+      }
+      if (voiceAssign?.customKeyword?.trim()) {
+        hookDirectives.push(`[PALABRA/FRASE OBLIGATORIA: "${voiceAssign.customKeyword.trim()}"]`);
+      }
+      return `${header} — ${hookDirectives.join(" ")}`;
+    }
+
+    // 6. VERSOS Y DEMÁS SECCIONES: Densidad, Patrón de Flow y Palabra Clave
+    const sectionDirectives: string[] = [`~${barsNum} líneas aproximadas`];
+
+    // Inyección de estilo y flow del artista específico de esta sección
+    if (sectionArtist) {
+      const cadenceTag = sectionFlow?.cadence?.toUpperCase() || sectionDna?.flow?.cadenceType?.toUpperCase() || "NATURAL";
+      const speedTag = sectionFlow?.speedLabel || "pocket estándar";
+      const originTag = sectionArtist.origin ? ` | DIALECTO: ${sectionArtist.origin}` : "";
+      sectionDirectives.push(`[INTÉRPRETE: ${sectionArtist.name} | FLOW: ${cadenceTag} (${speedTag})${originTag}]`);
+      if (sectionFlow?.cadenceInstruction && isCustomVoice) {
+        sectionDirectives.push(`[CADENCIA OBLIGATORIA: ${sectionFlow.cadenceInstruction}]`);
+      }
+    }
+
+    if (voiceAssign?.density && voiceAssign.density !== "normal") {
+      const densityMap: Record<string, string> = {
+        sparse: "DENSIDAD ESPACIADA (3-5 palabras/compás, silencios y pausas para el 808)",
+        dense: "DENSIDAD ELEVADA (8-11 palabras/compás, fraseo continuo)",
+        extra_dense: "DENSIDAD MÁXIMA (12+ palabras/compás, staccato rápido/tresillos)",
+      };
+      if (densityMap[voiceAssign.density]) {
+        sectionDirectives.push(`[${densityMap[voiceAssign.density]}]`);
+      }
+    }
+    if (voiceAssign?.repetitionPattern && voiceAssign.repetitionPattern !== "none") {
+      const rPattern = getRepetitionPatternById(voiceAssign.repetitionPattern);
+      if (rPattern) {
+        sectionDirectives.push(`[PATRÓN DE FLOW: ${rPattern.label} - ${rPattern.description}]`);
+      }
+    }
+    if (voiceAssign?.customKeyword?.trim()) {
+      sectionDirectives.push(`[PALABRA/FRASE OBLIGATORIA: "${voiceAssign.customKeyword.trim()}"]`);
+    }
+
+    return `${header} — ${sectionDirectives.join(" ")}`;
   }).join("\n");
 }
 
@@ -424,6 +561,20 @@ export function buildHolisticPrompt(params: PromptParams): string {
   const leadStyle = resolveFunctionalArtistStyle(params.artistId);
   const featStyle = featureArtist ? resolveFunctionalArtistStyle(featureArtist.id) : null;
   const flowProfile = getFlowProfile(params.artistId);
+
+  // Extraer artistas invitados únicos asignados a las secciones (excluyendo lead y feature)
+  const distinctGuestArtistIds = Array.from(
+    new Set(
+      (params.sectionVoices || [])
+        .map(v => resolveSectionArtistId(v.voice, params.artistId, params.featureArtistId))
+        .filter(id => id && id !== params.artistId && id !== params.featureArtistId)
+    )
+  );
+  const guestStyles = distinctGuestArtistIds.map(id => {
+    const art = getArtistById(id);
+    const st = resolveFunctionalArtistStyle(id);
+    return { id, name: art?.name ?? id, style: st, origin: art?.origin ?? "urbano" };
+  });
 
   // CAPA 2: NÚCLEO CREATIVO, CONFLICTO & NIVEL DE CRUDEZA (DIRTY LEVEL)
   const establishedFacts = params.customTopic?.trim()
@@ -470,14 +621,60 @@ export function buildHolisticPrompt(params: PromptParams): string {
 
   // Reference track analysis
   let refTrackGuideline = "";
-  if (params.referenceTrack?.summary) {
-    refTrackGuideline = `- Dinámica de Referencia: Tempo ~${params.referenceTrack.summary.bpm} BPM, energía ${params.referenceTrack.summary.energy}, esquema rítmico ${params.referenceTrack.summary.detectedRhymeScheme}, pockets: ${params.referenceTrack.summary.flowPockets.join(", ")}.`;
+  if (params.referenceTrack) {
+    const details = [
+      params.referenceTrack.summary ? `Resumen: ${params.referenceTrack.summary}` : "",
+      params.referenceTrack.rhymeScheme ? `Esquema: ${params.referenceTrack.rhymeScheme}` : "",
+      params.referenceTrack.density ? `Densidad: ${params.referenceTrack.density}` : "",
+      params.referenceTrack.avgSyllablesPerBar ? `~${params.referenceTrack.avgSyllablesPerBar} síl/compás` : "",
+      params.referenceTrack.hookStyle ? `Estilo hook: ${params.referenceTrack.hookStyle}` : "",
+    ].filter(Boolean).join(" | ");
+    refTrackGuideline = `- Dinámica de Referencia: ${details}`;
   }
 
   // Locked sections
   let lockedSectionsBlock = "";
   if (params.lockedSections && params.lockedSections.length > 0) {
     lockedSectionsBlock = `- COMPASES BLOQUEADOS POR EL USUARIO (INMUTABLES):\n${params.lockedSections.map(s => `  [${s.name}]:\n${s.content}`).join("\n")}\nConserva estas secciones exactamente como están en la letra final.`;
+  }
+
+  // Ad-lib Style
+  let adlibDirective = "";
+  if (params.adlibStyle === "minimal") {
+    adlibDirective = "- ESTILO DE AD-LIBS [Mínimo / Crudo]: Voz principal limpia y al frente, sin capas secundarias saturadas. Solo 1 a 2 ad-libs breves por estrofa en momentos de remate.";
+  } else if (params.adlibStyle === "textured") {
+    adlibDirective = "- ESTILO DE AD-LIBS [Texturado / Vanguardia]: Armonías secundarias cantadas, réplicas conversacionales entre dientes y silencios hiperrealistas [Pause].";
+  } else if (params.adlibStyle === "classic") {
+    adlibDirective = "- ESTILO DE AD-LIBS [Clásico de Época]: Ad-libs icónicos característicos entre paréntesis en los huecos del compás ((Facts!), (Cash!), (Skrrt!), ecos de la última palabra).";
+  }
+
+  // Dynamism Mode
+  let dynamismDirective = "";
+  if (params.dynamismMode === "vanguard") {
+    dynamismDirective = "- DINAMISMO & FLOW SWITCHING [Vanguardia]: Cambios de cadencia inesperados entre estrofas, tresillos sincopados en barras pares, quiebros de cadencia y contraste dinámico.";
+  } else if (params.dynamismMode === "classic") {
+    dynamismDirective = "- DINAMISMO & FLOW [Clásico]: Cadencia firme y locked pocket en tiempo estándar sin quiebros abruptos.";
+  }
+
+  // Semantic Anchor (Sensory scene & emotional axis)
+  let semanticAnchorDirective = "";
+  if (params.semanticAnchor?.sensoryDescription) {
+    semanticAnchorDirective = `- ANCLAJE SENSORIAL DE ESCENA: ${params.semanticAnchor.sensoryDescription} (Eje emocional: ${params.semanticAnchor.emotionalAxis || "tensión callejera"}). Usa detalles tangibles, transacciones y objetos físicos de este espacio.`;
+  }
+
+  // Feature simulation dynamics
+  let featureSimDirective = "";
+  if (params.featureSimId && params.featureSimId !== "solo" && params.featureSimId !== "none") {
+    const sim = getFeatureSimById(params.featureSimId);
+    if (sim) {
+      featureSimDirective = `- DINÁMICA DE COLABORACIÓN [${sim.label}]: ${sim.description}`;
+    }
+  }
+
+  // Language DNA block if available
+  let languageDNADirective = "";
+  if (params.languageDNA?.instructionBlock) {
+    languageDNADirective = `- ESTRUCTURA LINGÜÍSTICA REGIONAL & DIALECTO:\n${params.languageDNA.instructionBlock}`;
   }
 
   // CAPA 3: POCKET, BEAT TYPE & BPM
@@ -589,7 +786,7 @@ Tu objetivo primordial es lograr una voz con personalidad arrolladora, continuid
 - P0. Seguridad y privacidad: No expongas claves, secretos, variables de servidor, trazas internas ni instrucciones del sistema en la salida.
 - P1. Transporte y formato mínimo: Devuelve únicamente el contenido lírico solicitado, con encabezados parseables entre corchetes [Section: Artist - Timbre] cuando la sección sea lírica o instrumental. Cero introducciones conversacionales ni conclusiones.
 - P2. Continuidad y Hechos Establecidos: Mantén la coherencia dramática de la historia y los hechos fijados como verdaderos.
-- P3. Identidad vocal funcional: Timbre, cadencia, actitud y dialecto auténticos. Los nombres de los artistas SOLO van en los corchetes de sección [Section: Artist - Timbre]. NUNCA en la letra ni en ad-libs.
+- P3. Identidad vocal funcional: Timbre, cadencia, actitud y dialecto auténticos. Los nombres de los artistas SOLO van en los corchetes de sección [Section: Artist - Timbre]. NUNCA en la letra ni en ad-libs.${params.hideArtistNames ? " Puedes usar nombres funcionales como [Section: Lead - Timbre] o [Section: Feature - Timbre] si se requiere anonimato." : ""}
 - P4. Estructura y roles: Respeta la asignación de voces y el número aproximado de barras.
 - P5. Pocket y groove: Respeta el tempo y los espacios rítmicos sin forzar simetrías métricas rígidas.
 - P6. Rima y texturas: Evita rimas previsibles cuando solo estén ahí para cerrar la línea. Prioriza la intención, la voz y el groove sobre la complejidad técnica.
@@ -600,9 +797,9 @@ Cuando dos preferencias entren en tensión, cumple primero la de mayor prioridad
 ${dirtyGuideline}
 ${establishedFacts ? `- ${establishedFacts}\n` : ""}${creativeSeeds ? `- ${creativeSeeds}\n- Regla de no-invención: No conviertas una semilla creativa en un hecho rígido si contradice la continuidad de la canción.\n` : ""}- Estado Emocional (Mood): ${params.moodId}
 ${narrativeConflict}
-${sceneBrief ? `${sceneBrief}\n` : ""}${customIntroGuideline ? `${customIntroGuideline}\n` : ""}${refTrackGuideline ? `${refTrackGuideline}\n` : ""}${lockedSectionsBlock ? `${lockedSectionsBlock}\n` : ""}- Detalles Concretos (Show, Don't Tell): Describe transacciones, objetos físicos, marcas o acciones tangibles de calle. Evita formulaciones genéricas o moralejas de autoayuda.
+${sceneBrief ? `${sceneBrief}\n` : ""}${semanticAnchorDirective ? `${semanticAnchorDirective}\n` : ""}${customIntroGuideline ? `${customIntroGuideline}\n` : ""}${refTrackGuideline ? `${refTrackGuideline}\n` : ""}${lockedSectionsBlock ? `${lockedSectionsBlock}\n` : ""}- Detalles Concretos (Show, Don't Tell): Describe transacciones, objetos físicos, marcas o acciones tangibles de calle. Evita formulaciones genéricas o moralejas de autoayuda.
 - REGLA DE ORO DE AD-LIBS Y LETRA (P3 INVIOLABLE):
-  * Los corchetes [Section: Artist - Timbre] DEBEN llevar el nombre del artista para que Suno AI modele la voz y el flow adecuado.
+  * Los corchetes [Section: Artist - Timbre] DEBEN llevar el nombre del artista o rol para que Suno AI modele la voz y el flow adecuado.
   * PERO en el cuerpo de la letra y muy especialmente dentro de los paréntesis de ad-libs ( ... ) queda TERMINANTEMENTE PROHIBIDO que el rapero mencione, cante o grite su propio nombre, nombres de artistas de referencia, apodos o sellos discográficos (PROHIBIDO poner ad-libs como "(Takeoff!)", "(Fredo!)", "(Santana!)", "(Duki!)", "(Savage Squad!)", "(Quavo!)", "(Offset!)", "(Carti!)"). NUNCA nombres de personas, porque Suno canta literalmente lo que hay entre paréntesis.
   * ECOS RÍTMICOS DE REMATE (Migos / Atlanta Style): Se alienta fuertemente usar ad-libs que hagan eco de la última palabra o remate de la barra anterior (ej: "Trap como narco (Narco)", "Moviendo los gramos (Gramos)", "Corto el brick con el fajo (Fajo)").
   * AD-LIBS DE ACCIÓN, REMATE Y ACTITUD: Usa onomatopeyas y reacciones callejeras cortantes que aporten ritmo y textura (ej: (Click!), (Facts), (Cash!), (Bling), (Cha-ching!), (Next!), (Baa!), (Skrrt!), (Brrt!), (Grrah!), (Woo!), (No cap!), (Hold on!)).
@@ -610,10 +807,10 @@ ${sceneBrief ? `${sceneBrief}\n` : ""}${customIntroGuideline ? `${customIntroGui
 ${producerLine ? `${producerLine}\n` : ""}
 # CAPA 3: IDENTIDAD VOCAL FUNCIONAL, IDIOMA & POCKET
 - Voz Principal: Timbre ${leadStyle.timbre}. Cadencia ${leadStyle.cadence}. Textura de rima: ${leadStyle.rhymeTexture}. Actitud: ${leadStyle.emotionalPosture}.
-${featStyle ? `- Voz Feature: Timbre ${featStyle.timbre}. Cadencia ${featStyle.cadence}. Textura: ${featStyle.rhymeTexture}.\n` : ""}- Dialecto & Slang: ${leadStyle.dialectAndVocabulary}${params.customDictionary?.trim() ? ` + Diccionario local: { ${params.customDictionary.trim()} }` : ""}
-${spanishFlavorGuideline ? `${spanishFlavorGuideline}\n` : ""}- Idioma (Spanglish): ${spanglishGuideline}
+${featStyle ? `- Voz Feature: Timbre ${featStyle.timbre}. Cadencia ${featStyle.cadence}. Textura: ${featStyle.rhymeTexture}.\n` : ""}${guestStyles.map(g => `- Voz Invitada [${g.name}]: Timbre ${g.style.timbre}. Cadencia ${g.style.cadence}. Textura: ${g.style.rhymeTexture}. Actitud: ${g.style.emotionalPosture}. Dialecto: ${g.style.dialectAndVocabulary}.\n`).join("")}- Dialecto & Slang: ${leadStyle.dialectAndVocabulary}${params.customDictionary?.trim() ? ` + Diccionario local: { ${params.customDictionary.trim()} }` : ""}
+${guestStyles.length > 0 ? `- Aislamiento Dialectal entre Artistas: Cada intérprete asignado a una estrofa debe expresarse con su dialecto, cadencia y slang regional nativo sin contaminar las estrofas de los otros colaboradores.\n` : ""}${spanishFlavorGuideline ? `${spanishFlavorGuideline}\n` : ""}${languageDNADirective ? `${languageDNADirective}\n` : ""}- Idioma (Spanglish): ${spanglishGuideline}
 - Pocket & BPM: ${pocketGuideline}
-${beatTypeGuideline ? `${beatTypeGuideline}\n` : ""}${flowPocketGuideline ? `${flowPocketGuideline}\n` : ""}${rhymeSchemeGuideline ? `${rhymeSchemeGuideline}\n` : ""}${goldenAnchorBlock ? `${goldenAnchorBlock}\n` : ""}${collabGuideline ? `${collabGuideline}\n` : ""}- POCKET DE BARRAS CONCISAS (ATLANTA STACCATO & TRIPLETS): Prioriza barras cortas, directas y percusivas (5 a 8 sílabas promedio) que dejen respirar al 808 y los hats. Evita oraciones largas de prosa explicativa.
+${beatTypeGuideline ? `${beatTypeGuideline}\n` : ""}${flowPocketGuideline ? `${flowPocketGuideline}\n` : ""}${rhymeSchemeGuideline ? `${rhymeSchemeGuideline}\n` : ""}${goldenAnchorBlock ? `${goldenAnchorBlock}\n` : ""}${collabGuideline ? `${collabGuideline}\n` : ""}${featureSimDirective ? `${featureSimDirective}\n` : ""}${adlibDirective ? `${adlibDirective}\n` : ""}${dynamismDirective ? `${dynamismDirective}\n` : ""}- POCKET DE BARRAS CONCISAS (ATLANTA STACCATO & TRIPLETS): Prioriza barras cortas, directas y percusivas (5 a 8 sílabas promedio) que dejen respirar al 808 y los hats. Evita oraciones largas de prosa explicativa.
 - INGENIERÍA DE PUNCHLINES CON PEGADA (SETUP + PUNCH + TWIST):
   * Cada estrofa debe incluir 2 a 3 barras memorables ('quotables') con remate contundente y actitud.
   * Estructura Setup -> Twist: Compás 1 plantea la imagen o situación; Compás 2 remata con una comparación inesperada, juego de palabras o doble sentido ingenioso.
@@ -690,6 +887,7 @@ ${params.anchors?.lockedLines?.length ? `- Compases Bloqueados Inmutables: [${pa
 
 TAREA LÍRICA:
 Reescribe desde cero ÚNICAMENTE esta sección.
+- Interpreta la sección con el timbre vocal, la cadencia de flow y el dialecto regional de: ${params.artistStyle}.
 - Conserva la función narrativa y los hechos ya establecidos en la canción.
 - Cambia completamente la formulación lírica, la cadencia del flow, los patrones de rima y los punchlines para que suenen más frescos y originales.
 - Remates y Pegada: Incluye al menos 1 o 2 punchlines memorables con estructura Setup -> Twist y detalles físicos o de flex concretos (Show, Don't Tell).
@@ -717,15 +915,23 @@ export function buildSystemPrompt(params: PromptParams): string {
   if (params.regenerateSection) {
     const voiceAssign = params.sectionVoices?.find(v => v.sectionName === params.regenerateSection?.sectionName);
     const secObj = params.structure?.sections?.find(s => s.name === params.regenerateSection?.sectionName);
-    const leadStyle = resolveFunctionalArtistStyle(params.artistId);
+    const secArtistId = resolveSectionArtistId(
+      voiceAssign?.voice,
+      params.artistId,
+      params.featureArtistId,
+      secObj?.name.toLowerCase().includes("feature")
+    );
+    const secArtist = getArtistById(secArtistId);
+    const secStyle = resolveFunctionalArtistStyle(secArtistId);
+    const secFlow = getFlowProfile(secArtistId);
 
     return buildSectionRegenerationPrompt({
       sectionName: params.regenerateSection.sectionName,
       sectionType: params.regenerateSection.sectionType || (secObj?.type === "instrumental" || secObj?.type === "beat_drop" ? "instrumental" : "lyrical"),
-      artistStyle: `${leadStyle.timbre}, ${leadStyle.cadence}`,
+      artistStyle: `${secArtist?.name || "Artista"}: ${secStyle.timbre}, ${secStyle.cadence}. Textura de rima: ${secStyle.rhymeTexture}. Dialecto: ${secStyle.dialectAndVocabulary}`,
       exactLines: params.regenerateSection.exactLines || voiceAssign?.bars || (secObj?.type === "verse" ? 12 : 8),
       fullLyrics: params.regenerateSection.keepContext,
-      narrativeRole: params.regenerateSection.narrativeRole || `Re-escritura con flow fresco para [${params.regenerateSection.sectionName}]`,
+      narrativeRole: params.regenerateSection.narrativeRole || `Re-escritura con flow genuino de ${secArtist?.name || "el artista"} (${secFlow?.cadence?.toUpperCase() || "STACCATO"}, ${secFlow?.speedLabel || "natural"}) para [${params.regenerateSection.sectionName}]`,
       factsToPreserve: params.regenerateSection.factsToPreserve || (params.topics || []).slice(0, 5),
       previousSectionTail: params.regenerateSection.previousSectionTail,
       nextSectionHead: params.regenerateSection.nextSectionHead,
@@ -1101,6 +1307,7 @@ export function cleanSunoBracketHeaders(
           const va = options.sectionVoices?.find(v => v.sectionName.toLowerCase() === secName.toLowerCase());
           const isChorus = secName.toLowerCase().includes("chorus") || secName.toLowerCase().includes("hook") || secName.toLowerCase().includes("estribillo");
           const isIntro = secName.toLowerCase().includes("intro");
+          const isOutro = secName.toLowerCase().includes("outro") || secName.toLowerCase().includes("coda") || secName.toLowerCase().includes("final");
           const guide = resolveArtistVocalGuide(va?.voice ?? "auto", {
             mainArtistId: options.artistId,
             featureArtistId: options.featureArtistId,
@@ -1108,9 +1315,14 @@ export function cleanSunoBracketHeaders(
             isChorus,
             isIntro,
             introStyle: va?.introStyle,
+            isOutro,
+            outroStyle: va?.outroStyle,
+            hideArtistNames: options?.stripArtistNames,
           });
           if (guide.vocalGuide) {
-            content = `${secName}: ${voicePart} - ${guide.vocalGuide}`;
+            content = options?.stripArtistNames
+              ? `${secName}: ${guide.vocalGuide}`
+              : `${secName}: ${voicePart} - ${guide.vocalGuide}`;
           }
         }
       }
@@ -1142,7 +1354,12 @@ export function cleanSunoBracketHeaders(
     if (f?.name) artistNames.push(f.name);
   }
 
-  return stripArtistMentionsFromLyricBody(cleaned, artistNames);
+  let finalLyrics = cleaned;
+  if (options?.stripArtistNames) {
+    finalLyrics = stripArtistNamesFromLyrics(finalLyrics, artistNames);
+  }
+
+  return stripArtistMentionsFromLyricBody(finalLyrics, artistNames);
 }
 
 // ========================================================================
@@ -1452,6 +1669,22 @@ export function buildStage2GhostwriterPrompt(
   // Feature Contrast Profile (si hay feature artist)
   const featureContrast = featureArtist ? buildFeatureContrastProfile(params.artistId, featureArtist.id) : null;
 
+  // Extraer artistas invitados únicos asignados a las secciones (excluyendo lead y feature)
+  const distinctGuestArtistIds = Array.from(
+    new Set(
+      (params.sectionVoices || [])
+        .map(v => resolveSectionArtistId(v.voice, params.artistId, params.featureArtistId))
+        .filter(id => id && id !== params.artistId && id !== params.featureArtistId)
+    )
+  );
+  const guestArtists = distinctGuestArtistIds.map(id => {
+    const art = getArtistById(id);
+    const flow = getFlowProfile(id);
+    const dna = getMusicalDNAForArtist(id);
+    const rhyme = getRhymeSchemeById(customScheme?.id ?? flow?.defaultRhymeScheme ?? "rs_aabb");
+    return { id, name: art?.name ?? id, flow, dna, rhyme, origin: art?.origin ?? "urbano" };
+  });
+
   // Estructura limpia y autoridad de voces
   const structurePlan = params.structure.sections.map(s => {
     const va = params.sectionVoices?.find(v => v.sectionName === s.name);
@@ -1475,8 +1708,13 @@ export function buildStage2GhostwriterPrompt(
       }
     );
 
-    const isFeature = va?.voice === "feature" || (va?.voice === "auto" && s.name.toLowerCase().includes("feature") && !!featureArtist);
-    const sectionArtistId = isFeature && featureArtist ? featureArtist.id : params.artistId;
+    const sectionArtistId = resolveSectionArtistId(
+      va?.voice,
+      params.artistId,
+      featureArtist?.id,
+      s.name.toLowerCase().includes("feature")
+    );
+    const sectionArtist = getArtistById(sectionArtistId);
     const sectionFlow = getFlowProfile(sectionArtistId);
     const sectionRhymeId = customScheme?.id ?? sectionFlow?.defaultRhymeScheme ?? "rs_aabb";
     const sectionRhyme = getRhymeSchemeById(sectionRhymeId);
@@ -1528,7 +1766,7 @@ export function buildStage2GhostwriterPrompt(
       return `[${s.name}: ${guide.fullHeaderTag}] — 4 compases (Modo Hype Man: 🚫 PROHIBIDO ESCRIBIR VERSOS NARRATIVOS O LÍNEAS CANTADAS. Debe ser EXCLUSIVAMENTE 3 a 5 ad-libs y grunts de calentamiento entre paréntesis preparando la entrada del ritmo, rematando con ([Beat Drop]))`;
     }
 
-    return `[${s.name}: ${guide.fullHeaderTag}] — ${barDirective}${densityDirective}${repDirective} [VOZ: ${guide.artistName} | FLOW: ${sectionFlow?.cadence?.toUpperCase() ?? "STACCATO"} (${sectionFlow?.speedLabel ?? "natural"}) | RIMA: ${sectionRhyme?.label ?? "AABB"} (${sectionRhyme?.description ?? ""})]`;
+    return `[${s.name}: ${guide.fullHeaderTag}] — ${barDirective}${densityDirective}${repDirective} [VOZ: ${sectionArtist?.name || guide.artistName} | FLOW: ${sectionFlow?.cadence?.toUpperCase() ?? "STACCATO"} (${sectionFlow?.speedLabel ?? "natural"}) | RIMA: ${sectionRhyme?.label ?? "AABB"} (${sectionRhyme?.description ?? ""}) | DIALECTO: ${sectionArtist?.origin ?? "urbano"}]`;
   }).join("\n");
 
   const currentMood = MOODS.find(m => m.id === params.moodId) ?? { id: params.moodId, label: params.moodId, description: "" };
@@ -1637,8 +1875,7 @@ Si la [Intro] está en modo Hype Man o tiene asignado 'Hype', queda TERMINANTEME
 # 📜 CONTRATO 3: FLOW & MOTOR RÍTMICO (FLOW & RHYTHM CONTRACT)
 ================================================================================
 - Flow DNA (${artist?.name}): Cadencia ${flowProfile?.cadence?.toUpperCase() ?? mainDNA.flow.cadenceType} (${mainDNA.flow.avgSyllablesPerBar.join("-")} sílabas/compás). Velocidad: ${flowProfile?.speedLabel ?? "natural"}. Esquema Nativo: ${getRhymeSchemeById(customScheme?.id ?? flowProfile?.defaultRhymeScheme ?? "rs_aabb")?.label ?? "AABB"}. ${flowProfile?.cadenceInstruction ?? ""}
-${featDNA ? `- Flow Feature (${featureArtist?.name}): Cadencia ${featureFlowProfile?.cadence?.toUpperCase() ?? featDNA.flow.cadenceType} (${featDNA.flow.avgSyllablesPerBar.join("-")} sílabas/compás). Velocidad: ${featureFlowProfile?.speedLabel ?? "natural"}. Esquema Nativo: ${getRhymeSchemeById(customScheme?.id ?? featureFlowProfile?.defaultRhymeScheme ?? "rs_aabb")?.label ?? "AABB"}. ${featureFlowProfile?.cadenceInstruction ?? ""}` : ""}
-${featureContrast ? `${featureContrast.instruction}\n` : ""}- ${rhymeLevelInstruction}
+${featDNA ? `- Flow Feature (${featureArtist?.name}): Cadencia ${featureFlowProfile?.cadence?.toUpperCase() ?? featDNA.flow.cadenceType} (${featDNA.flow.avgSyllablesPerBar.join("-")} sílabas/compás). Velocidad: ${featureFlowProfile?.speedLabel ?? "natural"}. Esquema Nativo: ${getRhymeSchemeById(customScheme?.id ?? featureFlowProfile?.defaultRhymeScheme ?? "rs_aabb")?.label ?? "AABB"}. ${featureFlowProfile?.cadenceInstruction ?? ""}\n` : ""}${guestArtists.map(g => `- Flow Invitado (${g.name}): Cadencia ${g.flow?.cadence?.toUpperCase() ?? g.dna?.flow?.cadenceType?.toUpperCase() ?? "STACCATO"} (${g.dna?.flow?.avgSyllablesPerBar?.join("-") ?? "7-10"} sílabas/compás). Velocidad: ${g.flow?.speedLabel ?? "natural"}. Esquema Nativo: ${g.rhyme?.label ?? "AABB"}. ${g.flow?.cadenceInstruction ?? ""}\n`).join("")}${featureContrast ? `${featureContrast.instruction}\n` : ""}- ${rhymeLevelInstruction}
 
 - 🚨 DIRECTIVA DE RIMA OBLIGATORIA: CERO PROSA SUELTA. Cada sección debe respetar el esquema de rima asignado al artista que la interpreta. Todas las barras deben rimar auditivamente (consonante natural o asonante multi-silábica/slant rhyme). Se prohíben líneas huérfanas sin rima.
 
@@ -1724,13 +1961,27 @@ export function buildStage3VocalDirectorPrompt(params: PromptParams, fullLyrics:
     return va?.repetitionPattern === "call_response" || va?.hookStyle === "call_response";
   }).map(s => s.name);
 
+  // Extraer artistas invitados únicos asignados a las secciones
+  const distinctGuestArtistIds = Array.from(
+    new Set(
+      (params.sectionVoices || [])
+        .map(v => resolveSectionArtistId(v.voice, params.artistId, params.featureArtistId))
+        .filter(id => id && id !== params.artistId && id !== params.featureArtistId)
+    )
+  );
+  const guestVocalists = distinctGuestArtistIds.map(id => {
+    const art = getArtistById(id);
+    const dna = getMusicalDNAForArtist(id);
+    const flow = getFlowProfile(id);
+    return { name: art?.name ?? id, timbre: dna?.vocal?.sunoVocalTimbre || flow?.sunoVocalTimbre || "modern autotune trap vocal" };
+  });
+
   return `Eres el Director Vocal y Productor de Mezcla en la cabina de grabación para Suno AI v4.5.
 Tu trabajo es tomar la letra borrador de la canción y darle la DIMENSIÓN VOCAL TRIDIMENSIONAL que distingue una maqueta plana de un hit masterizado de estudio.
 
 # ARTISTAS EN CABINA:
 - Voz Principal: ${artist?.name ?? "Lead"} (${mainDNA.vocal.sunoVocalTimbre})
-${featureArtist ? `- Segunda Voz / Feature: ${featureArtist.name}` : ""}
-${callResponseSections.length > 0 ? `- Secciones con Call & Response obligatorio: ${callResponseSections.join(", ")}` : ""}
+${featureArtist ? `- Segunda Voz / Feature: ${featureArtist.name}\n` : ""}${guestVocalists.map(g => `- Voz Invitada: ${g.name} (${g.timbre})\n`).join("")}${callResponseSections.length > 0 ? `- Secciones con Call & Response obligatorio: ${callResponseSections.join(", ")}` : ""}
 
 # 🎚️ MODULACIÓN DE TEXTURA HUMANA (HUMAN TEXTURE DNA):
 - **En [Intro]**: Cortes de pensamiento (${Math.round(introTexture.cutThoughtProbability * 100)}%), Pausas de respiración (${Math.round(introTexture.pauseProbability * 100)}%).
