@@ -6,12 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { Search, X, Check, ChevronDown, Sparkles, Mic2, Users, Flame, Zap } from "lucide-react";
 import { ARTISTS_DATA, getArtistById, type Artist } from "@/lib/trap-data";
 import { getFlowProfile } from "@/lib/artist-flow-profiles";
+import { resolveArtistVocalGuide } from "@/lib/prompt-builder";
 
 export interface SectionVoiceComboboxProps {
   value: string;
   onValueChange: (value: string) => void;
   mainArtistName?: string;
   featureArtistName?: string;
+  mainArtistId?: string;
+  featureArtistId?: string;
   hasFeature?: boolean;
   className?: string;
 }
@@ -38,6 +41,8 @@ export function SectionVoiceCombobox({
   onValueChange,
   mainArtistName,
   featureArtistName,
+  mainArtistId,
+  featureArtistId,
   hasFeature = false,
   className = "",
 }: SectionVoiceComboboxProps) {
@@ -354,6 +359,19 @@ export function SectionVoiceCombobox({
                               <div className="text-[10px] text-muted-foreground/80 truncate">
                                 {role.subtitle}
                               </div>
+                              {(() => {
+                                const guide = resolveArtistVocalGuide(role.id, {
+                                  mainArtistId,
+                                  featureArtistId,
+                                });
+                                if (!guide?.vocalGuide) return null;
+                                return (
+                                  <div className="flex items-center gap-1 text-[8.5px] text-slime/80 font-mono truncate mt-0.5">
+                                    <Mic2 className="w-2 h-2 shrink-0 text-slime" />
+                                    <span className="truncate">Suno: {guide.vocalGuide}</span>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0 ml-2">
@@ -429,12 +447,12 @@ export function SectionVoiceCombobox({
                           </div>
 
                           {(() => {
-                            const flow = getFlowProfile(artist.id);
-                            if (!flow?.sunoVocalTimbre) return null;
+                            const guide = resolveArtistVocalGuide(artist.id);
+                            if (!guide?.vocalGuide) return null;
                             return (
-                              <div className="mt-1 flex items-center gap-1 text-[9px] text-slime/90 font-mono bg-slime/5 px-1.5 py-0.5 rounded border border-slime/20 truncate">
+                              <div className="mt-1 flex items-center gap-1 text-[9px] text-slime/90 font-mono bg-slime/5 px-1.5 py-0.5 rounded border border-slime/20 truncate" title={`Descriptor de producción Suno: ${guide.vocalGuide}`}>
                                 <Mic2 className="w-2.5 h-2.5 shrink-0 text-slime" />
-                                <span className="truncate">Suno: {flow.sunoVocalTimbre}</span>
+                                <span className="truncate">Suno: {guide.vocalGuide}</span>
                               </div>
                             );
                           })()}

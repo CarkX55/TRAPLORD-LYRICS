@@ -306,7 +306,7 @@ export function PreflightPromptModal({
                     {promptData.beatPrompt.instruments?.length > 0 && (
                       <>
                         <span>•</span>
-                        <span>Instrumentos: <strong>{promptData.beatPrompt.instruments.join(", ")}</strong></span>
+                        <span>Instrumentos: <strong>{promptData.beatPrompt.instruments.join(" | ")}</strong></span>
                       </>
                     )}
                   </div>

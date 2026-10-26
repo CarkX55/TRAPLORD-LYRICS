@@ -144,6 +144,7 @@ export interface VocalGuideResult {
   artistName: string;
   vocalGuide: string;
   fullHeaderTag: string;
+  technicalDescriptor: string;
 }
 
 /**
@@ -175,6 +176,7 @@ export function resolveSectionArtistId(
 
 /**
  * Resuelve la guía vocal concisa optimizada para Suno AI a partir del artista o rol asignado.
+ * Reemplaza nombres de raperos por descriptores técnicos de producción musical y vocal.
  * Guía al modelo de Suno con timbre, género vocal, autotune, efectos y cadencia.
  */
 export function resolveArtistVocalGuide(
@@ -192,6 +194,7 @@ export function resolveArtistVocalGuide(
     introStyle?: IntroStyleId;
     outroStyle?: OutroStyleId;
     hideArtistNames?: boolean;
+    includeArtistName?: boolean;
   } = {}
 ): VocalGuideResult {
   const mainArtist = options.mainArtistId ? getArtistById(options.mainArtistId) : null;
@@ -200,12 +203,19 @@ export function resolveArtistVocalGuide(
   const featName = options.hideArtistNames ? "Feature" : (featArtist?.name ?? "Feature");
 
   const getGuideForId = (id?: string): string => {
-    if (!id || id === "none") return "male vocal, modern autotune";
+    if (!id || id === "none") return "male vocal | modern autotune";
     const profile = getFlowProfile(id);
-    if (profile?.sunoVocalTimbre) return profile.sunoVocalTimbre;
+    if (profile?.sunoVocalTimbre) return profile.sunoVocalTimbre.split(/\s*,\s*/).join(" | ");
     const dna = getMusicalDNAForArtist(id);
-    if (dna?.vocal?.sunoVocalTimbre) return dna.vocal.sunoVocalTimbre;
-    return "male vocal, modern autotune bounce";
+    if (dna?.vocal?.sunoVocalTimbre) return dna.vocal.sunoVocalTimbre.split(/\s*,\s*/).join(" | ");
+    const artist = getArtistById(id);
+    if (artist) {
+      const isFemale = /(femenina|female|mujer|reina|queen)/i.test(artist.style || "");
+      const gender = isFemale ? "female vocal" : "male vocal";
+      const tags = artist.beatTags?.slice(0, 3).join(" | ") || "modern autotune trap";
+      return `${gender} | ${tags}`;
+    }
+    return "male vocal | modern autotune bounce";
   };
 
   let artistName = mainName;
@@ -223,19 +233,20 @@ export function resolveArtistVocalGuide(
     vocalGuide = getGuideForId(options.featureArtistId);
   } else if (voiceId === "both") {
     artistName = options.hideArtistNames ? "Lead & Feature" : `${mainName} & ${featName}`;
-    vocalGuide = "dual vocals in unison, wide stereo mix, stacked autotune harmonies";
+    vocalGuide = "dual vocals in unison | wide stereo mix | stacked autotune harmonies";
   } else if (voiceId === "trading_2x2" || options.isTrading2x2) {
     artistName = options.hideArtistNames ? "Lead & Feature" : `${mainName} & ${featName}`;
-    vocalGuide = "trading bars 2x2, rapid vocal back-and-forth, contrasting vocal flows";
+    vocalGuide = "trading bars 2x2 | rapid vocal back-and-forth | contrasting vocal flows";
   } else if (voiceId === "hype" || options.isHype) {
     artistName = mainName;
-    vocalGuide = "hype man ad-libs, raw energetic background shouts, filtered vocal effect";
+    vocalGuide = "hype man ad-libs | raw energetic background shouts | filtered vocal effect";
   } else if (voiceId.startsWith("instrumental:")) {
     const instName = voiceId.replace("instrumental:", "");
     return {
       artistName: instName,
       vocalGuide: "instrumental solo",
       fullHeaderTag: instName,
+      technicalDescriptor: "instrumental solo",
     };
   } else {
     const assignedArtist = getArtistById(voiceId);
@@ -247,38 +258,43 @@ export function resolveArtistVocalGuide(
 
   // Contextual nuance for Chorus / Intro / Outro
   if (isChorus && voiceId !== "both" && voiceId !== "trading_2x2") {
-    const primaryTimbre = vocalGuide.split(",")[0]?.trim() || "melodic male vocal";
-    vocalGuide = `${primaryTimbre}, layered stereo autotune harmonies, anthemic vocal stack`;
+    const primaryTimbre = vocalGuide.split(/[,|]/)[0]?.trim() || "melodic male vocal";
+    vocalGuide = `${primaryTimbre} | layered stereo autotune harmonies | anthemic vocal stack`;
   } else if (isIntro && voiceId !== "hype") {
-    const primaryTimbre = vocalGuide.split(",")[0]?.trim() || "spoken male vocal";
+    const primaryTimbre = vocalGuide.split(/[,|]/)[0]?.trim() || "spoken male vocal";
     if (options.introStyle && options.introStyle !== "auto") {
       const introOpt = getIntroStyleOptionById(options.introStyle);
       if (introOpt?.sunoAcousticTag) {
-        vocalGuide = `${primaryTimbre}, ${introOpt.sunoAcousticTag}`;
+        vocalGuide = `${primaryTimbre} | ${introOpt.sunoAcousticTag.split(/\s*,\s*/).join(" | ")}`;
       } else {
-        vocalGuide = `${primaryTimbre}, spoken whisper intro, filtered vocal texture`;
+        vocalGuide = `${primaryTimbre} | spoken whisper intro | filtered vocal texture`;
       }
     } else {
-      vocalGuide = `${primaryTimbre}, spoken whisper intro, filtered vocal texture`;
+      vocalGuide = `${primaryTimbre} | spoken whisper intro | filtered vocal texture`;
     }
   } else if (isOutro && voiceId !== "hype") {
-    const primaryTimbre = vocalGuide.split(",")[0]?.trim() || "atmospheric male vocal";
+    const primaryTimbre = vocalGuide.split(/[,|]/)[0]?.trim() || "atmospheric male vocal";
     if (options.outroStyle && options.outroStyle !== "auto") {
       const outroOpt = getOutroStyleOptionById(options.outroStyle);
       if (outroOpt?.sunoAcousticTag) {
-        vocalGuide = `${primaryTimbre}, ${outroOpt.sunoAcousticTag}`;
+        vocalGuide = `${primaryTimbre} | ${outroOpt.sunoAcousticTag.split(/\s*,\s*/).join(" | ")}`;
       } else {
-        vocalGuide = `${primaryTimbre}, atmospheric fade out, decaying reverb tail`;
+        vocalGuide = `${primaryTimbre} | atmospheric fade out | decaying reverb tail`;
       }
     } else {
-      vocalGuide = `${primaryTimbre}, atmospheric fade out, decaying reverb tail`;
+      vocalGuide = `${primaryTimbre} | atmospheric fade out | decaying reverb tail`;
     }
   }
+
+  // Suno AI v4/v4.5 ya no reconoce nombres de raperos/artistas en los corchetes de sección.
+  // Reemplazamos los nombres por descriptores técnicos de producción musical y vocal en fullHeaderTag.
+  const fullHeaderTag = options.includeArtistName ? `${artistName} - ${vocalGuide}` : vocalGuide;
 
   return {
     artistName,
     vocalGuide,
-    fullHeaderTag: `${artistName} - ${vocalGuide}`,
+    fullHeaderTag,
+    technicalDescriptor: vocalGuide,
   };
 }
 
@@ -450,8 +466,9 @@ export function buildStructurePlan(params: PromptParams): string {
       barsNum = 4;
     }
 
-    const tag = vocalGuideResult.vocalGuide ? ` - ${vocalGuideResult.vocalGuide}` : "";
-    const header = `[${s.name}: ${vocalGuideResult.artistName}${tag}]`;
+    const header = vocalGuideResult.fullHeaderTag
+      ? `[${s.name}: ${vocalGuideResult.fullHeaderTag}]`
+      : `[${s.name}]`;
 
     // 1. MODO HYPE MAN
     if (isHype || (isIntro && isHype)) {
@@ -895,7 +912,7 @@ Reescribe desde cero ÚNICAMENTE esta sección.
 - PROHIBIDO copiar versos literales de la versión previa de esta sección (salvo los elementos ancla autorizados).
 
 SALIDA ESTRICTA:
-- Comienza directamente en el encabezado [${params.sectionName}].
+- Comienza directamente en el encabezado [${params.sectionName}]. Queda PROHIBIDO incluir nombres de raperos en el corchete; usa exclusivamente descriptores técnicos de producción vocal.
 - Devuelve únicamente las líneas cantadas correspondientes. Cero introducciones ni explicaciones.`;
 }
 
@@ -986,18 +1003,20 @@ export function buildSunoStyleResult(params: SunoStylePromptParams): SunoStyleRe
   else if (params.beatType?.id.includes("drill")) groove = "sliding 808 drill bounce";
   else if (params.beatType?.id.includes("rage")) groove = "high-energy moshpit drive";
 
-  const layer1Genre = `${rawGenre}, ${params.bpmVibe.range} BPM, ${groove}`;
+  const layer1Genre = `${rawGenre} | ${params.bpmVibe.range} BPM | ${groove}`;
 
   // Capa 2: Timbre Vocal (Lead o Dual)
   const leadProfile = getFlowProfile(params.artistId);
   const featProfile = params.featureArtistId && params.featureArtistId !== "none" ? getFlowProfile(params.featureArtistId) : null;
   
-  let layer2Vocal = leadProfile?.sunoVocalTimbre ?? "deep male vocal, modern auto-tune";
+  let layer2Vocal = leadProfile?.sunoVocalTimbre
+    ? leadProfile.sunoVocalTimbre.split(/\s*,\s*/).join(" | ")
+    : "deep male vocal | modern auto-tune";
   if (featProfile) {
     // Condensed dual vocal timbre
-    const leadCondensed = (leadProfile?.sunoVocalTimbre ?? "melodic male vocals").split(",")[0].trim();
-    const featCondensed = featProfile.sunoVocalTimbre.split(",")[0].trim();
-    layer2Vocal = `${leadCondensed} & ${featCondensed}, dual vocal contrast`;
+    const leadCondensed = (leadProfile?.sunoVocalTimbre ?? "melodic male vocals").split(/[,|]/)[0].trim();
+    const featCondensed = featProfile.sunoVocalTimbre.split(/[,|]/)[0].trim();
+    layer2Vocal = `${leadCondensed} & ${featCondensed} | dual vocal contrast`;
   }
 
   // Capa 3: Instrumentación & 808s
@@ -1015,33 +1034,35 @@ export function buildSunoStyleResult(params: SunoStylePromptParams): SunoStyleRe
   // Producer sonic flavor injection
   let producerFlavor = "";
   if (params.producerId && params.producerId !== "none") {
-    if (params.producerId === "pierre_bourne") producerFlavor = "trippy synth flute, bouncy 808 bounce";
-    else if (params.producerId === "murda_beatz") producerFlavor = "bright bell melody, punchy clean 808 bounce";
-    else if (params.producerId === "mustard") producerFlavor = "hyphy west coast bounce, crisp claps, bouncy sub";
-    else if (params.producerId === "da_got_that_dope") producerFlavor = "ultra-bouncy club bounce, spring 808, syncopated rhythm";
-    else if (params.producerId === "cardo") producerFlavor = "spacey vintage synth, elastic bounce, deep 808";
-    else if (params.producerId === "cash_cobain") producerFlavor = "sexy sample drill, filtered vocal chop, warm 808 slides";
-    else if (params.producerId === "taz_taylor") producerFlavor = "melodic guitar loop, bouncy roll hi-hats, clean 808";
-    else if (params.producerId === "helluva") producerFlavor = "detroit piano bounce, off-beat clap, aggressive 808";
-    else if (params.producerId === "wondagurl") producerFlavor = "dark distorted industrial 808, cinematic low-end";
-    else if (params.producerId === "bnyx" || params.producerId === "f1lthy") producerFlavor = "distorted rage lead, chaotic heavy 808";
-    else if (params.producerId === "zaytovan") producerFlavor = "zaytoven piano riff, bouncy atlanta 808";
-    else if (params.producerId === "metro_boomin") producerFlavor = "metro dark bells, cinematic 808 sub, crisp hi-hats";
+    if (params.producerId === "pierre_bourne") producerFlavor = "trippy synth flute | bouncy 808 bounce";
+    else if (params.producerId === "murda_beatz") producerFlavor = "bright bell melody | punchy clean 808 bounce";
+    else if (params.producerId === "mustard") producerFlavor = "hyphy west coast bounce | crisp claps | bouncy sub";
+    else if (params.producerId === "da_got_that_dope") producerFlavor = "ultra-bouncy club bounce | spring 808 | syncopated rhythm";
+    else if (params.producerId === "cardo") producerFlavor = "spacey vintage synth | elastic bounce | deep 808";
+    else if (params.producerId === "cash_cobain") producerFlavor = "sexy sample drill | filtered vocal chop | warm 808 slides";
+    else if (params.producerId === "taz_taylor") producerFlavor = "melodic guitar loop | bouncy roll hi-hats | clean 808";
+    else if (params.producerId === "helluva") producerFlavor = "detroit piano bounce | off-beat clap | aggressive 808";
+    else if (params.producerId === "wondagurl") producerFlavor = "dark distorted industrial 808 | cinematic low-end";
+    else if (params.producerId === "bnyx" || params.producerId === "f1lthy") producerFlavor = "distorted rage lead | chaotic heavy 808";
+    else if (params.producerId === "zaytovan") producerFlavor = "zaytoven piano riff | bouncy atlanta 808";
+    else if (params.producerId === "metro_boomin") producerFlavor = "metro dark bells | cinematic 808 sub | crisp hi-hats";
   }
 
   // Merge with beatType tags if present
   const moodKey = params.moodId.split(" ")[0].toLowerCase();
   const baseInstruments = moodInstrumentMap[moodKey] ?? moodInstrumentMap["calle"] ?? ["punchy 808 bass", "fast hi-hat rolls", "atmospheric synth"];
-  const layer3Instruments = producerFlavor ? `${producerFlavor}, ${baseInstruments.slice(0, 2).join(", ")}` : baseInstruments.join(", ");
+  const layer3Instruments = producerFlavor
+    ? `${producerFlavor} | ${baseInstruments.slice(0, 2).join(" | ")}`
+    : baseInstruments.join(" | ");
 
   // Capa 4: Mezcla & Textura
-  let layer4Mix = "crisp modern trap mix, wide stereo";
+  let layer4Mix = "crisp modern trap mix | wide stereo";
   if (params.dirtyLevel === 3 || params.dirtyLevel === 4) {
-    layer4Mix = "raw aggressive master, overdriven 808";
+    layer4Mix = "raw aggressive master | overdriven 808";
   } else if (moodKey.includes("melancolico") || moodKey.includes("introspectivo")) {
-    layer4Mix = "spacious reverb, warm master, clean transients";
+    layer4Mix = "spacious reverb | warm master | clean transients";
   } else if (moodKey.includes("oscuro") || moodKey.includes("agresivo")) {
-    layer4Mix = "punchy transients, distorted low-end, wide stereo";
+    layer4Mix = "punchy transients | distorted low-end | wide stereo";
   }
 
   const layers: SunoStyleLayers = {
@@ -1052,10 +1073,10 @@ export function buildSunoStyleResult(params: SunoStylePromptParams): SunoStyleRe
   };
 
   // Composite prompt
-  let composite = `${layers.genre}, ${layers.vocal}, ${layers.instruments}, ${layers.mix}`;
+  let composite = `${layers.genre} | ${layers.vocal} | ${layers.instruments} | ${layers.mix}`;
 
   // Deduplicate tokens
-  const parts = composite.split(",").map(p => p.trim()).filter(Boolean);
+  const parts = composite.split(/[,|]/).map(p => p.trim()).filter(Boolean);
   const uniqueParts: string[] = [];
   const seen = new Set<string>();
   for (const part of parts) {
@@ -1065,15 +1086,15 @@ export function buildSunoStyleResult(params: SunoStylePromptParams): SunoStyleRe
       uniqueParts.push(part);
     }
   }
-  composite = uniqueParts.join(", ");
+  composite = uniqueParts.join(" | ");
 
   // Enforce 200-280 chars target
   if (composite.length > 280) {
-    const withoutMix = uniqueParts.slice(0, -1).join(", ");
+    const withoutMix = uniqueParts.slice(0, -1).join(" | ");
     if (withoutMix.length <= 280 && withoutMix.length >= 180) {
       composite = withoutMix;
     } else if (composite.length > 280) {
-      composite = composite.substring(0, 277).replace(/,\s*[^,]*$/, "") + "...";
+      composite = composite.substring(0, 277).replace(/\s*\|\s*[^|]*$/, "") + "...";
     }
   }
 
@@ -1129,10 +1150,10 @@ export function stripArtistNamesFromLyrics(lyrics: string, artistNames: string[]
     const afterColon = trimmed.slice(colonIdx + 1).trim();
 
     // Caso 1: Separador con guion e.g. "Fredo Santana - deep raspy monotone Chicago drill male vocal"
-    const hyphenIdx = afterColon.indexOf("-");
-    if (hyphenIdx !== -1) {
-      const leftPart = afterColon.slice(0, hyphenIdx).trim();
-      const rightPart = afterColon.slice(hyphenIdx + 1).trim();
+    const separatorMatch = afterColon.match(/\s+[—–-]\s+/);
+    if (separatorMatch && separatorMatch.index !== undefined) {
+      const leftPart = afterColon.slice(0, separatorMatch.index).trim();
+      const rightPart = afterColon.slice(separatorMatch.index + separatorMatch[0].length).trim();
 
       const leftLower = leftPart.toLowerCase();
       const isKnown = knownArtists.has(leftLower) || Array.from(knownArtists).some(k => leftLower.includes(k));
@@ -1147,10 +1168,32 @@ export function stripArtistNamesFromLyrics(lyrics: string, artistNames: string[]
 
     // Caso 2: Sin guion e.g. "Fredo Santana" o "Fredo Santana & Takeoff" vs "deep raspy male vocal"
     const afterLower = afterColon.toLowerCase();
-    const isKnown = knownArtists.has(afterLower) || Array.from(knownArtists).some(k => afterLower.includes(k));
+    const isKnown = knownArtists.has(afterLower) || Array.from(knownArtists).some(k => afterLower.includes(k)) || /^(lead|feature|guest|both|unison)$/i.test(afterLower);
     const isPurelyAcoustic = acousticKeywords.test(afterColon);
 
-    if (isKnown || (!isPurelyAcoustic && !afterColon.includes(","))) {
+    if (isKnown || (!isPurelyAcoustic && !afterColon.includes(",") && !afterColon.includes("|"))) {
+      // Reemplazar el nombre del rapero por sus descriptores técnicos de producción musical y vocal
+      let artistObj = getAllArtists().find(a => a.name.toLowerCase() === afterLower || a.id.toLowerCase() === afterLower);
+      if (!artistObj) {
+        const foundName = Array.from(knownArtists).find(k => afterLower.includes(k) || k.includes(afterLower));
+        if (foundName) {
+          artistObj = getAllArtists().find(a => a.name.toLowerCase() === foundName || a.id.toLowerCase() === foundName);
+        }
+      }
+      if (artistObj) {
+        const isChorus = sectionName.toLowerCase().includes("chorus") || sectionName.toLowerCase().includes("hook") || sectionName.toLowerCase().includes("estribillo");
+        const isIntro = sectionName.toLowerCase().includes("intro");
+        const isOutro = sectionName.toLowerCase().includes("outro") || sectionName.toLowerCase().includes("final");
+        const guide = resolveArtistVocalGuide(artistObj.id, {
+          sectionName,
+          isChorus,
+          isIntro,
+          isOutro,
+        });
+        if (guide.vocalGuide) {
+          return `[${sectionName}: ${guide.vocalGuide}]`;
+        }
+      }
       return `[${sectionName}]`;
     }
 
@@ -1298,12 +1341,19 @@ export function cleanSunoBracketHeaders(
       // Normalizar espacios
       content = content.replace(/[ \t]{2,}/g, " ").trim();
 
-      // Enriquecimiento automático si solo tiene el nombre y no tiene guía vocal "-" ni ","
-      if (options?.artistId && !content.includes("-") && !content.includes(",")) {
-        const colonIdx = content.indexOf(":");
-        if (colonIdx !== -1) {
-          const secName = content.slice(0, colonIdx).trim();
-          const voicePart = content.slice(colonIdx + 1).trim();
+      // Enriquecimiento automático y reemplazo de nombres de raperos por descriptores técnicos
+      const colonIdx = content.indexOf(":");
+      if (colonIdx !== -1) {
+        const secName = content.slice(0, colonIdx).trim();
+        const voicePart = content.slice(colonIdx + 1).trim();
+        const separatorMatch = voicePart.match(/\s+[—–-]\s+/);
+
+        if (options?.stripArtistNames && separatorMatch && separatorMatch.index !== undefined) {
+          const rightPart = voicePart.slice(separatorMatch.index + separatorMatch[0].length).trim();
+          if (rightPart) {
+            content = `${secName}: ${rightPart}`;
+          }
+        } else if (options?.artistId && !separatorMatch && !content.includes(",") && !content.includes("|")) {
           const va = options.sectionVoices?.find(v => v.sectionName.toLowerCase() === secName.toLowerCase());
           const isChorus = secName.toLowerCase().includes("chorus") || secName.toLowerCase().includes("hook") || secName.toLowerCase().includes("estribillo");
           const isIntro = secName.toLowerCase().includes("intro");
@@ -1317,12 +1367,10 @@ export function cleanSunoBracketHeaders(
             introStyle: va?.introStyle,
             isOutro,
             outroStyle: va?.outroStyle,
-            hideArtistNames: options?.stripArtistNames,
+            hideArtistNames: true,
           });
           if (guide.vocalGuide) {
-            content = options?.stripArtistNames
-              ? `${secName}: ${guide.vocalGuide}`
-              : `${secName}: ${voicePart} - ${guide.vocalGuide}`;
+            content = `${secName}: ${guide.vocalGuide}`;
           }
         }
       }
@@ -1929,13 +1977,13 @@ Como Director Vocal, incorpora la capa de performance con criterio musical:
 ================================================================================
 # 📜 CONTRATO 5: FORMATO DE SALIDA & GUÍA VOCAL SUNO (OUTPUT & VOCAL CONTRACT)
 ================================================================================
-- ⚡ GUÍA VOCAL OBLIGATORIA EN ENCABEZADOS: Dado que Suno AI ya no reconoce timbres solo por el nombre del artista, cada encabezado de sección DEBE incluir el nombre del artista acompañado de sus descriptores vocales (timbre, género vocal, autotune y entrega) para modelar acústicamente la voz en Suno.
-  Fórmula: [Sección: Artista - Descriptores de timbre y estilo vocal]
+- ⚡ GUÍA VOCAL TÉCNICA OBLIGATORIA (DESCRIPTORES DE PRODUCCIÓN): Dado que Suno AI ya no reconoce nombres de raperos/artistas en los corchetes, cada encabezado de sección DEBE REEMPLAZAR COMPLETAMENTE los nombres de artistas por descriptores técnicos de producción musical y vocal (timbre, autotune, efectos, entrega, reverb y cadencia rítmica). Queda TERMINANTEMENTE PROHIBIDO incluir nombres de artistas dentro de los corchetes [Section: ...] o en la letra.
+  Fórmula: [Sección: Descriptores técnicos de producción musical y vocal]
   Ejemplos válidos:
-  - [Intro: ${artist?.name ?? "Lead"} - spoken whisper intro, filtered ambient vocal]
-  - [Verse 1: ${artist?.name ?? "Lead"} - ${resolveArtistVocalGuide("main", { mainArtistId: params.artistId }).vocalGuide}]
-  - [Chorus: ${artist?.name ?? "Lead"} - layered stereo autotune harmonies, anthemic vocal stack]
-  ${featureArtist ? `- [Verse 2: ${featureArtist.name} - ${resolveArtistVocalGuide("feature", { featureArtistId: featureArtist.id }).vocalGuide}]` : ""}
+  - [Intro: ${resolveArtistVocalGuide("main", { mainArtistId: params.artistId, sectionType: "intro", isIntro: true }).fullHeaderTag}]
+  - [Verse 1: ${resolveArtistVocalGuide("main", { mainArtistId: params.artistId, sectionType: "verse" }).fullHeaderTag}]
+  - [Chorus: ${resolveArtistVocalGuide("main", { mainArtistId: params.artistId, sectionType: "chorus", isChorus: true }).fullHeaderTag}]
+  ${featureArtist ? `- [Verse 2: ${resolveArtistVocalGuide("feature", { featureArtistId: featureArtist.id, sectionType: "verse" }).fullHeaderTag}]` : ""}
 - Cada compás equivale EXACTAMENTE a una línea de texto con sus ad-libs.
 - Devuelve ÚNICAMENTE la letra completa de la canción estructurada con estos corchetes acústicos. Está TERMINANTEMENTE PROHIBIDO incluir introducciones, conclusiones, explicaciones de cambios o frases como "Letra ajustada:", "Se ha resuelto el problema" o "He modificado...". Comienza directamente en el primer corchete de la canción.`;
 }
@@ -2010,9 +2058,10 @@ ${featureArtist ? `- Segunda Voz / Feature: ${featureArtist.name}\n` : ""}${gues
    - El borrador ya tiene el balance de inglés y español fijado. Los ad-libs y réplicas entre paréntesis DEBEN escribirse en el idioma predominante de la barra o canción (${params.languageDNA?.primaryLanguage === "en" ? "inglés con toques breves de actitud en español" : "español con toques en inglés"}).
    - PROHIBIDO inundar la letra con ad-libs que cambien drásticamente el porcentaje de Spanglish.
 
-5. **PRESERVACIÓN Y REFINAMIENTO DE GUÍAS VOCALES EN ENCABEZADOS (SUNO NATIVE):**
-   - Todos los encabezados de sección DEBEN mantener el formato [Sección: Artista - Descriptores vocales] para que Suno modele adecuadamente la voz del intérprete (ej: '[Verse 1: ${artist?.name ?? "Lead"} - ${resolveArtistVocalGuide("main", { mainArtistId: params.artistId }).vocalGuide}]').
-   - Elimina cualquier texto residual de instrucciones ajenas fuera o dentro del corchete como '— 8 barras → [REGLA...]' o '[VOZ AUTORIZADA: ...]', pero PRESERVA rigurosamente la guía vocal del artista dentro del corchete.
+5. **PRESERVACIÓN Y REFINAMIENTO DE GUÍAS TÉCNICAS EN ENCABEZADOS (SUNO NATIVE):**
+   - Todos los encabezados de sección DEBEN mantener el formato [Sección: Descriptores técnicos vocales y acústicos] para que Suno modele adecuadamente la voz del intérprete (ej: '[Verse 1: ${resolveArtistVocalGuide("main", { mainArtistId: params.artistId }).fullHeaderTag}]').
+   - Suno AI NO reconoce nombres de artistas en los corchetes. Queda TERMINANTEMENTE PROHIBIDO dejar nombres de artistas dentro de los corchetes; deben ser reemplazados por sus descriptores técnicos acústicos y vocales.
+   - Elimina cualquier texto residual de instrucciones ajenas fuera o dentro del corchete como '— 8 barras → [REGLA...]' o '[VOZ AUTORIZADA: ...]', pero PRESERVA rigurosamente la guía técnica vocal dentro del corchete.
 
 6. **PRESERVACIÓN DE INTRO HYPE MAN:**
    - Si la [Intro] contiene ad-libs o tiene asignado 'Hype Man', MANTENLA exclusivamente como grunts, shouts y ad-libs entre paréntesis preparando el beat drop. Queda PROHIBIDO agregar oraciones completas o versos narrativos cantados en la intro.

@@ -883,6 +883,7 @@ export default function TrapGhostPage() {
         artistId,
         featureArtistId: featureArtist?.id,
         sectionVoices,
+        stripArtistNames: true,
       });
       const readiness = analyzeSunoReadiness(cleanLyrics);
       setLyrics(cleanLyrics);
@@ -938,7 +939,7 @@ export default function TrapGhostPage() {
       dynamismMode, adlibStyle, situationalPresetId, customSections, isCustomStructure, flowPocketMode,
       pipelineMode, addLiveLog, hideArtistNames]);
 
-  // ===== Copy for Suno AI (Clean Bracketed Format with Vocal Guides) =====
+  // ===== Copy for Suno AI (Clean Bracketed Format with Technical Production Descriptors) =====
   const handleCopySuno = useCallback(async () => {
     if (!lyrics) return;
     try {
@@ -946,9 +947,10 @@ export default function TrapGhostPage() {
         artistId,
         featureArtistId: featureArtist?.id,
         sectionVoices,
+        stripArtistNames: true,
       });
       await navigator.clipboard.writeText(clean);
-      toast.success("⚡ Letra copiada con guías vocales para Suno AI (ad-libs limpios)");
+      toast.success("⚡ Letra copiada con descriptores técnicos para Suno AI (cero nombres)");
     } catch {
       toast.error("No se pudo copiar");
     }
@@ -1338,7 +1340,7 @@ export default function TrapGhostPage() {
   // ===== Copy beat prompt (Suno/Udio style) =====
   const handleCopyBeatPrompt = useCallback(async () => {
     if (!beatPrompt) return;
-    const text = `Style: ${beatPrompt.styleTags}\n\nDescription: ${beatPrompt.description}\n\nInstruments: ${beatPrompt.instruments.join(", ")}\nEnergy: ${beatPrompt.energy}`;
+    const text = `Style: ${beatPrompt.styleTags}\n\nDescription: ${beatPrompt.description}\n\nInstruments: ${beatPrompt.instruments.join(" | ")}\nEnergy: ${beatPrompt.energy}`;
     try {
       await navigator.clipboard.writeText(text);
       toast.success("Beat prompt copiado (para Suno/Udio)");
@@ -3225,6 +3227,8 @@ export default function TrapGhostPage() {
                                   }}
                                   mainArtistName={artist?.name}
                                   featureArtistName={featureArtist?.name}
+                                  mainArtistId={artistId}
+                                  featureArtistId={featureArtist?.id}
                                   hasFeature={!!featureArtist}
                                 />
                               )}
@@ -3519,9 +3523,14 @@ export default function TrapGhostPage() {
                                   <span className="text-slime/90 shrink-0 font-semibold flex items-center gap-1">
                                     <Mic className="w-2.5 h-2.5 text-slime" /> Guía Suno:
                                   </span>
-                                  <span className="truncate text-foreground/80" title={`[${sec.name}: ${guide.fullHeaderTag}]`}>
+                                  <span className="truncate text-foreground/80 font-mono" title={`Descriptor técnico de producción para Suno: [${sec.name}: ${guide.fullHeaderTag}]`}>
                                     [{sec.name}: {guide.fullHeaderTag}]
                                   </span>
+                                  {assign?.voice && assign.voice !== "auto" && assign.voice !== "main" && (
+                                    <Badge variant="outline" className="text-[8px] py-0 px-1 h-3.5 border-slime/30 text-slime/80 shrink-0 ml-auto font-sans">
+                                      {guide.artistName} → Descriptor Técnico
+                                    </Badge>
+                                  )}
                                 </div>
                               );
                             })()}
@@ -3892,13 +3901,13 @@ export default function TrapGhostPage() {
                     <Switch checked={sunoTagsMode === "detailed"} onCheckedChange={(checked) => setSunoTagsMode(checked ? "detailed" : "minimal")} />
                   </div>
 
-                  {/* Purga de Nombres en Ad-libs (...) */}
+                  {/* Purga de Nombres: Descriptores Técnicos en Secciones y Ad-libs Anónimos */}
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-400" />
                       <div>
-                        <Label className="text-[13px] cursor-pointer">Ad-libs Anónimos (Cero Nombres en la Voz)</Label>
-                        <p className="text-[11px] text-muted-foreground">Impide que la voz de Suno cante nombres de artistas o sellos en ( ... ), conservando los corchetes intactos</p>
+                        <Label className="text-[13px] cursor-pointer">Descriptores Técnicos Suno (Cero Nombres en Voz/Corchetes)</Label>
+                        <p className="text-[11px] text-muted-foreground">Reemplaza nombres de raperos por descriptores de producción musical y vocal en corchetes e impide nombres en ad-libs (...)</p>
                       </div>
                     </div>
                     <Switch checked={hideArtistNames} onCheckedChange={setHideArtistNames} />
@@ -4659,7 +4668,7 @@ export default function TrapGhostPage() {
                 )}
                 {lyrics && (
                   <div className="ml-auto flex gap-1.5 flex-wrap items-center">
-                    <Button variant="default" size="sm" onClick={handleCopySuno} className="bg-slime text-black font-semibold hover:bg-slime/90 glow-slime h-8 px-3" title="Copiar letra 100% limpia para Suno AI (sin markdown)">
+                    <Button variant="default" size="sm" onClick={handleCopySuno} className="bg-slime text-black font-semibold hover:bg-slime/90 glow-slime h-8 px-3" title="Copiar letra 100% optimizada para Suno AI (reemplaza nombres de artistas en corchetes por descriptores técnicos de producción musical y vocal)">
                       <Zap className="w-3.5 h-3.5 mr-1 fill-black" />Copiar para Suno
                     </Button>
                     <Button
@@ -4667,7 +4676,7 @@ export default function TrapGhostPage() {
                       size="sm"
                       onClick={handleStripArtistNamesFromCurrentLyrics}
                       className="border-amber-500/40 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 h-8 px-2.5 text-xs font-medium"
-                      title="Limpiar nombres de artistas de los ad-libs entre paréntesis (...), conservando los corchetes [Verse: Artist] para Suno"
+                      title="Limpiar nombres de artistas en ad-libs (...) y asegurar descriptores técnicos de producción en corchetes"
                     >
                       <Sparkles className="w-3.5 h-3.5 mr-1 text-amber-400" />Limpiar Ad-libs
                     </Button>
@@ -6317,7 +6326,7 @@ export default function TrapGhostPage() {
                   <div>
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Style Tags</p>
                     <div className="flex flex-wrap gap-1">
-                      {beatPrompt.styleTags.split(", ").map((tag, i) => (
+                      {beatPrompt.styleTags.split(/\s*\|\s*|\s*,\s*/).map((tag, i) => (
                         <Badge key={i} variant="outline" className="text-[10px] border-cyber/30 text-cyber">{tag}</Badge>
                       ))}
                     </div>

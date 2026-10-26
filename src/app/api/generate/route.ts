@@ -596,6 +596,7 @@ export async function POST(req: NextRequest) {
         artistId: body.artistId,
         featureArtistId: body.featureArtistId,
         sectionVoices: body.sectionVoices,
+        stripArtistNames: true,
       });
       pipelineStagesCompleted = ["single_section_regenerated"];
       stageLogs.push({
@@ -744,6 +745,7 @@ export async function POST(req: NextRequest) {
         artistId: body.artistId,
         featureArtistId: body.featureArtistId,
         sectionVoices: body.sectionVoices,
+        stripArtistNames: true,
       });
       let candidateAST = parseRawLyricsToAST(candidateLyrics);
 
@@ -823,6 +825,7 @@ ${candidateLyrics}`;
               artistId: body.artistId,
               featureArtistId: body.featureArtistId,
               sectionVoices: body.sectionVoices,
+              stripArtistNames: true,
             });
             finalAST = parseRawLyricsToAST(lyrics);
             pipelineStagesCompleted.push("exceptional_repair_calibrated");
@@ -857,7 +860,12 @@ ${candidateLyrics}`;
 
       // --- RECONCILIACIÓN DETERMINISTA DE ESTRIBILLO (HOOK INVARIANT) ---
       finalAST = bindHookContractToAST(finalAST, hookContract);
-      lyrics = stringifyASTToSunoLyrics(finalAST);
+      lyrics = cleanSunoBracketHeaders(stringifyASTToSunoLyrics(finalAST), {
+        artistId: body.artistId,
+        featureArtistId: body.featureArtistId,
+        sectionVoices: body.sectionVoices,
+        stripArtistNames: true,
+      });
 
       // --- FINAL AUDIT: Auditoría completa de TODO el AST definitivo con Hook reconciliado ---
       auditContext = runInitialDeliveryAudit(finalAST, parsedBpm, flowProfile, userExplicitTerms, structuralExpectations);
@@ -894,6 +902,7 @@ ${candidateLyrics}`;
         artistId: body.artistId,
         featureArtistId: body.featureArtistId,
         sectionVoices: body.sectionVoices,
+        stripArtistNames: true,
       });
       pipelineStagesCompleted = ["holistic_generation_completed"];
       stageLogs.push({

@@ -637,7 +637,7 @@ export function getRhymeSchemeById(id: string): RhymeScheme | undefined {
 
 // ===== Beat Prompt Generator (Suno/Udio-style) =====
 export interface BeatPrompt {
-  styleTags: string;        // comma-separated tags for Suno/Udio
+  styleTags: string;        // pipe-separated tags for Suno/Udio ("|")
   description: string;      // textual description of the beat
   instruments: string[];    // key instruments
   energy: string;           // energy level descriptor
@@ -660,7 +660,13 @@ export function generateBeatPrompt(
   // Collect tags from artist + producer + bpm
   const tags: string[] = [];
   if (artist?.beatTags) tags.push(...artist.beatTags);
-  if (producer?.style) tags.push(producer.style);
+  if (producer?.style) {
+    const prodTags = producer.style
+      .split(/[,.]/)
+      .map(s => s.trim())
+      .filter(s => s.length > 2 && !s.toLowerCase().startsWith("patrón"));
+    tags.push(...prodTags);
+  }
   if (bpm) {
     tags.push(`${bpm.range} BPM`);
     tags.push(bpm.density.toLowerCase() + " density");
@@ -699,7 +705,7 @@ export function generateBeatPrompt(
   const description = `${artist?.name ?? "Trap"} style beat at ${bpm?.range ?? "130-145"} BPM. ${mood?.description ?? ""} Producer: ${producer?.name ?? "auto"}. Energy: ${energy}. Key elements: ${instruments.join(", ")}.`;
 
   return {
-    styleTags: tags.join(", "),
+    styleTags: tags.join(" | "),
     description,
     instruments,
     energy,
