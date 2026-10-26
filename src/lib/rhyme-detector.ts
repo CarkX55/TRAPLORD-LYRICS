@@ -172,7 +172,24 @@ const COMMON_STOPWORDS = new Set([
 ]);
 
 /**
+ * Strips ad-libs in parentheses (...), performance cues in brackets [...],
+ * and markdown emphasis (*, _, `) from a lyric line to get the clean sung text.
+ */
+export function extractCleanSungLine(line: string): string {
+  if (!line) return "";
+  return line
+    .replace(/\[[^\]]*\]/g, "")                  // remove all [bracket cues/tags]
+    .replace(/\*[ \t]*\([^)]*\)[ \t]*\*/g, "")   // remove *(ad-lib)*
+    .replace(/\([^)]*\)/g, "")                   // remove all (parenthetical ad-libs)
+    .replace(/[*_`"«»“”]/g, "")                  // remove markdown formatting and quotes
+    .replace(/[—–]/g, " ")                       // replace dashes
+    .replace(/[ \t]{2,}/g, " ")                  // collapse multiple whitespace
+    .trim();
+}
+
+/**
  * Analyzes lyrics and groups lines by rhyming endings (consonant + assonant + internal).
+ * Strips ad-libs in parentheses so that lines do NOT rhyme on ad-libs, but on actual sung bars.
  */
 export function analyzeRhymes(lyrics: string): RhymeAnalysis {
   const lines = lyrics.split("\n");
@@ -183,24 +200,34 @@ export function analyzeRhymes(lyrics: string): RhymeAnalysis {
   const matchedLineIndices = new Set<number>();
   const validLineIndices = new Set<number>();
 
-  lines.forEach((line, idx) => {
+  let globalLineIdx = 0;
+
+  for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed) return;
-    if (/^\[.*\]$/.test(trimmed)) return;
-    if (/^Interpr[èe]te?:/i.test(trimmed) || /^Intérprete?:/i.test(trimmed)) return;
-    if (/^[*#]/.test(trimmed)) return;
+    if (!trimmed) continue;
+    if (/^\[.*\]$/.test(trimmed)) continue;
+    if (/^Interpr[èe]te?:/i.test(trimmed) || /^Intérprete?:/i.test(trimmed)) continue;
+    if (/^[*#]/.test(trimmed)) continue;
 
-    validLineIndices.add(idx);
+    const lineIdx = globalLineIdx++;
+    validLineIndices.add(lineIdx);
 
-    // Words in line
-    const words = trimmed
-      .replace(/[^\w\sáéíóúñü']/g, " ")
+    // Clean line: remove ad-libs (...) and brackets [...] so we analyze only the main sung lyric
+    const cleanSung = extractCleanSungLine(trimmed);
+    if (!cleanSung) {
+      // Pure ad-lib or cue line: do not extract rhymes from ad-libs
+      continue;
+    }
+
+    // Words in clean sung line
+    const words = cleanSung
+      .replace(/[^\w\sáéíóúñüÁÉÍÓÚÑÜ']/g, " ")
       .split(/\s+/)
       .filter(w => w.length > 1);
 
-    if (words.length === 0) return;
+    if (words.length === 0) continue;
 
-    // 1. Check internal rhymes within this line
+    // 1. Check internal rhymes within this sung line
     if (words.length >= 4) {
       for (let i = 0; i < words.length - 1; i++) {
         const w1 = words[i].toLowerCase();
@@ -212,7 +239,7 @@ export function analyzeRhymes(lyrics: string): RhymeAnalysis {
           const p2 = phoneticEncode(w2);
           if (p1 === p2 && p1.length >= 2) {
             internalRhymes.push({
-              lineIndex: idx,
+              lineIndex: lineIdx,
               word1: w1,
               word2: w2,
               ending: p1,
@@ -223,7 +250,7 @@ export function analyzeRhymes(lyrics: string): RhymeAnalysis {
       }
     }
 
-    // 2. Consonant end-rhyme
+    // 2. Consonant end-rhyme on the last sung word
     const lastWord = words[words.length - 1].toLowerCase();
     const phonetic = phoneticEncode(lastWord);
 
@@ -232,7 +259,7 @@ export function analyzeRhymes(lyrics: string): RhymeAnalysis {
     }
     const entry = endingMap.get(phonetic)!;
     entry.words.add(lastWord);
-    entry.lineIndices.add(idx);
+    entry.lineIndices.add(lineIdx);
 
     // 3. Assonant end-rhyme key (for fallback)
     const assonance = extractVowelAssonance(lastWord);
@@ -242,9 +269,9 @@ export function analyzeRhymes(lyrics: string): RhymeAnalysis {
       }
       const aEntry = assonantMap.get(assonance)!;
       aEntry.words.add(lastWord);
-      aEntry.lineIndices.add(idx);
+      aEntry.lineIndices.add(lineIdx);
     }
-  });
+  }
 
   const groups: RhymeGroup[] = [];
   let colorIdx = 0;

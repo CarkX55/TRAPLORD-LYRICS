@@ -27,39 +27,87 @@ function assignLetters(
   lineIndices: number[],
   rhymeGroups: { id: number; lineIndices: number[] }[],
 ): string[] {
-  const letterMap = new Map<number, string>();
+  const groupLetterMap = new Map<number, string>();
   let nextLetter = 65; // 'A'
 
-  for (const lineIdx of lineIndices) {
+  return lineIndices.map(lineIdx => {
     // Find which rhyme group this line belongs to
     const group = rhymeGroups.find(g => g.lineIndices.includes(lineIdx));
     if (group) {
-      if (!letterMap.has(group.id)) {
-        letterMap.set(group.id, String.fromCharCode(nextLetter++));
+      if (!groupLetterMap.has(group.id)) {
+        groupLetterMap.set(group.id, String.fromCharCode(nextLetter++));
       }
-      letterMap.set(lineIdx, letterMap.get(group.id)!);
+      return groupLetterMap.get(group.id)!;
     } else {
       // Line doesn't rhyme with anything — assign unique lowercase letter
-      letterMap.set(lineIdx, String.fromCharCode(nextLetter++).toLowerCase());
+      return String.fromCharCode(nextLetter++).toLowerCase();
     }
-  }
-
-  return lineIndices.map(idx => letterMap.get(idx) ?? "x");
+  });
 }
 
 /**
- * Detects the rhyme scheme pattern from a sequence of letters.
- * Compacts repeated letters: ["A","A","B","B"] → "AABB".
+ * Normalizes a sequence of up to 4 letters into a canonical quatrain pattern (AABB, ABAB, ABBA, AAAA).
  */
-function detectPattern(letters: string[]): string {
-  if (letters.length === 0) return "";
-  const compact: string[] = [letters[0]];
-  for (let i = 1; i < letters.length; i++) {
-    if (letters[i] !== letters[i - 1]) {
-      compact.push(letters[i]);
+function normalizeQuatrain(fourLetters: string[]): string {
+  if (fourLetters.length < 2) return fourLetters.join("").toUpperCase();
+  const map = new Map<string, string>();
+  let next = 65; // 'A'
+  return fourLetters.map(l => {
+    // lowercase letters denote non-rhyming lines
+    if (l === l.toLowerCase() && l !== l.toUpperCase()) {
+      return "X";
+    }
+    const upper = l.toUpperCase();
+    if (!map.has(upper)) {
+      map.set(upper, String.fromCharCode(next++));
+    }
+    return map.get(upper)!;
+  }).join("");
+}
+
+/**
+ * Detects the rhyme scheme pattern from a sequence of letters (e.g. AABB, ABAB, ABBA, AAAA).
+ */
+export function detectPattern(letters: string[]): string {
+  if (letters.length === 0) return "—";
+  if (letters.length <= 4) {
+    const norm = normalizeQuatrain(letters);
+    if (norm === "AAAA") return "AAAA";
+    if (norm === "AABB") return "AABB";
+    if (norm === "ABAB") return "ABAB";
+    if (norm === "ABBA") return "ABBA";
+    if (norm === "AAAB") return "AAAB";
+    if (norm.includes("X") && !norm.includes("A")) return "Free";
+    return norm;
+  }
+
+  // For longer sections (e.g. 8, 12, 16 bars), evaluate quatrains (chunks of 4)
+  const quatrainPatterns: string[] = [];
+  for (let i = 0; i < letters.length; i += 4) {
+    const chunk = letters.slice(i, i + 4);
+    if (chunk.length >= 2) {
+      quatrainPatterns.push(normalizeQuatrain(chunk));
     }
   }
-  return compact.join("").toUpperCase();
+
+  const counts: Record<string, number> = {};
+  for (const p of quatrainPatterns) {
+    counts[p] = (counts[p] || 0) + 1;
+  }
+  let best = quatrainPatterns[0] || "—";
+  let max = 0;
+  for (const [p, c] of Object.entries(counts)) {
+    if (c > max) {
+      max = c;
+      best = p;
+    }
+  }
+
+  if (best === "AAAA") return "AAAA";
+  if (best === "AABB") return "AABB";
+  if (best === "ABAB") return "ABAB";
+  if (best === "ABBA") return "ABBA";
+  return best;
 }
 
 /**
@@ -76,6 +124,11 @@ export function detectRhymeScheme(lyrics: string, rhymeAnalysis: RhymeAnalysis):
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
+
+    // Skip standalone audio cues that are not structural sections
+    if (/^\[\s*(?:Pause|Vocal Cut|Pausa|Corte Vocal|Dog Barking|Gunshots|Pistols)\s*\]$/i.test(trimmed)) {
+      continue;
+    }
 
     // Section tag
     const tagMatch = trimmed.match(/^\[([^\]]+)\]/);
@@ -102,9 +155,11 @@ export function detectRhymeScheme(lyrics: string, rhymeAnalysis: RhymeAnalysis):
     if (/^Interpr[èe]te?:/i.test(trimmed) || /^Intérprete?:/i.test(trimmed)) continue;
     if (/^[*#]/.test(trimmed)) continue;
 
-    if (currentSection) {
-      currentSection.lineIndices.push(globalLineIdx);
+    if (!currentSection) {
+      currentSection = { name: "Intro", lineIndices: [] };
     }
+
+    currentSection.lineIndices.push(globalLineIdx);
     globalLineIdx++;
   }
 

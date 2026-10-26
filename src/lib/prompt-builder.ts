@@ -821,6 +821,7 @@ ${sceneBrief ? `${sceneBrief}\n` : ""}${semanticAnchorDirective ? `${semanticAnc
   * ECOS RÍTMICOS DE REMATE (Migos / Atlanta Style): Se alienta fuertemente usar ad-libs que hagan eco de la última palabra o remate de la barra anterior (ej: "Trap como narco (Narco)", "Moviendo los gramos (Gramos)", "Corto el brick con el fajo (Fajo)").
   * AD-LIBS DE ACCIÓN, REMATE Y ACTITUD: Usa onomatopeyas y reacciones callejeras cortantes que aporten ritmo y textura (ej: (Click!), (Facts), (Cash!), (Bling), (Cha-ching!), (Next!), (Baa!), (Skrrt!), (Brrt!), (Grrah!), (Woo!), (No cap!), (Hold on!)).
   * CUES CINEMÁTICOS DE AUDIO FX PARA SUNO: En intros, pausas o entre barras, puedes insertar etiquetas cinematográficas entre corchetes o paréntesis como [Dog Barking] ("Huff! Huff! Grrr!"), [Gunshots] (brrt! grrah!), [Pistols], o [Pausa]. Suno los interpreta como efectos de producción reales.
+  * LA RIMA RESIDE EN EL VERSO CANTADO, NUNCA EN LOS AD-LIBS: La rima de cada compás debe residir obligatoriamente en la última palabra cantada de la barra. Queda TERMINANTEMENTE PROHIBIDO depender de los ad-libs entre paréntesis ( ... ) para rimar o cerrar el compás (ej: la rima es 'no freno / de cero', no '(skrrt) / (skrrt)'). Los ad-libs son aditivos rítmicos y de textura, no portadores de la rima métrica.
 ${producerLine ? `${producerLine}\n` : ""}
 # CAPA 3: IDENTIDAD VOCAL FUNCIONAL, IDIOMA & POCKET
 - Voz Principal: Timbre ${leadStyle.timbre}. Cadencia ${leadStyle.cadence}. Textura de rima: ${leadStyle.rhymeTexture}. Actitud: ${leadStyle.emotionalPosture}.
@@ -1517,7 +1518,7 @@ export function buildStage1ToplinePrompt(
 # 🔁 PATRÓN DE GANCHO SELECCIONADO POR EL USUARIO: ${strategyConfig.label.toUpperCase()}
 - **Intérprete Asignado**: ${hookArtist?.name ?? "Lead"}
 - **Instrucción de Estrategia**: ${strategyConfig.instructionPrompt}
-- **Esquema de Rima Obligatorio**: ${hookRhymeScheme?.label ?? "AABB"} (${hookRhymeScheme?.description ?? ""})
+- **Esquema de Rima Obligatorio**: ${hookRhymeScheme?.label ?? "AABB"} (${hookRhymeScheme?.description ?? ""}). Las rimas deben situarse en las palabras cantadas del gancho, nunca en los ad-libs entre paréntesis.
 - **⚡ ARQUITECTURA SIMÉTRICA 4+4 (EARWORM FRAMEWORK)**:
   * Compases 1-4 (Motivo Núcleo): Establece el ancla melódica o mantra con 1-2 líneas motrices potentes con rimas audibles.
   * Compases 5-8 (Elevación & Cierre): Retoma el motivo variando la segunda mitad, elevando la textura vocal y rematando en la barra 8 con un payoff definitivo.`;
@@ -1532,7 +1533,7 @@ export function buildStage1ToplinePrompt(
 # 🎵 ARQUITECTURA DE GANCHO: AUTÉNTICA DE ${hookArtist?.name ?? "EL ARTISTA"} (${strategyConfig.label.toUpperCase()})
 - **Intérprete Asignado**: ${hookArtist?.name ?? "Lead"}
 - **Cadencia y Motor Rítmico**: Flow ${hookFlowProfile?.cadence?.toUpperCase() ?? "STACCATO"} (${hookFlowProfile?.speedLabel ?? "natural"}). ${hookFlowProfile?.cadenceInstruction ?? ""}
-- **Esquema de Rima Obligatorio**: ${hookRhymeScheme?.label ?? "AABB"} (${hookRhymeScheme?.description ?? ""})
+- **Esquema de Rima Obligatorio**: ${hookRhymeScheme?.label ?? "AABB"} (${hookRhymeScheme?.description ?? ""}). Las rimas deben situarse en las palabras cantadas del gancho, nunca en los ad-libs entre paréntesis.
 - **Estrategia Rítmica del Artista**: ${strategyConfig.instructionPrompt}
 - **⚡ ARQUITECTURA SIMÉTRICA 4+4 (EARWORM FRAMEWORK — ESTRICTA)**:
   * **Compases 1 a 4 (Motivo Núcleo / Anclaje Hipnótico)**: Establece 1 o 2 líneas motrices de anclaje (hook phrase/mantra), con rima audible y groove bailable con espacio para el bajo 808.
@@ -1623,7 +1624,7 @@ ${goldExamples.map(g => `- **${g.technique}**: ${g.description}`).join("\n")}
    - El rapeo y la melodía del gancho DEBEN capturar de forma inconfundible el flow, la métrica, la cadencia y el bolsillo rítmico de ${hookArtist?.name ?? "el artista"} (${hookFlowProfile?.cadence?.toUpperCase() ?? "STACCATO"}) para que al interpretarse en Suno suene con su pegada y estilo característicos.
    - 🚫 REGLA DE ORO DE PRIVACIDAD & HIGIENE: Queda TERMINANTEMENTE PROHIBIDO mencionar el nombre del artista ("soy ${hookArtist?.name ?? "X"}", "aquí ${hookArtist?.name ?? "X"}") ni de otros artistas reales en la letra cantada o ad-libs. Tampoco calques anécdotas autobiográficas íntimas, familiares fallecidos ni nombres de bandas callejeras reales de su infancia. El parecido debe ser 100% por el FLOW, la MÉTRICA y la ACTITUD MUSICAL.
 5. **RIMA AUDIBLE REAL, GROOVE & ANTI-PARTICIPIOS EN CADENA:**
-   - Esquema de Rima Obligatorio: El estribillo DEBE rimar según el esquema asignado ${hookRhymeScheme?.label ?? "AABB"} (${hookRhymeScheme?.description ?? ""}). Queda prohibida la prosa suelta sin rima.
+   - Esquema de Rima Obligatorio: El estribillo DEBE rimar según el esquema asignado ${hookRhymeScheme?.label ?? "AABB"} (${hookRhymeScheme?.description ?? ""}). Las rimas deben situarse en las palabras cantadas del gancho, nunca en los ad-libs entre paréntesis. Queda prohibida la prosa suelta sin rima.
    - 🚫 ANTI-PARTICIPIOS EN CADENA: Queda terminantemente prohibido hacer un estribillo donde 3 o más líneas rimen con la misma terminación verbal en '-ado/-ido' (ej: congelado/acelerado/controlado/duplicado). Busca rimas con pegada sobre sustantivos o palabras agudas y sonoras (-és, -ín, -al, -ón, -or, -ás, -ero, -ete, -ente).
    - Fonética de Rima de Estudio: Utiliza rimas consonantes naturales o rimas asonantes multi-silábicas (slant rhymes / vowel-matching como 'fuego/ceros' o 'pista/prisa'). Prohibidas consonancias forzadas e infantiles de guardería (*gelato/zapato*, *cuarto/parto*).
    - Naturalidad de Estudio: Quedan terminantemente prohibidas las frases ortopédicas o traducciones automáticas de máquina (ej: 'fast in my carro', 'cuarzo fino'). Escribe con fluidez y sintaxis natural.
@@ -1687,13 +1688,13 @@ export function buildStage2GhostwriterPrompt(
   const rhymeTier = getRhymeTier(params.artistId);
   let rhymeLevelInstruction = "";
   if (customScheme) {
-    rhymeLevelInstruction = `MÉTRICA / ESQUEMA DE RIMA OBLIGATORIO (${customScheme.pattern} - ${customScheme.label}): ${customScheme.description}.`;
+    rhymeLevelInstruction = `MÉTRICA / ESQUEMA DE RIMA OBLIGATORIO (${customScheme.pattern} - ${customScheme.label}): ${customScheme.description}. La rima debe residir en las palabras cantadas de la barra, nunca en los ad-libs entre paréntesis.`;
   } else if (rhymeTier === 1) {
-    rhymeLevelInstruction = `MÉTRICA TÉCNICA: Rimas multisilábicas obligatorias (2+ sílabas coincidentes) y rimas internas dentro del compás.`;
+    rhymeLevelInstruction = `MÉTRICA TÉCNICA: Rimas multisilábicas obligatorias (2+ sílabas coincidentes) y rimas internas dentro del compás. Las rimas residen en la letra cantada, nunca en ad-libs.`;
   } else if (rhymeTier === 2) {
-    rhymeLevelInstruction = `MÉTRICA EQUILIBRADA: Combina multisilábicas con rimas de 1 sílaba contundentes. Rimas internas naturales y cadencia pegadiza.`;
+    rhymeLevelInstruction = `MÉTRICA EQUILIBRADA: Combina multisilábicas con rimas de 1 sílaba contundentes. Rimas internas naturales y cadencia pegadiza en la letra cantada (no en ad-libs).`;
   } else {
-    rhymeLevelInstruction = `MÉTRICA DIRECTA / STREET: Prioriza la cadencia, el golpe rítmico y la actitud cruda.`;
+    rhymeLevelInstruction = `MÉTRICA DIRECTA / STREET: Prioriza la cadencia, el golpe rítmico y la actitud cruda en las barras cantadas (los ad-libs son solo texturas).`;
   }
 
   // Detectar secciones con Call & Response
